@@ -47,7 +47,8 @@ button, input {
   height: auto;
 }
 
-.brand-symbol {
+/* Beat `.brand img` so the square symbol stays hidden until the narrow sidebar. */
+.brand .brand-symbol {
   display: none;
   width: 40px;
   height: 40px;
@@ -533,8 +534,8 @@ main:has(.overview) {
   .app { grid-template-columns: 84px minmax(0, 1fr); }
   .nav { align-items: stretch; padding: 16px 8px; }
   .brand { display: flex; justify-content: center; padding: 4px 0 14px; }
-  .brand-word { display: none; }
-  .brand-symbol { display: block; }
+  .brand .brand-word { display: none; }
+  .brand .brand-symbol { display: block; width: 40px; height: 40px; }
   main { min-width: 0; padding: 16px; }
   #nav button, #settings-button {
     padding: 8px 4px;
