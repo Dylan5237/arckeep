@@ -198,6 +198,7 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
     title: record.title,
     url: record.url,
     updatedAt: record.updatedAt,
+    parentNumber: record.parentNumber,
     reasons
   }, now)
 }
@@ -210,6 +211,7 @@ export function draftFromReasons(input: {
   title: string
   url: string
   updatedAt: string
+  parentNumber?: number | null
   reasons: ClassifiedReason[]
 }, now: Date): WaitingDraft {
   const unique: ClassifiedReason[] = []
@@ -239,7 +241,10 @@ export function draftFromReasons(input: {
     waitingDays: chosen.days,
     daysEstimated: chosen.estimated,
     updatedAt: input.updatedAt,
-    reasonDetails: unique.map(reason => ({ reason: reason.reason, at: reason.at, estimated: reason.estimated }))
+    reasonDetails: unique.map(reason => ({ reason: reason.reason, at: reason.at, estimated: reason.estimated })),
+    parentNumber: input.parentNumber ?? null,
+    parent: null,
+    childCount: 0
   }
 }
 

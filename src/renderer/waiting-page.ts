@@ -279,7 +279,11 @@ function renderRow(row: WaitingRow, handlers: {
     ? el('span', { class: 'waiting-via' }, [viaNames.join(' · ')])
     : null
   const where = row.number === null ? row.repo : `${row.repo} #${row.number}`
-  const meta = el('span', { class: 'waiting-meta' }, [where])
+  const family = [
+    row.parentNumber != null ? `属于 #${row.parentNumber}` : '',
+    row.childCount > 0 ? `含 ${row.childCount} 个子项` : ''
+  ].filter(Boolean).join(' ')
+  const meta = el('span', { class: 'waiting-meta' }, [family ? `${where} ${family}` : where])
   const actions = el('div', { class: 'row-actions' })
   if (row.ignored) {
     const restore = el('button', { type: 'button', class: 'ghost tiny' }, ['恢复'])

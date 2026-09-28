@@ -1,5 +1,6 @@
 import { draftFromReasons, classifyRecord } from './classify.js'
 import { dedupeDrafts, issueUrlKey, sortDrafts } from './dedupe.js'
+import { annotateIssueFamily } from './sub-issues.js'
 import { WAITING_REASONS, type GithubRecord, type LocalBranchHit, type RepoAccess, type StatusDocHit, type TodoWaitingItem, type WaitingConfig, type WaitingDraft, type WaitingJsonRow } from './types.js'
 
 function preferAccess(current: RepoAccess | undefined, next: RepoAccess | undefined): RepoAccess {
@@ -76,7 +77,7 @@ export function assembleWaiting(input: {
   const docs = input.config.sources.statusDocs ? draftsFromStatusDocs(input.statusDocs, input.now) : []
   const branches = input.config.sources.localBranches ? draftsFromBranches(input.branches, input.now) : []
   const todos = input.config.sources.todos ? draftsFromTodos(input.todos, input.now) : []
-  return sortDrafts(dedupeDrafts([...github, ...docs, ...branches, ...todos], input.now))
+  return annotateIssueFamily(sortDrafts(dedupeDrafts([...github, ...docs, ...branches, ...todos], input.now)))
 }
 
 export function toWaitingJson(drafts: readonly WaitingDraft[]): WaitingJsonRow[] {
@@ -89,7 +90,9 @@ export function toWaitingJson(drafts: readonly WaitingDraft[]): WaitingJsonRow[]
     reasons: [...draft.reasons],
     action: draft.action,
     waitingDays: draft.waitingDays,
-    daysEstimated: draft.daysEstimated
+    daysEstimated: draft.daysEstimated,
+    parent: draft.parent,
+    childCount: draft.childCount
   }))
 }
 

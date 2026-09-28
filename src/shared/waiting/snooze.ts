@@ -1,5 +1,6 @@
 import { primaryAction } from './action.js'
 import { addDays } from './days.js'
+import { annotateIssueFamily } from './sub-issues.js'
 import type { DismissalMap, DismissalRecord, WaitingDraft, WaitingRow } from './types.js'
 
 export interface DismissalState {
@@ -99,10 +100,18 @@ export function partitionDismissals(
       waitingDays: draft.waitingDays,
       daysEstimated: draft.daysEstimated,
       updatedAt: draft.updatedAt,
-      ignored
+      ignored,
+      parentNumber: draft.parentNumber,
+      parent: draft.parent,
+      childCount: 0
     })
   }
-  return { rows, hiddenCount, map: nextMap }
+  const listed = annotateIssueFamily(rows)
+  return {
+    rows: listed.map((row, index) => ({ ...row, ignored: rows[index]?.ignored ?? false })),
+    hiddenCount,
+    map: nextMap
+  }
 }
 
 export function readDismissalState(raw: unknown): DismissalState {

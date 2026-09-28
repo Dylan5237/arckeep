@@ -153,6 +153,12 @@ export interface WaitingDraft {
   daysEstimated: boolean
   updatedAt: string
   reasonDetails: ReasonDetail[]
+  /** Parent issue number when this row is a sub-issue. */
+  parentNumber: number | null
+  /** Parent issue URL, or the parent number when a URL cannot be built. */
+  parent: string | number | null
+  /** Qualifying child issues included in this same result. */
+  childCount: number
 }
 
 export interface WaitingJsonRow {
@@ -165,6 +171,8 @@ export interface WaitingJsonRow {
   action?: string
   waitingDays: number
   daysEstimated: boolean
+  parent?: string | number | null
+  childCount?: number
 }
 
 export interface WaitingRow {
@@ -180,6 +188,9 @@ export interface WaitingRow {
   daysEstimated: boolean
   updatedAt: string
   ignored: boolean
+  parentNumber: number | null
+  parent: string | number | null
+  childCount: number
 }
 
 export interface SourceError {

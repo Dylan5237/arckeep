@@ -38,6 +38,53 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
       notices: ['仅关注的仓库只保留和你有关的条目，不会把别人的 open PR 整仓列出来。']
     })
   }
+  if (scene === 'waiting-family') {
+    const repo = 'northwind/ledger'
+    const parent = sampleWaitingRows().find(row => row.type === 'issue')
+    const baseRow = parent ?? sampleWaitingRows()[0]
+    if (!baseRow) return base({ hiddenCount: 0, rows: [] })
+    const child = (number: number, title: string, days: number): typeof baseRow => ({
+      ...baseRow,
+      id: `sample:${repo}#${number}`,
+      repo,
+      number,
+      type: 'issue',
+      title,
+      url: `https://github.com/${repo}/issues/${number}`,
+      reasons: ['要人动手'],
+      action: '要你动手',
+      waitingDays: days,
+      daysEstimated: false,
+      parentNumber: 40,
+      parent: `https://github.com/${repo}/issues/40`,
+      childCount: 0,
+      ignored: false
+    })
+    return base({
+      hiddenCount: 0,
+      rows: [
+        {
+          ...baseRow,
+          id: `sample:${repo}#40`,
+          repo,
+          number: 40,
+          type: 'issue',
+          title: '确认导出范围',
+          url: `https://github.com/${repo}/issues/40`,
+          reasons: ['要人动手'],
+          action: '要你动手',
+          waitingDays: 6,
+          daysEstimated: false,
+          parentNumber: null,
+          parent: null,
+          childCount: 2,
+          ignored: false
+        },
+        child(41, '核对导出的列名', 4),
+        child(42, '看空状态的截图', 2)
+      ]
+    })
+  }
   if (scene === 'waiting-hidden') {
     const rows = sampleWaitingRows().slice(0, 2)
     return base({

@@ -460,6 +460,11 @@ describe('sub-issues stay on their own rows', () => {
     ])
     expect(rows).toHaveLength(3)
     expect(rows.map(row => row.url).sort()).toEqual([issueUrl(1), issueUrl(2), issueUrl(3)].sort())
+    expect(rows.find(row => row.number === 1)?.childCount).toBe(2)
+    expect(rows.find(row => row.number === 1)?.parent).toBeNull()
+    expect(rows.find(row => row.number === 2)?.parent).toBe(issueUrl(1))
+    expect(rows.find(row => row.number === 2)?.childCount).toBe(0)
+    expect(rows.find(row => row.number === 3)?.parent).toBe(issueUrl(1))
   })
 
   it('dedupes a child found from a sub-issue link and from search by url', () => {
