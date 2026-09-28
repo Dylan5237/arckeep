@@ -57,10 +57,16 @@ jobs:
         shell: pwsh
         run: pwsh -File verify/run-all.ps1 -ArtifactDir artifact -EvidenceDir evidence
 
+      - name: Release v0.0.1-test smoke (gh release download, workflow GITHUB_TOKEN only)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pwsh -File verify/release-smoke.ps1 -EvidenceDir evidence -Tag v0.0.1-test -Repo ${{ github.repository }}
+
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: verify-issue-1-evidence-fef78d5
+          name: verify-issue-1-evidence-fef78d5-retest
           path: evidence/
           retention-days: 30

@@ -239,7 +239,16 @@ async function main() {
       const message = await page1.locator('.alert.error').innerText()
       const remaining = await tokenInput.inputValue()
       await shot(page1, '11-settings-network-error.png')
-      return { attempts, message, tokenKeptInField: remaining === FAKE_TOKEN }
+      const isNetworkClassMessage = message.includes('连不上 GitHub') || message.includes('网络不可达')
+      const caveat = 'CAVEAT: this scene reuses a long-lived Electron process (page1) that already ' +
+        'made a successful TLS connection to api.github.com in an earlier scene; a fetch/undici ' +
+        'keep-alive connection could bypass a newly added outbound-block rule. Treat this result ' +
+        'as informative only; the authoritative fresh-process retest is the X1-network-retest scene ' +
+        '(verify/x1-network-retest.mjs), which cold-starts a brand-new process after the network is cut.'
+      if (!isNetworkClassMessage) {
+        throw new Error(`message was NOT classified as network-unreachable (got: "${message}"). ${caveat}`)
+      }
+      return { attempts, message, tokenKeptInField: remaining === FAKE_TOKEN, isNetworkClassMessage, caveat }
     } finally {
       ps(`Remove-NetFirewallRule -DisplayName '${fwName}' -ErrorAction SilentlyContinue`)
       if (hostsOk && originalHosts !== null) fs.writeFileSync(hostsPath, originalHosts)
@@ -275,6 +284,20 @@ async function main() {
     await saveHotkey.click()
     await page1.waitForSelector('.hotkey-alert', { timeout: 5000 })
     const alert = page1.locator('.hotkey-alert')
+
+    // First capture the page exactly as the user sees it right after clicking
+    // "保存热键", with NO scrolling — this answers "第一眼能不能看到提示".
+    const viewport = page1.viewportSize()
+    const alertBoxNoScroll = await alert.boundingBox()
+    const visibleWithoutScroll = alertBoxNoScroll && viewport
+      ? (alertBoxNoScroll.y >= 0 && alertBoxNoScroll.y + alertBoxNoScroll.height <= viewport.height)
+      : null
+    await shot(page1, '08a-settings-hotkey-conflict-no-scroll.png')
+
+    // Then scroll the warning into view so the follow-up screenshot actually
+    // shows the warning text next to its "录制"/"改用这个" controls.
+    await alert.scrollIntoViewIfNeeded()
+    await page1.waitForTimeout(200)
     const warningText = await alert.locator('span').innerText()
     const alertBox = await alert.boundingBox()
     const replacementBox = await alert.locator('input[aria-label="新的热键组合"]').boundingBox()
@@ -288,7 +311,17 @@ async function main() {
     if (raw.includes('Ctrl+Alt+K')) throw new Error('failed hotkey was persisted to settings.json')
     if (!warningText.includes('Ctrl+Alt+K')) throw new Error(`warning does not name the combo: "${warningText}"`)
 
-    return { warningText, alertBox, replacementBox, recordBox, applyBox, settingsFileHasConflictCombo: raw.includes('Ctrl+Alt+K') }
+    return {
+      viewport,
+      alertBoxNoScroll,
+      visibleWithoutScroll,
+      warningText,
+      alertBox,
+      replacementBox,
+      recordBox,
+      applyBox,
+      settingsFileHasConflictCombo: raw.includes('Ctrl+Alt+K')
+    }
   })
 
   await scene('AC9-control', 'Control group: switching to an idle combo shows no warning', async () => {

@@ -129,6 +129,26 @@ if ($holderProc -and -not $holderProc.HasExited) { Stop-Process -Id $holderProc.
 Get-Process Arckeep -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
 # -----------------------------------------------------------------
+# X1 retest: fresh-process, network-cut-before-launch retest of the
+# "network unreachable" classification. Isolated from smoke.mjs on purpose
+# (see verify/x1-network-retest.mjs header). Firewall rules it creates are
+# always removed in its own finally block before this returns, so later
+# steps (e.g. the Release smoke test, which needs network) are unaffected.
+# -----------------------------------------------------------------
+Write-Section 'x1-network-retest.mjs' {
+  $env:ARCKEEP_UNPACKED_EXE = $unpackedExe.FullName
+  $env:ARCKEEP_EVIDENCE_DIR = (Resolve-Path $EvidenceDir).Path
+  $env:FAKE_TOKEN = 'ghp_Vf9QzXk2LmP4rT8wYb6nHc3JdA1sE7uG0oKi'
+  Push-Location verify
+  try {
+    node x1-network-retest.mjs
+  } finally {
+    Pop-Location
+  }
+}
+Get-Process Arckeep -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+# -----------------------------------------------------------------
 # Bonus: Ctrl+Alt+Space occupied before a cold start (does not affect the AC9 verdict).
 # -----------------------------------------------------------------
 Write-Section 'bonus-default-hotkey-occupied' {
@@ -162,10 +182,13 @@ This is verification tooling only; it is not part of the Arckeep product.
 | 05-nav-toolshelf.png | AC4 | 点击「工具架」后 |
 | 06-settings-empty.png | AC4/AC5 | 首次进入设置页的空状态 |
 | 07-settings-invalid-token.png | AC5c/X2 | 粘贴假 token 点「测试连接」后的错误提示，token 仍在输入框 |
-| 08-settings-hotkey-conflict.png | AC9/X3 | 热键改成 Ctrl+Alt+K（已被 hold-hotkey.ps1 占用）后的冲突提示 |
+| 08a-settings-hotkey-conflict-no-scroll.png | AC9/X3 | 点「保存热键」后**不滚动**的原样截图（第一眼能不能看到提示） |
+| 08-settings-hotkey-conflict.png | AC9/X3 | `scrollIntoViewIfNeeded()` 后的冲突提示，能看到警告和旁边的输入框/录制/改用这个 |
 | 09-window-narrow-800.png | X6 | 窗口宽度约 800px |
 | 10-window-narrow-min.png | X6 | 窗口缩到 getMinimumSize() |
-| 11-settings-network-error.png | X1 | 防火墙封锁出站后点「测试连接」的网络错误提示 |
+| 11-settings-network-error.png | X1（方法论存疑，见 x1-retest.json） | 复用长时间运行进程时，防火墙封锁出站后点「测试连接」的提示 |
+| 11-settings-network-error-retest.png / -retest-win.png | X1（权威结果） | **全新进程**：先断网（程序级+CIDR+解析IP 三重防火墙规则）再冷启动，点「测试连接」的提示 |
+| x1-retest.json / x1-retest-verdict.txt | X1（权威结果） | 断网重测的完整步骤记录（DNS 解析、防火墙规则、Test-NetConnection 前后结果）和最终判定 |
 | 12-hooks-off.png | X4 | 不设 ARCKEEP_TEST_HOOKS 冷启动，`--arckeep-test=quit` 不起作用 |
 | 13-settings-repos-hotkey-saved.png | AC7 | 添加两个关注仓库后 |
 | 14-hook-close-fullscreen.png | AC8/F | close 钩子后的全屏截图（窗口应不可见） |
@@ -178,9 +201,12 @@ This is verification tooling only; it is not part of the Arckeep product.
 | 21-ac3-installer.json | AC3 | NSIS 安装包 /S 静默安装结果、快捷方式 |
 | 22-ac3-installed-launch.png | AC3 | 安装后启动的全屏截图 |
 | 23-bonus-default-hotkey-occupied.png | 附加 | 默认热键 Ctrl+Alt+Space 被占用时冷启动的表现（不影响 AC9 结论） |
+| 24-release-view.json / 24-release-tag-sha.txt / 24-release-exe-sha256.txt | AC2（绑定 4c5f83b） | Release 元数据、tag 对应的 commit sha、下载资产现算的 SHA256 |
+| 25-release-portable-launch.png / .json | AC2（绑定 4c5f83b） | 从 Release 下载的 portable exe 启动冒烟 |
+| 26-release-installer.json / 26-release-installed-launch.png | AC2（绑定 4c5f83b） | 从 Release 下载的 Setup.exe `/S` 静默安装 + 启动冒烟 |
 | scenes.json | 全部 | 每个检查场景的机器可读结果（PASS/FAIL + 细节） |
 | invalid-token-message.txt / hotkey-warning-message.txt | AC5c/AC9 | 提示文案原文 |
-| run-all-errors.txt | - | run-all.ps1 里失败场景的错误堆栈 |
+| run-all-errors.txt / release-smoke-errors.txt | - | 各脚本里失败场景的错误堆栈 |
 '@ | Out-File -Encoding utf8 $indexPath
 
 Write-Host "Evidence written to $EvidenceDir"
