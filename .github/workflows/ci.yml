@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows:
     name: windows-latest
@@ -63,11 +67,11 @@ jobs:
       - name: test
         run: npm test
 
-  windows-unpacked-smoke:
-    name: windows unpacked smoke
+  windows-package:
+    name: windows package
     runs-on: windows-latest
-    timeout-minutes: 30
-    continue-on-error: true
+    needs: windows
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -82,14 +86,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build unpacked app
-        run: npm run build
+      - name: Build NSIS installer and portable exe
+        run: npm run dist
 
-      - name: Launch smoke
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: arckeep-windows
+          path: |
+            dist/*Setup*.exe
+            dist/*portable*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Launch portable smoke
+        continue-on-error: true
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Recurse -LiteralPath "dist/win-unpacked" -Filter "Arckeep.exe" | Select-Object -First 1
-          if (-not $exe) { throw "Arckeep.exe was not produced" }
+          $exe = Get-ChildItem -LiteralPath "dist" -File -Filter "*portable*.exe" | Select-Object -First 1
+          if (-not $exe) { throw "portable exe was not produced" }
           $proc = Start-Process -FilePath $exe.FullName -PassThru
           Start-Sleep -Seconds 8
           if ($proc.HasExited) { throw "Arckeep exited early with code $($proc.ExitCode)" }
