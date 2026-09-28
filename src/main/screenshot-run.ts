@@ -105,6 +105,39 @@ export async function presentScreenshot(options: {
       && document.body.innerText.includes('显示 8 条')
       && !document.body.innerText.includes('未标仓库的待办')
     `, 'repo filter')
+  } else if (scene === 'hotkey-banner') {
+    await waitUntil(contents, `
+      document.body.innerText.includes('Ctrl+Alt+Space 已被其他程序占用，快速捕获暂不可用')
+      && document.querySelector('#hotkey-banner-action') !== null
+      && document.querySelector('#hotkey-banner')?.hidden === false
+      && document.body.innerText.includes('等我处理')
+    `, 'hotkey banner')
+  } else if (scene === 'hotkey-save-conflict') {
+    await waitUntil(contents, `document.querySelector('#hotkey-save') !== null`, 'hotkey save')
+    const saved = await contents.executeJavaScript(`
+      (() => {
+        const input = document.querySelector('#hotkey-input')
+        const save = document.querySelector('#hotkey-save')
+        if (!(input instanceof HTMLInputElement) || !(save instanceof HTMLButtonElement)) {
+          return 'missing input=' + (input && input.outerHTML) + ' save=' + (save && save.outerHTML)
+        }
+        input.value = 'Ctrl+Alt+K'
+        save.click()
+        return 'clicked'
+      })()
+    `)
+    if (saved !== 'clicked') throw new Error(String(saved))
+    await waitUntil(contents, `(() => {
+      const conflict = document.querySelector('#hotkey-conflict')
+      const scroller = document.querySelector('main')
+      const rect = conflict && conflict.getBoundingClientRect()
+      return Boolean(conflict && scroller && rect
+        && scroller.scrollTop === 0
+        && rect.top >= 0
+        && rect.bottom <= window.innerHeight
+        && conflict.innerText.includes('Ctrl+Alt+K 已被其他程序占用')
+        && document.querySelector('#hotkey-banner')?.hidden === true)
+    })()`, 'inline hotkey conflict')
   } else if (scene === 'todos-delete') {
     await waitUntil(contents, includesText('共 40 条'), '共 40 条')
     await contents.executeJavaScript(`

@@ -16,6 +16,8 @@ export interface AppState {
   watchedRepos: string[]
   hotkey: string
   hotkeyWarning: string | null
+  /** Combo that failed to register, or null when capture is available. */
+  hotkeyUnavailable: string | null
   github: PublicGithubAuth
 }
 
@@ -48,6 +50,7 @@ export interface ArckeepApi {
   getCaptureDraft(): Promise<CaptureDraft>
   setCaptureDraft(draft: CaptureDraft): Promise<CaptureDraft>
   onTodosChanged(listener: () => void): () => void
+  onHotkeyStatus(listener: (combo: string | null) => void): () => void
 }
 
 export function githubSourceLabel(source: GithubSource): string {

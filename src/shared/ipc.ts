@@ -15,5 +15,6 @@ export const IpcChannel = {
   getCaptureDraft: 'capture:get-draft',
   setCaptureDraft: 'capture:set-draft',
   todosChanged: 'todos:changed',
+  hotkeyStatus: 'app:hotkey-status',
   testHook: 'app:test-hook'
 } as const

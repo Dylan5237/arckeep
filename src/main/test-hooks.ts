@@ -1,4 +1,4 @@
-export type TestHookAction = 'close' | 'show' | 'quit' | 'capture' | 'todos'
+export type TestHookAction = 'close' | 'show' | 'quit' | 'capture' | 'todos' | 'hotkey-fail'
 
 export interface TrayActions {
   closeWindow(): void
@@ -11,13 +11,20 @@ export interface TestHookExtras {
   readTodos?: () => unknown
   /** Called only for the `todos` action, so a checker can read a dump file. */
   onTodos?: (todos: unknown) => void
+  /** Marks the capture hotkey as unregistered. Ignored unless hooks are enabled. */
+  failHotkey?: () => void
 }
 
-const ACTIONS = new Set<TestHookAction>(['close', 'show', 'quit', 'capture', 'todos'])
+const ACTIONS = new Set<TestHookAction>(['close', 'show', 'quit', 'capture', 'todos', 'hotkey-fail'])
 
 /** Test hooks stay off unless this exact value is set. */
 export function testHooksEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.ARCKEEP_TEST_HOOKS === '1'
+}
+
+/** Startup flag: the initial globalShortcut.register must fail. Off unless hooks are enabled. */
+export function hotkeyFailureRequested(env: NodeJS.ProcessEnv, argv: readonly string[]): boolean {
+  return testHooksEnabled(env) && argv.includes('--arckeep-test=hotkey-fail')
 }
 
 export function parseTestHookName(value: unknown): TestHookAction | null {
@@ -55,6 +62,10 @@ export function runTestHook(
     extras.openCapture?.()
     return null
   }
+  if (action === 'hotkey-fail') {
+    extras.failHotkey?.()
+    return null
+  }
   const todos = extras.readTodos?.() ?? []
   extras.onTodos?.(todos)
   return todos
@@ -77,6 +88,7 @@ export interface TestHookHandlers {
   quit(): void
   openCapture(): void
   readTodos(): unknown
+  failHotkey(): void
 }
 
 export interface TestHookInstaller {
@@ -96,7 +108,8 @@ export function installTrayTestHooks(env: NodeJS.ProcessEnv, host: TestHookInsta
     show: () => runTestHook('show', host.actions, extras),
     quit: () => runTestHook('quit', host.actions, extras),
     openCapture: () => runTestHook('capture', host.actions, extras),
-    readTodos: () => extras.readTodos?.() ?? []
+    readTodos: () => extras.readTodos?.() ?? [],
+    failHotkey: () => runTestHook('hotkey-fail', host.actions, extras)
   }
   host.expose(handlers)
   host.registerIpc(action => {

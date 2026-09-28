@@ -21,6 +21,7 @@ describe('tray test hooks', () => {
     expect(parseTestHookAction(['--arckeep-test=quit'])).toBe('quit')
     expect(parseTestHookAction(['--arckeep-test=capture'])).toBe('capture')
     expect(parseTestHookAction(['--arckeep-test=todos'])).toBe('todos')
+    expect(parseTestHookAction(['--arckeep-test=hotkey-fail'])).toBe('hotkey-fail')
     expect(parseTestHookAction(['--arckeep-test=nope'])).toBe(null)
     expect(parseTestHookAction([])).toBe(null)
   })
@@ -54,6 +55,10 @@ describe('tray test hooks', () => {
     expect(dispatchTestHook({ ARCKEEP_TEST_HOOKS: 'true' }, 'todos', actions, { openCapture, onTodos })).toBe(false)
     expect(openCapture).not.toHaveBeenCalled()
     expect(onTodos).not.toHaveBeenCalled()
+    const failHotkey = vi.fn()
+    expect(dispatchTestHook({}, 'hotkey-fail', actions, { failHotkey })).toBe(false)
+    expect(dispatchTestHook({ ARCKEEP_TEST_HOOKS: 'true' }, 'hotkey-fail', actions, { failHotkey })).toBe(false)
+    expect(failHotkey).not.toHaveBeenCalled()
   })
 
   it('opens capture and returns store contents only when hooks are enabled', () => {
@@ -92,6 +97,10 @@ describe('tray test hooks', () => {
     expect(ipc?.('todos')).toEqual(todos)
     expect(onTodos).toHaveBeenCalledWith(todos)
     expect(ipc?.('nope')).toBeNull()
+    const failHotkey = vi.fn()
+    expect(ipc?.('hotkey-fail')).toBeNull()
+    expect(dispatchTestHook({ ARCKEEP_TEST_HOOKS: '1' }, 'hotkey-fail', actions, { failHotkey })).toBe(true)
+    expect(failHotkey).toHaveBeenCalledOnce()
     expect(dispatchTestHook({ ARCKEEP_TEST_HOOKS: '1' }, 'todos', actions, {
       readTodos: () => todos,
       onTodos

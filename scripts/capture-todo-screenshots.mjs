@@ -20,7 +20,9 @@ const scenes = [
   ['todos-empty', 'todos-empty.png'],
   ['todos-filter', 'todos-filter.png'],
   ['todos-delete', 'todos-delete.png'],
-  ['todos-narrow', 'todos-narrow.png']
+  ['todos-narrow', 'todos-narrow.png'],
+  ['hotkey-banner', 'hotkey-banner.png'],
+  ['hotkey-save-conflict', 'hotkey-save-conflict.png']
 ]
 
 for (const [scene, filename] of scenes) {

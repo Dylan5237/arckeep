@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { IpcChannel } from '../shared/ipc.js'
+import { trayMenuEntries, trayToolTip } from '../shared/hotkey-status.js'
 import { mergeRepoOptions } from '../shared/todos/repos.js'
 import { createCaptureWindow, focusCaptureInput, showSavedToast } from './capture-window.js'
 import { createGracefulShutdownHandler } from './graceful-shutdown.js'
@@ -32,14 +33,17 @@ import {
 import { SettingsService } from './settings-service.js'
 import {
   dispatchTestHook,
+  hotkeyFailureRequested,
   installTrayTestHooks,
   parseTestHookAction,
+  testHooksEnabled,
   type TestHookExtras,
   type TrayActions
 } from './test-hooks.js'
 import { clearCaptureDraft, loadCaptureDraft, saveCaptureDraft } from './todos/draft.js'
 import { TodoStore } from './todos/store.js'
 import { createSafeStorageBox } from './token-store.js'
+import type { HotkeyRegistrar } from './hotkey.js'
 import { createUrlGuard } from './url-trust.js'
 import { hardenedWebPreferences } from './window-prefs.js'
 
@@ -177,25 +181,61 @@ function openCaptureWindow(): BrowserWindow {
   return window
 }
 
+function publishHotkeyStatus(): void {
+  applyTrayState()
+  if (!mainWindow || mainWindow.isDestroyed() || !service) return
+  mainWindow.webContents.send(IpcChannel.hotkeyStatus, service.hotkeyUnavailableCombo())
+}
+
+function applyTrayState(): void {
+  if (!tray) return
+  const unavailable = service?.hotkeyUnavailableCombo() ?? null
+  tray.setToolTip(trayToolTip(unavailable))
+  const menu = Menu.buildFromTemplate(trayMenuEntries(unavailable).map(entry => ({
+    label: entry.label,
+    enabled: entry.enabled,
+    click: entry.role === 'open'
+      ? () => showMainWindow()
+      : entry.role === 'capture'
+        ? () => openCaptureWindow()
+        : entry.role === 'quit'
+          ? () => quitFromTray()
+          : undefined
+  })))
+  tray.setContextMenu(menu)
+}
+
 function createTray(): void {
   const icon = nativeImage.createFromPath(trayIconPath())
   if (icon.isEmpty()) throw new Error('tray icon is empty')
   tray = new Tray(icon)
-  tray.setToolTip('Arckeep')
-  const menu = Menu.buildFromTemplate([
-    { label: '打开', click: () => showMainWindow() },
-    { label: '快速捕获', click: () => openCaptureWindow() },
-    { label: '退出', click: () => quitFromTray() }
-  ])
-  tray.setContextMenu(menu)
+  applyTrayState()
   tray.on('double-click', () => showMainWindow())
+}
+
+function captureRegistrar(): HotkeyRegistrar {
+  if (!hotkeyFailureRequested(process.env, process.argv)) return globalShortcut
+  return {
+    register: () => false,
+    isRegistered: () => false,
+    unregister: accelerator => {
+      globalShortcut.unregister(accelerator)
+    }
+  }
 }
 
 function installTestHooks(): void {
   installTrayTestHooks(process.env, {
     argv: process.argv,
     actions: trayActions(),
-    extras: testHookExtras(),
+    extras: {
+      ...testHookExtras(),
+      failHotkey: () => {
+        if (!testHooksEnabled(process.env) || !service) return
+        service.simulateRegistrationFailure()
+        publishHotkeyStatus()
+      }
+    },
     expose(handlers) {
       Object.defineProperty(globalThis, '__ARCKEEP_TEST_HOOKS__', {
         configurable: true,
@@ -311,7 +351,9 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
   })
   ipcMain.handle(IpcChannel.setHotkey, (event, hotkey: unknown) => {
     guard(event)
-    return settings.setHotkey(hotkey)
+    const result = settings.setHotkey(hotkey)
+    publishHotkeyStatus()
+    return result
   })
   ipcMain.handle(IpcChannel.setPat, (event, token: unknown) => {
     guard(event)
@@ -419,7 +461,7 @@ if (!gotLock) {
       service = new SettingsService({
         file: settingsFilePath(app.getPath('userData')),
         secretBox: createSafeStorageBox(safeStorage),
-        registrar: globalShortcut,
+        registrar: captureRegistrar(),
         onHotkey: () => openCaptureWindow(),
         log: message => console.error(message)
       })

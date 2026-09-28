@@ -22,6 +22,11 @@ const api: ArckeepApi = {
     const wrapped = (_event: IpcRendererEvent) => listener()
     ipcRenderer.on(IpcChannel.todosChanged, wrapped)
     return () => ipcRenderer.removeListener(IpcChannel.todosChanged, wrapped)
+  },
+  onHotkeyStatus(listener) {
+    const wrapped = (_event: IpcRendererEvent, combo: string | null) => listener(combo)
+    ipcRenderer.on(IpcChannel.hotkeyStatus, wrapped)
+    return () => ipcRenderer.removeListener(IpcChannel.hotkeyStatus, wrapped)
   }
 }
 

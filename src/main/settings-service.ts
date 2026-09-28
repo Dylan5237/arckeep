@@ -6,7 +6,8 @@ import {
   toPublicGithubAuth,
   type GhLookup
 } from './github-auth.js'
-import { applyHotkey, type HotkeyRegistrar } from './hotkey.js'
+import { applyHotkey, hotkeyConflictWarning, type HotkeyRegistrar } from './hotkey.js'
+import { unavailableComboAfterApply } from '../shared/hotkey-status.js'
 import { normalizePat, normalizeWatchedRepos } from './ipc-validators.js'
 import { loadSettings, saveSettings, type PersistedSettings } from './settings-store.js'
 import { assertSerializedWithoutSecret, type SecretBox } from './token-store.js'
@@ -25,6 +26,7 @@ export class SettingsService {
   private settings: PersistedSettings
   private hotkeyWarning: string | null = null
   private activeHotkey: string | null = null
+  private unavailableCombo: string | null = null
 
   constructor(private readonly deps: SettingsServiceDeps) {
     this.settings = loadSettings(deps.file)
@@ -32,6 +34,7 @@ export class SettingsService {
 
   init(): void {
     const applied = applyHotkey(this.settings.hotkey, this.deps.registrar, this.deps.onHotkey, null)
+    this.unavailableCombo = unavailableComboAfterApply(null, applied, null)
     if (!applied.ok) {
       this.activeHotkey = null
       this.hotkeyWarning = applied.warning
@@ -45,6 +48,25 @@ export class SettingsService {
     }
   }
 
+  hotkeyUnavailableCombo(): string | null {
+    return this.unavailableCombo
+  }
+
+  /** Test hook: drop the registered combo so the banner and tray show the failure. */
+  simulateRegistrationFailure(): string {
+    if (this.activeHotkey) {
+      try {
+        this.deps.registrar.unregister(this.activeHotkey)
+      } catch {
+        // Already gone.
+      }
+    }
+    this.activeHotkey = null
+    this.unavailableCombo = this.settings.hotkey
+    this.hotkeyWarning = hotkeyConflictWarning(this.settings.hotkey)
+    return this.unavailableCombo
+  }
+
   getSettings(): PersistedSettings {
     return { ...this.settings, watchedRepos: [...this.settings.watchedRepos] }
   }
@@ -55,6 +77,7 @@ export class SettingsService {
       watchedRepos: [...this.settings.watchedRepos],
       hotkey: this.settings.hotkey,
       hotkeyWarning: this.hotkeyWarning,
+      hotkeyUnavailable: this.unavailableCombo,
       github
     }
   }
@@ -71,9 +94,12 @@ export class SettingsService {
   }
 
   setHotkey(input: unknown): IpcResult<{ hotkey: string }> {
+    const previouslyRegistered = this.activeHotkey
     const applied = applyHotkey(input, this.deps.registrar, this.deps.onHotkey, this.activeHotkey)
+    this.unavailableCombo = unavailableComboAfterApply(this.unavailableCombo, applied, previouslyRegistered)
     if (!applied.ok) {
       this.hotkeyWarning = applied.warning
+      if (!previouslyRegistered || applied.hotkey !== previouslyRegistered) this.activeHotkey = null
       return { ok: false, error: applied.warning ?? '热键注册失败' }
     }
     this.activeHotkey = applied.hotkey

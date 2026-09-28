@@ -7,6 +7,8 @@ export const SCREENSHOT_SCENES = [
   'invalid-token',
   'connected',
   'hotkey-conflict',
+  'hotkey-banner',
+  'hotkey-save-conflict',
   'narrow',
   'capture-empty',
   'capture-opened',
@@ -49,11 +51,14 @@ export function screenshotWindowSize(scene: ScreenshotScene): { width: number, h
   if (scene === 'capture-empty' || scene === 'capture-opened' || scene === 'capture-filled' || scene === 'capture-draft' || scene === 'capture-saved') {
     return { width: 800, height: 600 }
   }
+  if (scene === 'hotkey-banner' || scene === 'hotkey-save-conflict') {
+    return { width: 1120, height: 760 }
+  }
   return { width: 1120, height: 900 }
 }
 
 export function screenshotOpensSettings(scene: ScreenshotScene): boolean {
-  return scene === 'signed-out' || scene === 'invalid-token' || scene === 'connected' || scene === 'hotkey-conflict'
+  return scene === 'signed-out' || scene === 'invalid-token' || scene === 'connected' || scene === 'hotkey-conflict' || scene === 'hotkey-save-conflict'
 }
 
 export function screenshotOpensTodos(scene: ScreenshotScene): boolean {
@@ -92,7 +97,8 @@ export function createScreenshotSettings(scene: ScreenshotScene, file: string): 
     secretBox: fixtureSecretBox(),
     registrar: {
       register: (accelerator: string) => {
-        if (scene === 'hotkey-conflict') return false
+        if (scene === 'hotkey-conflict' || scene === 'hotkey-banner') return false
+        if (scene === 'hotkey-save-conflict' && accelerator === 'Ctrl+Alt+K') return false
         held.add(accelerator)
         return true
       },

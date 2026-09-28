@@ -140,6 +140,10 @@ describe('settings persistence', () => {
     service.init()
     const state = await service.getState()
     expect(state.hotkeyWarning).toBe('Ctrl+Alt+Space 已被其他程序占用')
+    expect(state.hotkeyUnavailable).toBe('Ctrl+Alt+Space')
+    expect(service.hotkeyUnavailableCombo()).toBe('Ctrl+Alt+Space')
+    expect(service.setHotkey('Ctrl+Alt+K').ok).toBe(false)
+    expect(service.hotkeyUnavailableCombo()).toBe('Ctrl+Alt+K')
   })
 
   it('reports a hotkey conflict without replacing the saved accelerator', async () => {
@@ -161,6 +165,29 @@ describe('settings persistence', () => {
     const state = await service.getState()
     expect(state.hotkeyWarning).toBe('Ctrl+Alt+K 已被其他程序占用')
     expect(state.hotkey).toBe(DEFAULT_HOTKEY)
+    expect(state.hotkeyUnavailable).toBeNull()
+  })
+
+  it('clears the startup banner once a later hotkey registers', async () => {
+    const file = tempFile()
+    const shortcuts = new FakeShortcuts()
+    shortcuts.blocked.add(DEFAULT_HOTKEY)
+    const service = new SettingsService({
+      file,
+      secretBox: xorBox(),
+      registrar: shortcuts,
+      onHotkey: () => {},
+      readGh: async () => ({ ok: false, reason: 'not-installed' })
+    })
+    service.init()
+    expect(service.hotkeyUnavailableCombo()).toBe(DEFAULT_HOTKEY)
+    expect(service.simulateRegistrationFailure()).toBe(DEFAULT_HOTKEY)
+    shortcuts.blocked.delete(DEFAULT_HOTKEY)
+    expect(service.setHotkey('Ctrl+Alt+K').ok).toBe(true)
+    const state = await service.getState()
+    expect(state.hotkeyUnavailable).toBeNull()
+    expect(state.hotkeyWarning).toBeNull()
+    expect(shortcuts.registered.has('Ctrl+Alt+K')).toBe(true)
   })
 
   it('uses gh CLI when it is logged in, and a saved PAT otherwise', async () => {
