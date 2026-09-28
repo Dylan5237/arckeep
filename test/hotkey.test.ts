@@ -12,6 +12,10 @@ class FakeShortcuts implements HotkeyRegistrar {
     return true
   }
 
+  isRegistered(accelerator: string): boolean {
+    return this.registered.has(accelerator)
+  }
+
   unregister(accelerator: string): void {
     this.registered.delete(accelerator)
   }
@@ -42,6 +46,15 @@ describe('applyHotkey', () => {
     expect(conflict.hotkey).toBe(DEFAULT_HOTKEY)
     expect(shortcuts.registered.has(DEFAULT_HOTKEY)).toBe(true)
     expect(shortcuts.registered.has('Ctrl+Alt+K')).toBe(false)
+  })
+
+  it('warns when register() returns true but isRegistered() is false', () => {
+    const shortcuts = new FakeShortcuts()
+    shortcuts.register = () => true
+    shortcuts.isRegistered = () => false
+    const result = applyHotkey('Ctrl+Alt+K', shortcuts, () => {}, null)
+    expect(result.ok).toBe(false)
+    expect(result.warning).toMatch(/冲突/)
   })
 
   it('does not unregister the current accelerator when the input is invalid', () => {

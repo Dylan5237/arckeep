@@ -47,6 +47,9 @@ function registrar(): HotkeyRegistrar {
       registered.add(accelerator)
       return true
     },
+    isRegistered(accelerator: string) {
+      return registered.has(accelerator)
+    },
     unregister(accelerator: string) {
       registered.delete(accelerator)
     }

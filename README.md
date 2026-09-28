@@ -6,6 +6,12 @@ Arckeep：Dylan 的 AI 原生个人工作台（Windows 桌面应用）。
 
 渲染层用 Vite 打包的普通 TypeScript，没有 UI 框架。页面只有导航和一张设置表单，先不引入组件运行时。
 
+## 在 Windows 上运行
+
+1. 下载 CI artifact `arckeep-windows` 里的 portable exe（`Arckeep-*-portable.exe`），或运行 NSIS 安装包（`Arckeep-Setup-*.exe`）。
+2. 双击 exe。安装包没有代码签名，SmartScreen 会提示风险：点「更多信息」，再点「仍要运行」。
+3. 窗口打开就能用。关掉窗口会留在托盘；要从托盘菜单选「退出」才会结束进程。
+
 ## 开发
 
 需要 Node.js 22。

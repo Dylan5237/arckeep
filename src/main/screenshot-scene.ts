@@ -53,12 +53,18 @@ function fixtureSecretBox(): SecretBox {
 }
 
 export function createScreenshotSettings(scene: ScreenshotScene, file: string): SettingsService {
+  const held = new Set<string>()
   const service = new SettingsService({
     file,
     secretBox: fixtureSecretBox(),
     registrar: {
-      register: () => scene !== 'hotkey-conflict',
-      unregister: () => {}
+      register: (accelerator: string) => {
+        if (scene === 'hotkey-conflict') return false
+        held.add(accelerator)
+        return true
+      },
+      isRegistered: (accelerator: string) => held.has(accelerator),
+      unregister: (accelerator: string) => { held.delete(accelerator) }
     },
     onHotkey: () => {},
     readGh: async () => {

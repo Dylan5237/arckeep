@@ -9,6 +9,7 @@ const NAMED_KEYS = new Set([
 
 export interface HotkeyRegistrar {
   register(accelerator: string, callback: () => void): boolean
+  isRegistered(accelerator: string): boolean
   unregister(accelerator: string): void
 }
 
@@ -52,6 +53,23 @@ export function hotkeyConflictWarning(accelerator: string): string {
   return `热键 ${accelerator} 注册失败，可能与其他程序冲突`
 }
 
+/** True only when register() and isRegistered() both report success. */
+export function confirmRegistered(
+  registrar: HotkeyRegistrar,
+  accelerator: string,
+  onTrigger: () => void
+): boolean {
+  const accepted = registrar.register(accelerator, onTrigger) === true
+  const registered = registrar.isRegistered(accelerator) === true
+  if (accepted && registered) return true
+  try {
+    registrar.unregister(accelerator)
+  } catch {
+    // Nothing was held.
+  }
+  return false
+}
+
 /**
  * Registers `requested`. On conflict, restores `previous` when possible and returns a visible warning.
  */
@@ -81,13 +99,13 @@ export function applyHotkey(
     }
   }
 
-  if (registrar.register(accelerator, onTrigger)) {
+  if (confirmRegistered(registrar, accelerator, onTrigger)) {
     return { ok: true, hotkey: accelerator, warning: null }
   }
 
   let restored = false
   if (previous && previous !== accelerator) {
-    restored = registrar.register(previous, onTrigger)
+    restored = confirmRegistered(registrar, previous, onTrigger)
   }
   return {
     ok: false,

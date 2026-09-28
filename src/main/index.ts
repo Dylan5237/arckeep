@@ -15,6 +15,7 @@ import {
   screenshotWindowSize
 } from './screenshot-scene.js'
 import { SettingsService } from './settings-service.js'
+import { parseTestHookAction, runTestHook, testHooksEnabled, type TrayActions } from './test-hooks.js'
 import { createSafeStorageBox } from './token-store.js'
 import { createUrlGuard } from './url-trust.js'
 
@@ -61,6 +62,23 @@ function showMainWindow(): void {
   mainWindow.focus()
 }
 
+function quitFromTray(): void {
+  isQuitting = true
+  app.quit()
+}
+
+function closeMainWindow(): void {
+  mainWindow?.close()
+}
+
+function trayActions(): TrayActions {
+  return {
+    closeWindow: closeMainWindow,
+    showWindow: showMainWindow,
+    quit: quitFromTray
+  }
+}
+
 function createTray(): void {
   const icon = nativeImage.createFromPath(trayIconPath())
   if (icon.isEmpty()) throw new Error('tray icon is empty')
@@ -68,10 +86,26 @@ function createTray(): void {
   tray.setToolTip('Arckeep')
   const menu = Menu.buildFromTemplate([
     { label: '打开', click: () => showMainWindow() },
-    { label: '退出', click: () => { isQuitting = true; app.quit() } }
+    { label: '退出', click: () => quitFromTray() }
   ])
   tray.setContextMenu(menu)
   tray.on('double-click', () => showMainWindow())
+}
+
+function installTestHooks(): void {
+  if (!testHooksEnabled()) return
+  const actions = trayActions()
+  Object.defineProperty(globalThis, '__ARCKEEP_TEST_HOOKS__', {
+    configurable: true,
+    enumerable: false,
+    value: {
+      close: () => runTestHook('close', actions),
+      show: () => runTestHook('show', actions),
+      quit: () => runTestHook('quit', actions)
+    }
+  })
+  const action = parseTestHookAction(process.argv)
+  if (action) runTestHook(action, actions)
 }
 
 function createWindow(): BrowserWindow {
@@ -214,7 +248,16 @@ const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => showMainWindow())
+  app.on('second-instance', (_event, argv) => {
+    if (testHooksEnabled()) {
+      const action = parseTestHookAction(argv)
+      if (action) {
+        runTestHook(action, trayActions())
+        return
+      }
+    }
+    showMainWindow()
+  })
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null)
     if (screenshotPath) {
@@ -236,6 +279,7 @@ if (!gotLock) {
     } catch (error) {
       console.error(error instanceof Error ? error.message : '托盘不可用')
     }
+    installTestHooks()
   }).catch(error => {
     console.error(error)
     app.exit(1)

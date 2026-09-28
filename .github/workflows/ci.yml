@@ -89,7 +89,18 @@ jobs:
       - name: Build NSIS installer and portable exe
         run: npm run dist
 
-      - name: Upload Windows build
+      - name: Zip win-unpacked
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath "dist/win-unpacked/Arckeep.exe")) {
+            throw "dist/win-unpacked/Arckeep.exe was not produced"
+          }
+          if (-not (Get-ChildItem -LiteralPath "dist" -File -Filter "*portable*.exe")) {
+            throw "portable exe was not produced"
+          }
+          Compress-Archive -Path "dist/win-unpacked" -DestinationPath "dist/arckeep-win-unpacked.zip" -Force
+
+      - name: Upload Windows installers
         uses: actions/upload-artifact@v4
         with:
           name: arckeep-windows
@@ -99,12 +110,19 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Launch portable smoke
+      - name: Upload unpacked app
+        uses: actions/upload-artifact@v4
+        with:
+          name: arckeep-win-unpacked
+          path: dist/arckeep-win-unpacked.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Launch unpacked smoke
         continue-on-error: true
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -LiteralPath "dist" -File -Filter "*portable*.exe" | Select-Object -First 1
-          if (-not $exe) { throw "portable exe was not produced" }
+          $exe = Get-Item -LiteralPath "dist/win-unpacked/Arckeep.exe"
           $proc = Start-Process -FilePath $exe.FullName -PassThru
           Start-Sleep -Seconds 8
           if ($proc.HasExited) { throw "Arckeep exited early with code $($proc.ExitCode)" }

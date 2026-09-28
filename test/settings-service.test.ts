@@ -32,6 +32,10 @@ class FakeShortcuts implements HotkeyRegistrar {
     return true
   }
 
+  isRegistered(accelerator: string): boolean {
+    return this.registered.has(accelerator)
+  }
+
   unregister(accelerator: string): void {
     this.registered.delete(accelerator)
   }
@@ -87,6 +91,24 @@ describe('settings persistence', () => {
     expect(service.getSettings().hotkey).toBe(DEFAULT_HOTKEY)
     expect(service.setRepos([]).ok).toBe(true)
     expect(loadSettings(file).watchedRepos).toEqual([])
+  })
+
+  it('surfaces a settings warning when register succeeds but isRegistered does not', async () => {
+    const file = tempFile()
+    const service = new SettingsService({
+      file,
+      secretBox: xorBox(),
+      registrar: {
+        register: () => true,
+        isRegistered: () => false,
+        unregister: () => {}
+      },
+      onHotkey: () => {},
+      readGh: async () => ({ ok: false, reason: 'not-installed' })
+    })
+    service.init()
+    const state = await service.getState()
+    expect(state.hotkeyWarning).toMatch(/注册失败/)
   })
 
   it('reports a hotkey conflict without replacing the saved accelerator', async () => {
