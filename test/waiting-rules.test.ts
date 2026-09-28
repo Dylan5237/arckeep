@@ -398,7 +398,9 @@ describe('hidden repositories', () => {
         })
       }]
     }))
-    const env = { XDG_CONFIG_HOME: configHome }
+    const env = process.platform === 'win32'
+      ? { APPDATA: configHome }
+      : { XDG_CONFIG_HOME: configHome }
     let hiddenOut = ''
     await runCli(['--json', '--fixture', fixture], {
       stdout: text => { hiddenOut += text },
