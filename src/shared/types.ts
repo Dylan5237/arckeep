@@ -1,4 +1,8 @@
+import type { TodoItem, TodoUpdate } from './todos/types.js'
+
 export const DEFAULT_HOTKEY = 'Ctrl+Alt+Space'
+
+export type { TodoItem, TodoUpdate, WaitingTodo } from './todos/types.js'
 
 export type GithubSource = 'gh-cli' | 'pat' | 'none'
 
@@ -34,6 +38,14 @@ export interface ArckeepApi {
   setPat(token: string): Promise<IpcResult<{ patSaved: true }>>
   clearPat(): Promise<IpcResult<{ patSaved: false }>>
   testGithub(pastedToken?: string): Promise<{ ok: true, login: string } | { ok: false, error: string }>
+  listTodos(): Promise<TodoItem[]>
+  createTodo(input: { text: string, repo: string | null, waiting: boolean }): Promise<IpcResult<TodoItem>>
+  updateTodo(input: TodoUpdate): Promise<IpcResult<TodoItem>>
+  setTodoCompleted(id: string, completed: boolean): Promise<IpcResult<TodoItem>>
+  deleteTodo(id: string): Promise<IpcResult<{ id: string }>>
+  todoRepoOptions(): Promise<string[]>
+  closeCapture(): Promise<void>
+  onTodosChanged(listener: () => void): () => void
 }
 
 export function githubSourceLabel(source: GithubSource): string {

@@ -10,3 +10,11 @@ export function userDataDir(appData: string, join: (...parts: string[]) => strin
 export function settingsFilePath(userData: string, join: (...parts: string[]) => string = path.join): string {
   return join(userData, 'settings.json')
 }
+
+export function todosFilePath(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'todos.jsonl')
+}
+
+export function testHookTodosPath(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'test-hook-todos.json')
+}

@@ -1,0 +1,66 @@
+@import "../../docs/brand/arckeep-brand-tokens.css";
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--arckeep-warm-ivory);
+  color: var(--arckeep-deep-charcoal);
+  font-family: "Segoe UI", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+  font-size: 15px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  padding: 16px 18px 14px;
+}
+
+.capture {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+
+h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+input[type="text"] {
+  width: 100%;
+  border: 1px solid var(--arckeep-soft-stone);
+  background: var(--arckeep-white);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  color: inherit;
+}
+
+.capture-repo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--arckeep-muted-graphite);
+  font-size: 13px;
+}
+
+.capture-wait {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+}
+
+.hint {
+  margin: 0;
+  color: var(--arckeep-muted-graphite);
+  font-size: 12px;
+}
+
+.error {
+  margin: 0;
+  color: #8a4b32;
+  font-size: 13px;
+}

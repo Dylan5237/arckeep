@@ -5,5 +5,13 @@ export const IpcChannel = {
   setPat: 'app:set-pat',
   clearPat: 'app:clear-pat',
   testGithub: 'app:test-github',
+  listTodos: 'todos:list',
+  createTodo: 'todos:create',
+  updateTodo: 'todos:update',
+  setTodoCompleted: 'todos:set-completed',
+  deleteTodo: 'todos:delete',
+  todoRepoOptions: 'todos:repo-options',
+  closeCapture: 'capture:close',
+  todosChanged: 'todos:changed',
   testHook: 'app:test-hook'
 } as const

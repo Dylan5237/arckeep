@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { type HotkeyRegistrar } from '../src/main/hotkey.js'
-import { settingsFilePath, userDataDir } from '../src/main/paths.js'
+import { settingsFilePath, todosFilePath, userDataDir } from '../src/main/paths.js'
 import { SettingsService } from '../src/main/settings-service.js'
 import { loadSettings } from '../src/main/settings-store.js'
 import type { SecretBox } from '../src/main/token-store.js'
@@ -76,6 +76,37 @@ describe('settings persistence', () => {
       watchedRepos: ['Dylan5237/arckeep', 'Dylan5237/kcc-workbench'],
       hotkey: 'Ctrl+Shift+A'
     })
+  })
+
+  it('registers the new hotkey, drops the old one, and registers the saved combo after restart', () => {
+    const file = tempFile()
+    const shortcuts = new FakeShortcuts()
+    const first = new SettingsService({
+      file,
+      secretBox: xorBox(),
+      registrar: shortcuts,
+      onHotkey: () => {},
+      readGh: async () => ({ ok: false, reason: 'not-installed' })
+    })
+    first.init()
+    expect(shortcuts.registered.has(DEFAULT_HOTKEY)).toBe(true)
+    expect(first.setHotkey('Ctrl+Alt+K').ok).toBe(true)
+    expect(shortcuts.registered.has(DEFAULT_HOTKEY)).toBe(false)
+    expect(shortcuts.registered.has('Ctrl+Alt+K')).toBe(true)
+    expect(loadSettings(file).hotkey).toBe('Ctrl+Alt+K')
+
+    const restarted = new FakeShortcuts()
+    const second = new SettingsService({
+      file,
+      secretBox: xorBox(),
+      registrar: restarted,
+      onHotkey: () => {},
+      readGh: async () => ({ ok: false, reason: 'not-installed' })
+    })
+    second.init()
+    expect(restarted.registered.has('Ctrl+Alt+K')).toBe(true)
+    expect(restarted.registered.has(DEFAULT_HOTKEY)).toBe(false)
+    expect(second.getSettings().hotkey).toBe('Ctrl+Alt+K')
   })
 
   it('stores an empty repo list as auto mode and starts from the default hotkey', () => {
@@ -194,5 +225,7 @@ describe('user data path', () => {
     expect(userDataDir(appData, path.win32.join)).toBe('C:\\Users\\Dylan\\AppData\\Roaming\\Arckeep')
     expect(settingsFilePath(userDataDir(appData, path.win32.join), path.win32.join))
       .toBe('C:\\Users\\Dylan\\AppData\\Roaming\\Arckeep\\settings.json')
+    expect(todosFilePath(userDataDir(appData, path.win32.join), path.win32.join))
+      .toBe('C:\\Users\\Dylan\\AppData\\Roaming\\Arckeep\\todos.jsonl')
   })
 })

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { IpcChannel } from '../shared/ipc.js'
 import type { ArckeepApi } from '../shared/types.js'
 
@@ -8,7 +8,19 @@ const api: ArckeepApi = {
   setHotkey: hotkey => ipcRenderer.invoke(IpcChannel.setHotkey, hotkey),
   setPat: token => ipcRenderer.invoke(IpcChannel.setPat, token),
   clearPat: () => ipcRenderer.invoke(IpcChannel.clearPat),
-  testGithub: (pastedToken?: string) => ipcRenderer.invoke(IpcChannel.testGithub, pastedToken)
+  testGithub: (pastedToken?: string) => ipcRenderer.invoke(IpcChannel.testGithub, pastedToken),
+  listTodos: () => ipcRenderer.invoke(IpcChannel.listTodos),
+  createTodo: input => ipcRenderer.invoke(IpcChannel.createTodo, input),
+  updateTodo: input => ipcRenderer.invoke(IpcChannel.updateTodo, input),
+  setTodoCompleted: (id, completed) => ipcRenderer.invoke(IpcChannel.setTodoCompleted, { id, completed }),
+  deleteTodo: id => ipcRenderer.invoke(IpcChannel.deleteTodo, id),
+  todoRepoOptions: () => ipcRenderer.invoke(IpcChannel.todoRepoOptions),
+  closeCapture: () => ipcRenderer.invoke(IpcChannel.closeCapture),
+  onTodosChanged(listener) {
+    const wrapped = (_event: IpcRendererEvent) => listener()
+    ipcRenderer.on(IpcChannel.todosChanged, wrapped)
+    return () => ipcRenderer.removeListener(IpcChannel.todosChanged, wrapped)
+  }
 }
 
 contextBridge.exposeInMainWorld('arckeep', api)

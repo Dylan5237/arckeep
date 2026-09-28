@@ -6,7 +6,13 @@ export default defineConfig({
   base: './',
   build: {
     outDir: resolve(__dirname, 'out/renderer'),
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        index: resolve(__dirname, 'src/renderer/index.html'),
+        capture: resolve(__dirname, 'src/renderer/capture.html')
+      }
+    }
   },
   server: {
     host: '127.0.0.1',

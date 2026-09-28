@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>快速捕获</title>
+    <link rel="stylesheet" href="./capture.css" />
+  </head>
+  <body>
+    <form id="capture-form" class="capture">
+      <h1>快速捕获</h1>
+      <input id="text" type="text" maxlength="500" placeholder="记一件事" aria-label="待办内容" autocomplete="off" spellcheck="false" />
+      <label class="capture-repo">
+        <span>仓库</span>
+        <input id="repo" type="text" placeholder="owner/repo，可选" aria-label="仓库标签" list="capture-repos" autocomplete="off" spellcheck="false" />
+      </label>
+      <datalist id="capture-repos"></datalist>
+      <label class="capture-wait">
+        <input id="waiting" type="checkbox" />
+        <span>等我</span>
+      </label>
+      <p id="error" class="error" role="alert" hidden></p>
+      <p class="hint">Enter 保存并关闭，Esc 放弃</p>
+    </form>
+    <script type="module" src="./capture.ts"></script>
+  </body>
+</html>

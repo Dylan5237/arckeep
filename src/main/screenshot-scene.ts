@@ -7,7 +7,14 @@ export const SCREENSHOT_SCENES = [
   'invalid-token',
   'connected',
   'hotkey-conflict',
-  'narrow'
+  'narrow',
+  'capture-empty',
+  'capture-filled',
+  'todos',
+  'todos-empty',
+  'todos-filter',
+  'todos-delete',
+  'todos-narrow'
 ] as const
 
 export type ScreenshotScene = (typeof SCREENSHOT_SCENES)[number]
@@ -31,13 +38,29 @@ export function parseScreenshotScene(value: string | undefined): ScreenshotScene
 }
 
 export function screenshotWindowSize(scene: ScreenshotScene): { width: number, height: number } {
-  if (scene === 'narrow') return { width: 800, height: 760 }
-  if (scene === 'nav') return { width: 1120, height: 760 }
+  if (scene === 'narrow' || scene === 'todos-narrow') return { width: 800, height: 760 }
+  if (scene === 'nav' || scene === 'todos-empty') return { width: 1120, height: 760 }
+  if (scene === 'todos' || scene === 'todos-filter' || scene === 'todos-delete') {
+    return { width: 1120, height: 1100 }
+  }
+  if (scene === 'capture-empty' || scene === 'capture-filled') return { width: 800, height: 600 }
   return { width: 1120, height: 900 }
 }
 
 export function screenshotOpensSettings(scene: ScreenshotScene): boolean {
-  return scene !== 'nav' && scene !== 'narrow'
+  return scene === 'signed-out' || scene === 'invalid-token' || scene === 'connected' || scene === 'hotkey-conflict'
+}
+
+export function screenshotOpensTodos(scene: ScreenshotScene): boolean {
+  return scene === 'todos'
+    || scene === 'todos-empty'
+    || scene === 'todos-filter'
+    || scene === 'todos-delete'
+    || scene === 'todos-narrow'
+}
+
+export function screenshotShowsMainWindow(scene: ScreenshotScene): boolean {
+  return scene !== 'capture-empty' && scene !== 'capture-filled'
 }
 
 function fixtureSecretBox(): SecretBox {

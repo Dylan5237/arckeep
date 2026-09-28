@@ -2,10 +2,12 @@ import brandMark from '../../docs/brand/logo/Arckeep_Master_Horizontal_Reverse.s
 import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
 import { DEFAULT_HOTKEY } from '../shared/types'
+import { renderTodos } from './todos-page'
 
 type ViewId = 'inbox' | 'projects' | 'todos' | 'tools' | 'settings'
+type PlaceholderId = Exclude<ViewId, 'settings' | 'todos'>
 
-const PAGES: Record<Exclude<ViewId, 'settings'>, { title: string, body: string }> = {
+const PAGES: Record<PlaceholderId, { title: string, body: string }> = {
   inbox: {
     title: '等我处理',
     body: '需要你拍板或回复的事项会集中在这里。这一页先占位，具体能力在后续 Issue。'
@@ -13,10 +15,6 @@ const PAGES: Record<Exclude<ViewId, 'settings'>, { title: string, body: string }
   projects: {
     title: '项目总览',
     body: '关注的仓库会在这里汇总。列表留空时走自动模式。这一页先占位。'
-  },
-  todos: {
-    title: '待办',
-    body: '个人待办会放在这里。这一页先占位。'
   },
   tools: {
     title: '工具架',
@@ -52,7 +50,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node
 }
 
-function renderPlaceholder(view: Exclude<ViewId, 'settings'>): void {
+function renderPlaceholder(view: PlaceholderId): void {
   if (!content) return
   const page = PAGES[view]
   content.replaceChildren(
@@ -234,7 +232,7 @@ async function applyHotkeyValue(value: string): Promise<void> {
 function renderHotkeyCard(state: AppState): HTMLElement {
   const card = el('section', { class: 'card' }, [
     el('h2', {}, ['全局热键']),
-    el('p', { class: 'hint' }, [`默认 ${DEFAULT_HOTKEY}。注册失败时会写出被占用的组合，并可在提示旁边直接换一个。`])
+    el('p', { class: 'hint' }, [`默认 ${DEFAULT_HOTKEY}，用来打开快速捕获。注册失败时会写出被占用的组合，并可在提示旁边直接换一个。`])
   ])
   const input = el('input', { type: 'text', value: state.hotkey, 'aria-label': '全局热键' })
   const save = el('button', { type: 'button', class: 'primary' }, ['保存热键'])
@@ -277,9 +275,15 @@ function hotkeyWarningRow(warning: string): HTMLElement {
   ])
 }
 
+let leaveTodos: (() => void) | null = null
+
 async function show(view: ViewId): Promise<void> {
+  leaveTodos?.()
+  leaveTodos = null
   setActive(view)
+  if (!content) return
   if (view === 'settings') await renderSettings()
+  else if (view === 'todos') leaveTodos = await renderTodos(content)
   else renderPlaceholder(view)
 }
 
@@ -293,4 +297,4 @@ for (const button of navButtons) {
 }
 
 const initial = new URLSearchParams(location.search).get('page')
-void show(initial === 'settings' ? 'settings' : 'inbox')
+void show(initial === 'settings' ? 'settings' : initial === 'todos' ? 'todos' : 'inbox')
