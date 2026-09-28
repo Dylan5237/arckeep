@@ -2,6 +2,8 @@ import brandMark from '../../docs/brand/logo/Arckeep_Master_Horizontal_Reverse.s
 import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
 import { DEFAULT_HOTKEY } from '../shared/types'
+import { renderWaiting } from './waiting-page'
+import { renderWaitingSettings } from './waiting-settings'
 
 type ViewId = 'inbox' | 'projects' | 'todos' | 'tools' | 'settings'
 
@@ -88,7 +90,8 @@ async function renderSettings(): Promise<void> {
   page.append(
     renderGithubCard(state),
     renderReposCard(state),
-    renderHotkeyCard(state)
+    renderHotkeyCard(state),
+    renderWaitingSettings(state, renderSettings)
   )
 }
 
@@ -279,7 +282,9 @@ function hotkeyWarningRow(warning: string): HTMLElement {
 
 async function show(view: ViewId): Promise<void> {
   setActive(view)
+  if (!content) return
   if (view === 'settings') await renderSettings()
+  else if (view === 'inbox') await renderWaiting(content, next => { void show(next) })
   else renderPlaceholder(view)
 }
 

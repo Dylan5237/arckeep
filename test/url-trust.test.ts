@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createUrlGuard, isTrustedAppUrl, type UrlTrustOptions } from '../src/main/url-trust.js'
+import { createUrlGuard, isTrustedAppUrl, isTrustedBrowserUrl, type UrlTrustOptions } from '../src/main/url-trust.js'
 
 const opts = {
   rendererRootFileUrl: 'file:///app/out/renderer/',
@@ -33,6 +33,15 @@ describe('isTrustedAppUrl', () => {
   it('returns false for malformed input', () => {
     expect(isTrustedAppUrl('not a url', opts)).toBe(false)
     expect(isTrustedAppUrl('', opts)).toBe(false)
+  })
+
+  it('opens only https github.com urls in the browser', () => {
+    expect(isTrustedBrowserUrl('https://github.com/example/demo/issues/12')).toBe(true)
+    expect(isTrustedBrowserUrl('https://www.github.com/example/demo/pull/4')).toBe(true)
+    expect(isTrustedBrowserUrl('http://github.com/example/demo/issues/12')).toBe(false)
+    expect(isTrustedBrowserUrl('https://github.com.evil.com/example/demo')).toBe(false)
+    expect(isTrustedBrowserUrl('https://user:pass@github.com/example/demo')).toBe(false)
+    expect(isTrustedBrowserUrl('https://github.com/')).toBe(false)
   })
 
   it('requires getOptions to be a function', () => {

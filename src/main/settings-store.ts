@@ -1,5 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { defaultWaitingConfig, parseWaitingConfig } from '../shared/waiting/rules.js'
+import type { WaitingConfig } from '../shared/waiting/types.js'
 import { DEFAULT_HOTKEY } from '../shared/types.js'
 import { normalizeAccelerator } from './hotkey.js'
 import { normalizeWatchedRepos } from './ipc-validators.js'
@@ -9,6 +11,7 @@ export interface PersistedSettings {
   watchedRepos: string[]
   hotkey: string
   patCiphertext: string | null
+  waiting: WaitingConfig
 }
 
 export function defaultSettings(): PersistedSettings {
@@ -16,7 +19,8 @@ export function defaultSettings(): PersistedSettings {
     version: 1,
     watchedRepos: [],
     hotkey: DEFAULT_HOTKEY,
-    patCiphertext: null
+    patCiphertext: null,
+    waiting: defaultWaitingConfig()
   }
 }
 
@@ -42,7 +46,13 @@ export function parseSettings(raw: unknown): PersistedSettings {
   const patCiphertext = typeof raw.patCiphertext === 'string' && raw.patCiphertext.length > 0
     ? raw.patCiphertext
     : null
-  return { version: 1, watchedRepos, hotkey, patCiphertext }
+  let waiting = defaultWaitingConfig()
+  try {
+    waiting = parseWaitingConfig(raw.waiting)
+  } catch {
+    waiting = defaultWaitingConfig()
+  }
+  return { version: 1, watchedRepos, hotkey, patCiphertext, waiting }
 }
 
 export function loadSettings(file: string): PersistedSettings {

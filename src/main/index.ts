@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, safeStorage } from 'electron'
+import { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, safeStorage, shell } from 'electron'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { IpcChannel } from '../shared/ipc.js'
 import { createGracefulShutdownHandler } from './graceful-shutdown.js'
 import { requireSender } from './ipc-validators.js'
-import { settingsFilePath, userDataDir } from './paths.js'
+import { settingsFilePath, userDataDir, waitingCachePath, waitingDismissalPath } from './paths.js'
 import {
   MOCK_GITHUB_LOGIN,
   createScreenshotSettings,
@@ -14,10 +14,12 @@ import {
   screenshotOpensSettings,
   screenshotWindowSize
 } from './screenshot-scene.js'
+import { createScreenshotWaiting } from './screenshot-waiting.js'
 import { SettingsService } from './settings-service.js'
+import { WaitingService } from './waiting-service.js'
 import { dispatchTestHook, installTrayTestHooks, parseTestHookAction, type TrayActions } from './test-hooks.js'
 import { createSafeStorageBox } from './token-store.js'
-import { createUrlGuard } from './url-trust.js'
+import { createUrlGuard, isTrustedBrowserUrl } from './url-trust.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const screenshotPath = process.env.ARCKEEP_SCREENSHOT
@@ -37,6 +39,7 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 let service: SettingsService | null = null
+let waiting: WaitingService | ReturnType<typeof createScreenshotWaiting> | null = null
 
 const devServerOrigin = process.env.ARCKEEP_DEV === '1' ? process.env.VITE_DEV_SERVER_URL ?? null : null
 const rendererDir = path.join(__dirname, '../renderer')
@@ -199,7 +202,19 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: str
         ? '未配置'
         : scene === 'hotkey-conflict'
           ? '已被其他程序占用'
-          : '等我处理'
+          : scene === 'waiting' || scene === 'waiting-narrow'
+            ? '验收北区截图'
+            : scene === 'waiting-empty'
+              ? '没有等你处理的事项'
+              : scene === 'waiting-no-token'
+                ? '未配置 GitHub 认证，去设置'
+                : scene === 'waiting-invalid-token'
+                  ? 'GitHub 认证无效或已过期，去设置'
+                  : scene === 'waiting-loading'
+                    ? '正在刷新'
+                    : scene === 'waiting-rate-limit'
+                      ? '速率限制'
+                      : '等我处理'
   const start = Date.now()
   let seen = false
   while (Date.now() - start < 5000) {
@@ -246,6 +261,50 @@ function registerIpc(settings: SettingsService): void {
     guard(event)
     return settings.testConnection(pasted)
   })
+  ipcMain.handle(IpcChannel.getWaiting, event => {
+    guard(event)
+    return waiting?.current()
+  })
+  ipcMain.handle(IpcChannel.refreshWaiting, event => {
+    guard(event)
+    return waiting?.refresh() ?? Promise.reject(new Error('等我处理尚未就绪'))
+  })
+  ipcMain.handle(IpcChannel.snoozeWaiting, (event, id: unknown, days: unknown) => {
+    guard(event)
+    return waiting?.snooze(id, days) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.ignoreWaiting, (event, id: unknown) => {
+    guard(event)
+    return waiting?.ignore(id) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.restoreWaiting, (event, id: unknown) => {
+    guard(event)
+    return waiting?.restore(id) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.setShowIgnored, (event, show: unknown) => {
+    guard(event)
+    return waiting?.setShowIgnored(show) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.setWaiting, (event, config: unknown) => {
+    guard(event)
+    const saved = settings.setWaiting(config)
+    if (!saved.ok) return saved
+    return settings.getState().then(state => ({ ok: true as const, data: state }))
+  })
+  ipcMain.handle(IpcChannel.openExternal, (event, url: unknown) => {
+    guard(event)
+    if (typeof url !== 'string' || !isTrustedBrowserUrl(url)) {
+      return { ok: false, error: '只能用浏览器打开 GitHub 链接' }
+    }
+    return shell.openExternal(url).then(
+      () => ({ ok: true as const, data: true as const }),
+      () => ({ ok: false as const, error: '无法打开浏览器' })
+    )
+  })
+  ipcMain.handle(IpcChannel.advanceWaitingDays, (event, days: unknown) => {
+    guard(event)
+    return waiting?.advanceDays(days) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
 }
 
 const gotLock = app.requestSingleInstanceLock()
@@ -258,17 +317,25 @@ if (!gotLock) {
   })
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null)
+    const userData = app.getPath('userData')
     if (screenshotPath) {
-      service = createScreenshotSettings(screenshotScene, settingsFilePath(app.getPath('userData')))
+      service = createScreenshotSettings(screenshotScene, settingsFilePath(userData))
+      waiting = createScreenshotWaiting(screenshotScene)
     } else {
       service = new SettingsService({
-        file: settingsFilePath(app.getPath('userData')),
+        file: settingsFilePath(userData),
         secretBox: createSafeStorageBox(safeStorage),
         registrar: globalShortcut,
         onHotkey: () => showMainWindow(),
         log: message => console.error(message)
       })
       service.init()
+      waiting = new WaitingService(service, {
+        cache: waitingCachePath(userData),
+        dismissals: waitingDismissalPath(userData)
+      }, {
+        log: message => console.error(message)
+      })
     }
     registerIpc(service)
     mainWindow = createWindow()

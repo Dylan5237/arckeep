@@ -1,3 +1,5 @@
+import { parseWaitingConfig } from '../shared/waiting/rules.js'
+import type { WaitingConfig } from '../shared/waiting/types.js'
 import type { AppState, IpcResult } from '../shared/types.js'
 import {
   readGhAuthToken,
@@ -55,8 +57,26 @@ export class SettingsService {
       watchedRepos: [...this.settings.watchedRepos],
       hotkey: this.settings.hotkey,
       hotkeyWarning: this.hotkeyWarning,
-      github
+      github,
+      waiting: this.settings.waiting
     }
+  }
+
+  setWaiting(input: unknown): IpcResult<{ waiting: WaitingConfig }> {
+    try {
+      const waiting = parseWaitingConfig(input, { validatePatterns: true })
+      this.settings.waiting = waiting
+      this.persist()
+      return { ok: true, data: { waiting } }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : '等我处理的规则无效' }
+    }
+  }
+
+  patchShowIgnored(show: boolean): WaitingConfig {
+    this.settings.waiting = { ...this.settings.waiting, showIgnored: show }
+    this.persist()
+    return this.settings.waiting
   }
 
   setRepos(input: unknown): IpcResult<{ watchedRepos: string[] }> {
@@ -131,6 +151,10 @@ export class SettingsService {
 
   private persist(): void {
     saveSettings(this.deps.file, this.settings)
+  }
+
+  readSavedPat(): string | null {
+    return this.readPat()
   }
 
   private readPat(): string | null {
