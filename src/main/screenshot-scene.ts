@@ -9,7 +9,10 @@ export const SCREENSHOT_SCENES = [
   'hotkey-conflict',
   'narrow',
   'capture-empty',
+  'capture-opened',
   'capture-filled',
+  'capture-draft',
+  'capture-saved',
   'todos',
   'todos-empty',
   'todos-filter',
@@ -43,7 +46,9 @@ export function screenshotWindowSize(scene: ScreenshotScene): { width: number, h
   if (scene === 'todos' || scene === 'todos-filter' || scene === 'todos-delete') {
     return { width: 1120, height: 1100 }
   }
-  if (scene === 'capture-empty' || scene === 'capture-filled') return { width: 800, height: 600 }
+  if (scene === 'capture-empty' || scene === 'capture-opened' || scene === 'capture-filled' || scene === 'capture-draft' || scene === 'capture-saved') {
+    return { width: 800, height: 600 }
+  }
   return { width: 1120, height: 900 }
 }
 
@@ -60,7 +65,11 @@ export function screenshotOpensTodos(scene: ScreenshotScene): boolean {
 }
 
 export function screenshotShowsMainWindow(scene: ScreenshotScene): boolean {
-  return scene !== 'capture-empty' && scene !== 'capture-filled'
+  return scene !== 'capture-empty'
+    && scene !== 'capture-opened'
+    && scene !== 'capture-filled'
+    && scene !== 'capture-draft'
+    && scene !== 'capture-saved'
 }
 
 function fixtureSecretBox(): SecretBox {

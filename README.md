@@ -2,7 +2,7 @@
 
 Arckeep：Dylan 的 AI 原生个人工作台（Windows 桌面应用）。
 
-这个仓库目前是骨架加待办：Electron + TypeScript，主进程 / preload / 渲染进程分离。等我处理、项目总览、工具架仍是占位页。设置、托盘和打包流水线已经接上。待办写在 userData 里的 `todos.jsonl`（只追加，读的时候折叠）。默认全局热键 `Ctrl+Alt+Space` 打开快速捕获，可以在设置里改。
+这个仓库目前是骨架加待办：Electron + TypeScript，主进程 / preload / 渲染进程分离。等我处理、项目总览、工具架仍是占位页。设置、托盘和打包流水线已经接上。待办写在 userData 里的 `todos.jsonl`（只追加，读的时候折叠）。默认全局热键 `Ctrl+Alt+Space` 打开快速捕获，输入框直接获得焦点。正文里的 `#owner/repo`、能对上的 `#仓库名` 和 `!等我` 会在保存时拆出来。Esc 或点到窗口外不创建待办，草稿写在 `capture-draft.json`，下次热键还会回来。可以在设置里改热键。
 
 渲染层用 Vite 打包的普通 TypeScript，没有 UI 框架。页面只有导航和一张设置表单，先不引入组件运行时。
 

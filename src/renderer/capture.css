@@ -28,6 +28,10 @@ h1 {
   font-weight: 600;
 }
 
+.text-wrap {
+  position: relative;
+}
+
 input[type="text"] {
   width: 100%;
   border: 1px solid var(--arckeep-soft-stone);
@@ -36,6 +40,28 @@ input[type="text"] {
   padding: 8px 10px;
   font: inherit;
   color: inherit;
+}
+
+#text {
+  caret-color: transparent;
+}
+
+.caret {
+  position: absolute;
+  width: 1px;
+  height: 1.05em;
+  background: var(--arckeep-deep-charcoal);
+  pointer-events: none;
+}
+
+#caret-probe {
+  position: absolute;
+  visibility: hidden;
+  white-space: pre;
+  font: inherit;
+  left: 0;
+  top: 0;
+  pointer-events: none;
 }
 
 .capture-repo {

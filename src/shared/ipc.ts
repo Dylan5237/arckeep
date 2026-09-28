@@ -12,6 +12,8 @@ export const IpcChannel = {
   deleteTodo: 'todos:delete',
   todoRepoOptions: 'todos:repo-options',
   closeCapture: 'capture:close',
+  getCaptureDraft: 'capture:get-draft',
+  setCaptureDraft: 'capture:set-draft',
   todosChanged: 'todos:changed',
   testHook: 'app:test-hook'
 } as const

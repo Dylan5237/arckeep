@@ -25,3 +25,9 @@ export interface TodoInput {
 export interface TodoUpdate extends TodoInput {
   id: string
 }
+
+export interface CaptureDraft {
+  text: string
+  repo: string
+  waiting: boolean
+}

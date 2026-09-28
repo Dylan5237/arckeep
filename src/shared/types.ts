@@ -1,8 +1,8 @@
-import type { TodoItem, TodoUpdate } from './todos/types.js'
+import type { CaptureDraft, TodoItem, TodoUpdate } from './todos/types.js'
 
 export const DEFAULT_HOTKEY = 'Ctrl+Alt+Space'
 
-export type { TodoItem, TodoUpdate, WaitingTodo } from './todos/types.js'
+export type { CaptureDraft, TodoItem, TodoUpdate, WaitingTodo } from './todos/types.js'
 
 export type GithubSource = 'gh-cli' | 'pat' | 'none'
 
@@ -44,7 +44,9 @@ export interface ArckeepApi {
   setTodoCompleted(id: string, completed: boolean): Promise<IpcResult<TodoItem>>
   deleteTodo(id: string): Promise<IpcResult<{ id: string }>>
   todoRepoOptions(): Promise<string[]>
-  closeCapture(): Promise<void>
+  closeCapture(mode?: 'dismiss' | 'saved'): Promise<void>
+  getCaptureDraft(): Promise<CaptureDraft>
+  setCaptureDraft(draft: CaptureDraft): Promise<CaptureDraft>
   onTodosChanged(listener: () => void): () => void
 }
 

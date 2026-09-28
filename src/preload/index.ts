@@ -15,7 +15,9 @@ const api: ArckeepApi = {
   setTodoCompleted: (id, completed) => ipcRenderer.invoke(IpcChannel.setTodoCompleted, { id, completed }),
   deleteTodo: id => ipcRenderer.invoke(IpcChannel.deleteTodo, id),
   todoRepoOptions: () => ipcRenderer.invoke(IpcChannel.todoRepoOptions),
-  closeCapture: () => ipcRenderer.invoke(IpcChannel.closeCapture),
+  closeCapture: (mode?: 'dismiss' | 'saved') => ipcRenderer.invoke(IpcChannel.closeCapture, mode ?? 'dismiss'),
+  getCaptureDraft: () => ipcRenderer.invoke(IpcChannel.getCaptureDraft),
+  setCaptureDraft: draft => ipcRenderer.invoke(IpcChannel.setCaptureDraft, draft),
   onTodosChanged(listener) {
     const wrapped = (_event: IpcRendererEvent) => listener()
     ipcRenderer.on(IpcChannel.todosChanged, wrapped)

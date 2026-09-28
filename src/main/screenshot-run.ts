@@ -22,6 +22,7 @@ export async function presentScreenshot(options: {
   scene: ScreenshotScene
   main: BrowserWindow
   openCapture: () => BrowserWindow
+  savedToast?: () => BrowserWindow | null
   file: string
   prepareMain?: (contents: WebContents) => Promise<void>
 }): Promise<void> {
@@ -31,7 +32,7 @@ export async function presentScreenshot(options: {
   }
 
   let contents = main.webContents
-  if (scene === 'capture-empty' || scene === 'capture-filled') {
+  if (scene === 'capture-empty' || scene === 'capture-opened' || scene === 'capture-filled' || scene === 'capture-draft') {
     const capture = options.openCapture()
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('capture window did not load')), 5000)
@@ -41,12 +42,48 @@ export async function presentScreenshot(options: {
       })
     })
     contents = capture.webContents
+    const focused = `document.activeElement === document.querySelector('#text')
+      && document.querySelector('#caret')?.hidden === false`
     const expected = scene === 'capture-filled'
       ? `document.querySelector('#text').value === '记一条带仓库的待办'
         && document.querySelector('#repo').value === 'example/demo'
-        && document.querySelector('#waiting').checked === true`
-      : `document.body.innerText.includes('快速捕获') && document.querySelector('#text').value === ''`
+        && document.querySelector('#waiting').checked === true
+        && ${focused}`
+      : scene === 'capture-draft'
+        ? `document.querySelector('#text').value === '把没写完的这半句留在'
+          && document.querySelector('#repo').value === 'example/demo'
+          && document.querySelector('#waiting').checked === true
+          && document.querySelector('#text').selectionStart === document.querySelector('#text').value.length
+          && ${focused}`
+        : `document.body.innerText.includes('快速捕获')
+          && document.querySelector('#text').value === ''
+          && document.querySelector('#text').selectionStart === 0
+          && ${focused}`
     await waitUntil(contents, expected, scene)
+  } else if (scene === 'capture-saved') {
+    const capture = options.openCapture()
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('capture window did not load')), 5000)
+      capture.webContents.once('did-finish-load', () => {
+        clearTimeout(timer)
+        resolve()
+      })
+    })
+    await capture.webContents.executeJavaScript(`
+      document.querySelector('#text').value = '记一条待办'
+      document.querySelector('#capture-form').requestSubmit()
+      true
+    `)
+    const start = Date.now()
+    let toast: BrowserWindow | null = null
+    while (Date.now() - start < 5000) {
+      toast = options.savedToast?.() ?? null
+      if (toast && !toast.isDestroyed()) break
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    if (!toast || toast.isDestroyed()) throw new Error('已记下 toast did not open')
+    contents = toast.webContents
+    await waitUntil(contents, includesText('已记下'), '已记下')
   } else if (scene === 'todos' || scene === 'todos-narrow') {
     await waitUntil(contents, includesText('共 40 条'), '共 40 条')
     await contents.executeJavaScript(`

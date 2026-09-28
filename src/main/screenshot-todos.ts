@@ -17,7 +17,11 @@ export function screenshotCaptureFixture(scene: ScreenshotScene): 'filled' | nul
 }
 
 export function screenshotCapturesCaptureWindow(scene: ScreenshotScene): boolean {
-  return scene === 'capture-empty' || scene === 'capture-filled'
+  return scene === 'capture-empty'
+    || scene === 'capture-opened'
+    || scene === 'capture-filled'
+    || scene === 'capture-draft'
+    || scene === 'capture-saved'
 }
 
 /** Forty synthetic todos. The first twelve stay incomplete. */

@@ -18,3 +18,7 @@ export function todosFilePath(userData: string, join: (...parts: string[]) => st
 export function testHookTodosPath(userData: string, join: (...parts: string[]) => string = path.join): string {
   return join(userData, 'test-hook-todos.json')
 }
+
+export function captureDraftPath(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'capture-draft.json')
+}

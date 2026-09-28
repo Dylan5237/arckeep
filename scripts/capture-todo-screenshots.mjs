@@ -12,7 +12,10 @@ const forbidden = ['ghp_', 'github_pat_', 'zzfakeexpiredpatvalue', 'zzmockgithub
 
 const scenes = [
   ['capture-empty', 'capture-empty.png'],
+  ['capture-opened', 'capture-opened.png'],
   ['capture-filled', 'capture-filled.png'],
+  ['capture-draft', 'capture-draft.png'],
+  ['capture-saved', 'capture-saved.png'],
   ['todos', 'todos-populated.png'],
   ['todos-empty', 'todos-empty.png'],
   ['todos-filter', 'todos-filter.png'],

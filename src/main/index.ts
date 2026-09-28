@@ -5,7 +5,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { IpcChannel } from '../shared/ipc.js'
 import { mergeRepoOptions } from '../shared/todos/repos.js'
-import { createCaptureWindow, focusCaptureWindow } from './capture-window.js'
+import { createCaptureWindow, focusCaptureInput, showSavedToast } from './capture-window.js'
 import { createGracefulShutdownHandler } from './graceful-shutdown.js'
 import {
   normalizeTodoCompletion,
@@ -14,7 +14,7 @@ import {
   normalizeTodoUpdate,
   requireTrustedSender
 } from './ipc-validators.js'
-import { settingsFilePath, testHookTodosPath, todosFilePath, userDataDir } from './paths.js'
+import { captureDraftPath, settingsFilePath, testHookTodosPath, todosFilePath, userDataDir } from './paths.js'
 import {
   createScreenshotSettings,
   parseScreenshotScene,
@@ -37,6 +37,7 @@ import {
   type TestHookExtras,
   type TrayActions
 } from './test-hooks.js'
+import { clearCaptureDraft, loadCaptureDraft, saveCaptureDraft } from './todos/draft.js'
 import { TodoStore } from './todos/store.js'
 import { createSafeStorageBox } from './token-store.js'
 import { createUrlGuard } from './url-trust.js'
@@ -58,6 +59,7 @@ app.setPath('userData', screenshotPath
 
 let mainWindow: BrowserWindow | null = null
 let captureWindow: BrowserWindow | null = null
+let savedToast: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 let service: SettingsService | null = null
@@ -132,18 +134,40 @@ function loadRenderer(window: BrowserWindow, page: string, query: Record<string,
   void window.loadFile(path.join(rendererDir, page), { query })
 }
 
+function draftFile(): string {
+  return captureDraftPath(app.getPath('userData'))
+}
+
+function showSavedConfirmation(): void {
+  if (savedToast && !savedToast.isDestroyed()) savedToast.close()
+  const toast = showSavedToast({
+    preload: preloadPath(),
+    trusted: isTrustedNavigation,
+    holdMs: screenshotPath ? 4000 : undefined,
+    load: target => loadRenderer(target, 'toast.html')
+  })
+  savedToast = toast
+  toast.on('closed', () => {
+    if (savedToast === toast) savedToast = null
+  })
+}
+
 function openCaptureWindow(): BrowserWindow {
   if (captureWindow && !captureWindow.isDestroyed()) {
-    focusCaptureWindow(captureWindow)
+    focusCaptureInput(captureWindow)
     return captureWindow
   }
   const fixture = screenshotPath ? screenshotCaptureFixture(screenshotScene) : null
+  const query: Record<string, string> = {}
+  if (fixture) query.fixture = fixture
+  if (screenshotPath) query.stay = '1'
   const window = createCaptureWindow({
     preload: preloadPath(),
     icon: trayIconPath(),
     trusted: isTrustedNavigation,
+    ignoreBlur: Boolean(screenshotPath),
     load: target => {
-      loadRenderer(target, 'capture.html', fixture ? { fixture } : {})
+      loadRenderer(target, 'capture.html', query)
     }
   })
   window.on('closed', () => {
@@ -225,6 +249,7 @@ function createWindow(): BrowserWindow {
         scene: screenshotScene,
         main: window,
         openCapture: openCaptureWindow,
+        savedToast: () => savedToast,
         file: screenshotPath,
         prepareMain: async contents => {
           await contents.executeJavaScript(`
@@ -348,9 +373,20 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
       return ipcError(error, '待办无效')
     }
   })
-  ipcMain.handle(IpcChannel.closeCapture, event => {
+  ipcMain.handle(IpcChannel.getCaptureDraft, event => {
     guard(event)
+    return loadCaptureDraft(draftFile())
+  })
+  ipcMain.handle(IpcChannel.setCaptureDraft, (event, input: unknown) => {
+    guard(event)
+    return saveCaptureDraft(draftFile(), input)
+  })
+  ipcMain.handle(IpcChannel.closeCapture, (event, mode: unknown) => {
+    guard(event)
+    const saved = mode === 'saved'
+    if (saved) clearCaptureDraft(draftFile())
     if (captureWindow && !captureWindow.isDestroyed()) captureWindow.close()
+    if (saved) showSavedConfirmation()
   })
 }
 
@@ -364,6 +400,13 @@ if (!gotLock) {
   })
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null)
+    if (screenshotPath && screenshotScene === 'capture-draft') {
+      saveCaptureDraft(captureDraftPath(app.getPath('userData')), {
+        text: '把没写完的这半句留在',
+        repo: 'example/demo',
+        waiting: true
+      })
+    }
     if (screenshotPath && screenshotSeedsTodos(screenshotScene)) {
       const file = todosFilePath(app.getPath('userData'))
       fs.mkdirSync(path.dirname(file), { recursive: true })
