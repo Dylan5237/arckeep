@@ -34,6 +34,9 @@ const DEFAULT_RESOLVED = [
   '\\bPASS\\b'
 ]
 
+/** Enough for a large personal account. Hitting it shows a notice instead of dropping repos quietly. */
+export const DEFAULT_MAX_SCOPE_REPOS = 400
+
 export function defaultWaitingSources(): WaitingSources {
   return {
     assignee: true,
@@ -55,6 +58,7 @@ export function defaultWaitingConfig(): WaitingConfig {
     resolvedSignals: [...DEFAULT_RESOLVED],
     statusDocRules: [],
     localRepoDirs: [],
+    maxScopeRepos: DEFAULT_MAX_SCOPE_REPOS,
     showIgnored: false
   }
 }
@@ -94,6 +98,14 @@ export function compileUserRegex(pattern: string, label: string): RegExp {
 
 export function compileUserRegexList(patterns: readonly string[], label: string): RegExp[] {
   return patterns.map(pattern => compileUserRegex(pattern, label))
+}
+
+function scopeRepoLimit(value: unknown, fallback: number): number {
+  if (value === undefined) return fallback
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 2000) {
+    throw new WaitingConfigError('仓库数量上限应为 1 到 2000 的整数')
+  }
+  return value
 }
 
 function parseRule(value: unknown): StatusDocRule {
@@ -161,6 +173,7 @@ export function parseWaitingConfig(input: unknown, options?: { validatePatterns?
     resolvedSignals,
     statusDocRules,
     localRepoDirs,
+    maxScopeRepos: scopeRepoLimit(input.maxScopeRepos, defaults.maxScopeRepos),
     showIgnored: bool(input.showIgnored, false)
   }
   if (options?.validatePatterns) validateWaitingPatterns(config)

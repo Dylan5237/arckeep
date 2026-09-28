@@ -63,6 +63,8 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
   resolved.value = config.resolvedSignals.join('\n')
   const dirs = el('textarea', { 'aria-label': '本地仓目录' })
   dirs.value = config.localRepoDirs.join('\n')
+  const limit = el('input', { type: 'number', min: '1', max: '2000', 'aria-label': '仓库数量上限' })
+  limit.value = String(config.maxScopeRepos)
   const rulesBox = el('div', { class: 'rule-list' })
   const rules: StatusDocRule[] = config.statusDocRules.map(rule => ({ ...rule }))
   const drawRules = () => {
@@ -101,6 +103,7 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
       resolvedSignals: lines(resolved.value),
       statusDocRules: rules.filter(rule => rule.repo || rule.target || rule.pattern),
       localRepoDirs: lines(dirs.value),
+      maxScopeRepos: Number(limit.value),
       showIgnored: config.showIgnored
     }
     void window.arckeep.setWaiting(next).then(async result => {
@@ -127,6 +130,9 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
     add,
     el('h3', {}, ['本地仓目录']),
     dirs,
+    el('h3', {}, ['仓库数量上限']),
+    el('p', { class: 'hint' }, ['自动模式下，拥有的和 watching 的仓库都会查。空仓不查 PR。达到上限时这一页会提示，不会悄悄丢掉其余仓库。']),
+    limit,
     el('div', { class: 'actions' }, [save])
   )
   return card

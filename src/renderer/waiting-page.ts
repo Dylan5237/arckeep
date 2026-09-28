@@ -83,6 +83,9 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
       `GitHub 速率限制，重置时间 ${formatStamp(snapshot.rateLimitResetAt)}。下面仍是上次刷新的列表。`
     ]))
   }
+  for (const notice of snapshot.notices) {
+    page.append(el('div', { class: 'alert', role: 'status' }, [notice]))
+  }
   for (const error of snapshot.sourceErrors) {
     page.append(el('div', { class: 'alert error', role: 'status' }, [`来源「${error.source}」失败：${error.message}`]))
   }
@@ -182,6 +185,7 @@ export async function renderWaiting(host: HTMLElement, navigate: (view: 'setting
     auth: 'ok',
     rateLimitResetAt: null,
     sourceErrors: [],
+    notices: [],
     showIgnored: false,
     hiddenCount: 0,
     todosAvailable: false

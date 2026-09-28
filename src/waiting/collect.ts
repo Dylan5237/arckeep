@@ -43,6 +43,7 @@ export interface CollectResult {
   drafts: WaitingDraft[]
   memory: WaitingMemory
   errors: SourceError[]
+  notices: string[]
   rateLimitResetAt: string | null
   auth: 'ok' | 'missing' | 'invalid'
   todosAvailable: boolean
@@ -65,6 +66,7 @@ export async function collectWaiting(options: {
   const memory = options.memory ?? emptyWaitingMemory()
   const next: WaitingMemory = { ...memory }
   const errors: SourceError[] = []
+  const notices: string[] = []
   let rateLimitResetAt: string | null = null
   let auth: CollectResult['auth'] = options.token ? 'ok' : 'missing'
   const todos = options.todos ?? pendingTodoProvider
@@ -75,12 +77,12 @@ export async function collectWaiting(options: {
         token: options.token,
         config: options.config,
         watchedRepos: options.watchedRepos,
-        fetchImpl: options.fetchImpl,
-        now: options.now
+        fetchImpl: options.fetchImpl
       })
       auth = github.auth
       rateLimitResetAt = github.rateLimitResetAt
       errors.push(...github.errors)
+      notices.push(...github.notices)
       const keys: (keyof GithubSourceBundle)[] = ['assignee', 'reviewRequested', 'mentions', 'openPrs', 'humanIssues']
       if (github.auth !== 'invalid') {
         for (const key of keys) {
@@ -157,6 +159,7 @@ export async function collectWaiting(options: {
     drafts,
     memory: next,
     errors,
+    notices,
     rateLimitResetAt,
     auth,
     todosAvailable: todos.available

@@ -11,6 +11,7 @@ function base(partial: Partial<WaitingSnapshot>): WaitingSnapshot {
     auth: 'ok',
     rateLimitResetAt: null,
     sourceErrors: [],
+    notices: [],
     showIgnored: false,
     hiddenCount: 3,
     todosAvailable: false,

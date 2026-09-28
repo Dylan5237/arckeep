@@ -39,6 +39,8 @@ export interface WaitingConfig {
   resolvedSignals: string[]
   statusDocRules: StatusDocRule[]
   localRepoDirs: string[]
+  /** Owned + watched repositories included in the repo-scope batch. */
+  maxScopeRepos: number
   showIgnored: boolean
 }
 
@@ -166,6 +168,7 @@ export interface WaitingSnapshot {
   auth: WaitingAuth
   rateLimitResetAt: string | null
   sourceErrors: SourceError[]
+  notices: string[]
   showIgnored: boolean
   hiddenCount: number
   todosAvailable: boolean

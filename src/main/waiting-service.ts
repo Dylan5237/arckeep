@@ -65,6 +65,7 @@ function snapshotOf(input: {
   auth: WaitingSnapshot['auth']
   rateLimitResetAt: string | null
   sourceErrors: WaitingSnapshot['sourceErrors']
+  notices: WaitingSnapshot['notices']
   todosAvailable: boolean
 }): { snapshot: WaitingSnapshot, dismissals: DismissalMap } {
   const visible = partitionDismissals(input.drafts, input.dismissals, input.now, input.showIgnored)
@@ -77,6 +78,7 @@ function snapshotOf(input: {
       auth: input.auth,
       rateLimitResetAt: input.rateLimitResetAt,
       sourceErrors: input.sourceErrors,
+      notices: input.notices,
       showIgnored: input.showIgnored,
       hiddenCount: visible.hiddenCount,
       todosAvailable: input.todosAvailable
@@ -117,6 +119,7 @@ export class WaitingService {
       auth: 'ok',
       rateLimitResetAt: null,
       sourceErrors: [],
+      notices: [],
       showIgnored: settings.getSettings().waiting.showIgnored,
       hiddenCount: 0,
       todosAvailable: (deps.todos ?? pendingTodoProvider).available
@@ -159,6 +162,7 @@ export class WaitingService {
       auth: result.auth,
       rateLimitResetAt: result.rateLimitResetAt,
       sourceErrors: result.errors,
+      notices: result.notices,
       todosAvailable: result.todosAvailable
     })
     this.dismissals = painted.dismissals
@@ -226,6 +230,7 @@ export class WaitingService {
       auth: this.snapshot.auth,
       rateLimitResetAt: this.snapshot.rateLimitResetAt,
       sourceErrors: this.snapshot.sourceErrors,
+      notices: this.snapshot.notices,
       todosAvailable: this.snapshot.todosAvailable
     })
     this.dismissals = painted.dismissals

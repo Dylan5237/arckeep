@@ -13,21 +13,6 @@ export function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_MS)
 }
 
-/**
- * Empty repositories and repositories with no push for more than 30 days
- * are skipped by the repo-scoped sources (open PRs and human-action issues).
- * Assignments, review requests, and mentions are not filtered here.
- * A missing push time is not treated as stale.
- */
-export function repoIsOnWaitingPage(
-  repo: { isEmpty: boolean, pushedAt: string | null },
-  now: Date
-): boolean {
-  if (repo.isEmpty) return false
-  if (!repo.pushedAt) return true
-  return waitingDays(repo.pushedAt, now) <= 30
-}
-
 export function laterIso(left: string | null, right: string | null): string | null {
   if (!left) return right
   if (!right) return left

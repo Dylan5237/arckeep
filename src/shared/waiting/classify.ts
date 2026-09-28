@@ -1,4 +1,4 @@
-import { earlierIso, laterIso, repoIsOnWaitingPage, waitingDays } from './days.js'
+import { earlierIso, laterIso, waitingDays } from './days.js'
 import { compileUserRegexList } from './rules.js'
 import { WAITING_REASONS, type GithubRecord, type ReasonDetail, type WaitingConfig, type WaitingDraft } from './types.js'
 
@@ -80,15 +80,11 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
   if (config.sources.mentions && record.fromMention) {
     reasons.push(fallbackUpdated(WAITING_REASONS.mention, record, record.mentionedAt))
   }
-  // Empty repos and repos with no push for more than 30 days stay off the
-  // repo-scoped sources only. An assignment, review request, or mention in a
-  // quiet repo is still an explicit ask.
-  const repoScoped = repoIsOnWaitingPage({ isEmpty: record.repoIsEmpty, pushedAt: record.repoPushedAt }, now)
-  if (repoScoped && config.sources.openPrs && record.kind === 'pr' && !record.isDraft && (record.fromOpenPr || record.inScopeRepo)) {
+  if (config.sources.openPrs && record.kind === 'pr' && !record.isDraft && (record.fromOpenPr || record.inScopeRepo)) {
     const at = laterIso(record.lastPushedAt, record.updatedAt)
     reasons.push({ reason: WAITING_REASONS.openPr, at, estimated: false })
   }
-  if (repoScoped && config.sources.humanIssues && record.inScopeRepo) {
+  if (config.sources.humanIssues && record.inScopeRepo) {
     const human = humanSignal(record, config)
     if (human) reasons.push(human)
   }

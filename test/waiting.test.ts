@@ -147,7 +147,7 @@ describe('source classification', () => {
     expect(open?.reasons).toEqual(['待你审/合'])
   })
 
-  it('keeps explicit asks in quiet repos and drops only repo-scoped reasons', () => {
+  it('keeps every source in a repo last pushed 60 days ago, including an empty repo signal', () => {
     const rules = config()
     const quiet = '2026-07-30T00:00:00.000Z'
     const assigned = classifyRecord(record({
@@ -160,7 +160,7 @@ describe('source classification', () => {
     }), rules, NOW)
     expect(assigned?.reasons).toEqual(['指派'])
 
-    expect(classifyRecord(record({
+    const open = classifyRecord(record({
       kind: 'pr',
       number: 8,
       title: 'Open pull with nobody asking',
@@ -168,11 +168,33 @@ describe('source classification', () => {
       inScopeRepo: true,
       isDraft: false,
       repoPushedAt: quiet
-    }), rules, NOW)).toBeNull()
+    }), rules, NOW)
+    expect(open?.reasons).toEqual(['待你审/合'])
+
+    const human = classifyRecord(record({
+      kind: 'issue',
+      number: 9,
+      title: 'Need a person',
+      body: '待验收',
+      inScopeRepo: true,
+      repoPushedAt: quiet
+    }), rules, NOW)
+    expect(human?.reasons).toEqual(['要人动手'])
+
+    const empty = classifyRecord(record({
+      kind: 'issue',
+      number: 3,
+      title: 'Signal in an empty repo',
+      body: '请确认',
+      inScopeRepo: true,
+      repoIsEmpty: true,
+      repoPushedAt: null
+    }), rules, NOW)
+    expect(empty?.reasons).toEqual(['要人动手'])
 
     const both = classifyRecord(record({
       kind: 'pr',
-      number: 9,
+      number: 10,
       title: 'Assigned pull in a quiet repo',
       fromAssignee: true,
       fromOpenPr: true,
@@ -181,23 +203,7 @@ describe('source classification', () => {
       assignedAt: '2026-08-15T00:00:00.000Z',
       repoPushedAt: quiet
     }), rules, NOW)
-    expect(both?.reasons).toEqual(['指派'])
-
-    expect(classifyRecord(record({
-      kind: 'pr',
-      number: 1,
-      title: 'Empty',
-      fromOpenPr: true,
-      repoIsEmpty: true
-    }), rules, NOW)).toBeNull()
-    expect(classifyRecord(record({
-      kind: 'issue',
-      number: 3,
-      title: 'Still active',
-      fromAssignee: true,
-      assignedAt: '2026-09-20T00:00:00.000Z',
-      repoPushedAt: '2026-08-29T00:00:00.000Z'
-    }), rules, NOW)?.title).toBe('Still active')
+    expect(both?.reasons).toEqual(['指派', '待你审/合'])
   })
 })
 
@@ -356,25 +362,194 @@ describe('status documents and local branches', () => {
 })
 
 describe('repo activity scope', () => {
-  it('stops owned-repo paging at the first stale page without dropping user search', async () => {
+  const quietPush = '2026-07-30T00:00:00.000Z'
+
+  function issueNode(repo: string, number: number, title: string, body: string): Record<string, unknown> {
+    return {
+      number,
+      title,
+      url: `https://github.com/${repo}/issues/${number}`,
+      body,
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+      labels: { nodes: [] },
+      comments: { nodes: [] },
+      timelineItems: { nodes: [] }
+    }
+  }
+
+  it('pages past quiet repos and still loads their pulls and an empty repo issue', async () => {
     const rules = config({
+      sources: {
+        ...defaultWaitingConfig().sources,
+        reviewRequested: false,
+        mentions: false,
+        statusDocs: false,
+        localBranches: false
+      }
+    })
+    const bodies: string[] = []
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      const body = String(init?.body ?? '')
+      bodies.push(body)
+      if (body.includes('viewer { login }')) {
+        return new Response(JSON.stringify({ data: { viewer: { login: 'ada' } } }), { status: 200 })
+      }
+      if (body.includes('ownerAffiliations') && body.includes('NEXT')) {
+        return new Response(JSON.stringify({
+          data: {
+            viewer: {
+              repositories: {
+                pageInfo: { hasNextPage: false },
+                nodes: [{ nameWithOwner: 'example/empty', isEmpty: true, pushedAt: null }]
+              }
+            }
+          }
+        }), { status: 200 })
+      }
+      if (body.includes('ownerAffiliations')) {
+        return new Response(JSON.stringify({
+          data: {
+            viewer: {
+              repositories: {
+                pageInfo: { hasNextPage: true, endCursor: 'NEXT' },
+                nodes: [
+                  { nameWithOwner: 'example/active', isEmpty: false, pushedAt: '2026-09-20T00:00:00.000Z' },
+                  { nameWithOwner: 'example/quiet', isEmpty: false, pushedAt: quietPush }
+                ]
+              }
+            }
+          }
+        }), { status: 200 })
+      }
+      if (body.includes('watching(')) {
+        return new Response(JSON.stringify({
+          data: { viewer: { watching: { pageInfo: { hasNextPage: false }, nodes: [] } } }
+        }), { status: 200 })
+      }
+      if (body.includes('pullRequests')) {
+        if (body.includes('empty')) throw new Error('empty repo must not be in a pull request query')
+        return new Response(JSON.stringify({
+          data: {
+            r0: {
+              nameWithOwner: 'example/quiet',
+              isEmpty: false,
+              pushedAt: quietPush,
+              issues: {
+                pageInfo: { hasNextPage: false },
+                nodes: [issueNode('example/quiet', 61, 'Need a person', '待验收')]
+              },
+              pullRequests: {
+                pageInfo: { hasNextPage: false },
+                nodes: [{
+                  number: 8,
+                  title: 'Quiet pull',
+                  url: 'https://github.com/example/quiet/pull/8',
+                  body: '',
+                  isDraft: false,
+                  createdAt: '2026-08-01T00:00:00.000Z',
+                  updatedAt: '2026-08-10T00:00:00.000Z',
+                  labels: { nodes: [] },
+                  comments: { nodes: [] },
+                  commits: { nodes: [{ commit: { committedDate: '2026-08-10T00:00:00.000Z' } }] },
+                  timelineItems: { nodes: [] }
+                }]
+              }
+            },
+            r1: {
+              nameWithOwner: 'example/active',
+              isEmpty: false,
+              pushedAt: '2026-09-20T00:00:00.000Z',
+              issues: { pageInfo: { hasNextPage: false }, nodes: [] },
+              pullRequests: { pageInfo: { hasNextPage: false }, nodes: [] }
+            }
+          }
+        }), { status: 200 })
+      }
+      if (body.includes('"n0":"empty"') || body.includes('example/empty')) {
+        return new Response(JSON.stringify({
+          data: {
+            r0: {
+              nameWithOwner: 'example/empty',
+              isEmpty: true,
+              pushedAt: null,
+              issues: {
+                pageInfo: { hasNextPage: false },
+                nodes: [issueNode('example/empty', 3, 'Signal in an empty repo', '请确认')]
+              }
+            }
+          }
+        }), { status: 200 })
+      }
+      if (body.includes('assignee:@me')) {
+        return new Response(JSON.stringify({
+          data: {
+            search: {
+              pageInfo: { hasNextPage: false },
+              nodes: [{
+                __typename: 'Issue',
+                ...issueNode('example/quiet', 60, 'Still waiting in a quiet repo', ''),
+                repository: { nameWithOwner: 'example/quiet', isEmpty: false, pushedAt: quietPush },
+                timelineItems: { nodes: [{ __typename: 'AssignedEvent', createdAt: '2026-08-01T00:00:00.000Z', assignee: { login: 'ada' } }] }
+              }]
+            }
+          }
+        }), { status: 200 })
+      }
+      if (body.includes('is:issue is:open')) {
+        return new Response(JSON.stringify({
+          data: { search: { pageInfo: { hasNextPage: false }, nodes: [] } }
+        }), { status: 200 })
+      }
+      return new Response(`unexpected ${body.slice(0, 180)}`, { status: 500 })
+    }
+    const loaded = await loadGithubRecords({
+      token: 'test-token',
+      config: rules,
+      watchedRepos: [],
+      fetchImpl
+    })
+    expect(bodies.some(body => body.includes('ownerAffiliations') && body.includes('NEXT'))).toBe(true)
+    expect(bodies.some(body => body.includes('pullRequests') && body.includes('quiet'))).toBe(true)
+    expect(bodies.some(body => body.includes('pullRequests') && body.includes('empty'))).toBe(false)
+    expect(loaded.notices).toEqual([])
+    expect(loaded.errors).toEqual([])
+    const rows = assembleWaiting({
+      records: [
+        ...loaded.bySource.assignee,
+        ...loaded.bySource.openPrs,
+        ...loaded.bySource.humanIssues
+      ],
+      statusDocs: [],
+      branches: [],
+      todos: [],
+      config: rules,
+      now: NOW
+    })
+    expect(rows.map(row => `${row.repo}#${row.number}:${row.reasons.join('+')}`).sort()).toEqual([
+      'example/empty#3:要人动手',
+      'example/quiet#60:指派',
+      'example/quiet#61:要人动手',
+      'example/quiet#8:待你审/合'
+    ])
+  })
+
+  it('notices when the repo cap drops the rest instead of stopping on a quiet repo', async () => {
+    const rules = config({
+      maxScopeRepos: 1,
       sources: {
         ...defaultWaitingConfig().sources,
         reviewRequested: false,
         mentions: false,
         humanIssues: false,
         statusDocs: false,
-        localBranches: false,
-        openPrs: true,
-        assignee: true
+        localBranches: false
       }
     })
-    const quietPush = '2026-07-30T00:00:00.000Z'
     const fetchImpl: typeof fetch = async (_input, init) => {
       const body = String(init?.body ?? '')
-      if (body.includes('ownerAffiliations') && body.includes('NEXT')) {
-        throw new Error('stale break should not request another owned-repo page')
-      }
+      if (body.includes('NEXT')) throw new Error('cap should stop before another owned-repo page')
+      if (body.includes('quiet') && body.includes('pullRequests')) throw new Error('capped repo must not be queried')
       if (body.includes('viewer { login }')) {
         return new Response(JSON.stringify({ data: { viewer: { login: 'ada' } } }), { status: 200 })
       }
@@ -399,7 +574,6 @@ describe('repo activity scope', () => {
         }), { status: 200 })
       }
       if (body.includes('pullRequests')) {
-        if (body.includes('quiet')) throw new Error('quiet repo must not be in the repo-scope batch')
         return new Response(JSON.stringify({
           data: {
             r0: {
@@ -414,24 +588,7 @@ describe('repo activity scope', () => {
       }
       if (body.includes('assignee:@me')) {
         return new Response(JSON.stringify({
-          data: {
-            search: {
-              pageInfo: { hasNextPage: false },
-              nodes: [{
-                __typename: 'Issue',
-                number: 60,
-                title: 'Still waiting in a quiet repo',
-                url: 'https://github.com/example/quiet/issues/60',
-                body: '',
-                createdAt: '2026-07-01T00:00:00.000Z',
-                updatedAt: '2026-08-01T00:00:00.000Z',
-                repository: { nameWithOwner: 'example/quiet', isEmpty: false, pushedAt: quietPush },
-                labels: { nodes: [] },
-                comments: { nodes: [] },
-                timelineItems: { nodes: [{ __typename: 'AssignedEvent', createdAt: '2026-08-01T00:00:00.000Z', assignee: { login: 'ada' } }] }
-              }]
-            }
-          }
+          data: { search: { pageInfo: { hasNextPage: false }, nodes: [] } }
         }), { status: 200 })
       }
       return new Response('unexpected', { status: 500 })
@@ -440,21 +597,11 @@ describe('repo activity scope', () => {
       token: 'test-token',
       config: rules,
       watchedRepos: [],
-      fetchImpl,
-      now: NOW
+      fetchImpl
     })
-    expect(loaded.fresh.assignee).toBe(true)
-    expect(loaded.bySource.assignee.map(item => item.repo)).toEqual(['example/quiet'])
+    expect(loaded.errors).toEqual([])
+    expect(loaded.notices).toEqual(['仓库数量达到上限 1，其余仓库没有继续查询。到设置里调高「仓库数量上限」。'])
     expect(loaded.bySource.openPrs).toEqual([])
-    const rows = assembleWaiting({
-      records: [...loaded.bySource.assignee, ...loaded.bySource.openPrs],
-      statusDocs: [],
-      branches: [],
-      todos: [],
-      config: rules,
-      now: NOW
-    })
-    expect(rows.map(row => row.reasons)).toEqual([['指派']])
   })
 })
 
@@ -526,8 +673,7 @@ describe('rate limit', () => {
       token: 'test-token',
       config: rules,
       watchedRepos: ['example/demo'],
-      fetchImpl,
-      now: NOW
+      fetchImpl
     })
     expect(first.rateLimitResetAt).toBe('2026-09-28T18:30:00.000Z')
     expect(first.fresh.assignee).toBe(true)
@@ -552,8 +698,7 @@ describe('rate limit', () => {
       token: 'test-token',
       config: rules,
       watchedRepos: ['example/demo'],
-      fetchImpl: secondFetch,
-      now: NOW
+      fetchImpl: secondFetch
     })
     expect(second.fresh.assignee).toBe(false)
     expect(second.bySource.assignee).toEqual([])
@@ -757,6 +902,8 @@ describe('tokens and search terms', () => {
     ]))
     expect(defaults.humanLabels).toEqual(expect.arrayContaining(['needs-human', 'needs-dylan']))
     expect(defaults.resolvedSignals).toEqual(expect.arrayContaining(['已验收', '已完成', '\\bPASS\\b']))
+    expect(defaults.maxScopeRepos).toBe(400)
+    expect(() => parseWaitingConfig({ maxScopeRepos: 0 })).toThrow('仓库数量上限')
     const queryBlob = JSON.stringify(defaults)
     expect(queryBlob).not.toContain('Dylan5237/')
   })

@@ -1,4 +1,3 @@
-import { repoIsOnWaitingPage } from '../shared/waiting/days.js'
 import { parseRepoNode, parseSearchPayload, type RepoBatchItem } from '../shared/waiting/parse-github.js'
 import { keywordToSearchTerms, chunkSearchText } from '../shared/waiting/rules.js'
 import { GithubAuthError, GithubRateLimitError, earlierReset, rateLimitFromResponse } from '../shared/waiting/rate-limit.js'
@@ -70,6 +69,7 @@ export interface GithubLoadResult {
   bySource: GithubSourceBundle
   fresh: Record<keyof GithubSourceBundle, boolean>
   errors: SourceError[]
+  notices: string[]
   rateLimitResetAt: string | null
   auth: 'ok' | 'invalid'
 }
@@ -168,56 +168,36 @@ function connectionPage(value: unknown): { nodes: unknown[], cursor: string | nu
   return { nodes, cursor }
 }
 
-async function discoverOwned(token: string, fetchImpl: typeof fetch, now: Date): Promise<ScopeRepo[]> {
-  const repos: ScopeRepo[] = []
-  let cursor: string | null = null
-  for (let page = 0; page < 6; page += 1) {
-    const payload = await graphql(token, `
-      query($cursor: String) {
-        viewer {
-          repositories(first: 40, after: $cursor, ownerAffiliations: [OWNER], orderBy: {field: PUSHED_AT, direction: DESC}) {
-            pageInfo { hasNextPage endCursor }
-            nodes { nameWithOwner isEmpty pushedAt }
-          }
-        }
-      }
-    `, { cursor }, fetchImpl)
-    const viewer = dataOf(payload).viewer
-    const repositories = viewer && typeof viewer === 'object' && 'repositories' in viewer
-      ? (viewer as { repositories: unknown }).repositories
-      : null
-    const batch = connectionPage(repositories)
-    let stale = false
-    for (const node of batch.nodes) {
-      if (!node || typeof node !== 'object') continue
-      const name = 'nameWithOwner' in node && typeof node.nameWithOwner === 'string' ? node.nameWithOwner : ''
-      const parts = splitRepo(name)
-      if (!parts) continue
-      const isEmpty = 'isEmpty' in node && node.isEmpty === true
-      const pushedAt = 'pushedAt' in node && typeof node.pushedAt === 'string' ? node.pushedAt : null
-      if (pushedAt && !repoIsOnWaitingPage({ isEmpty: false, pushedAt }, now)) {
-        stale = true
-        continue
-      }
-      repos.push({ ...parts, full: name, isEmpty, pushedAt })
-    }
-    // Owned repos are ordered by push time, so the first stale page ends this
-    // scan. That only shrinks the repo-scoped batch. User-level Search
-    // (assignee / review / mention) is a separate query and keeps going.
-    if (stale || !batch.cursor) break
-    cursor = batch.cursor
-  }
-  return repos
+const REPO_PAGE_SIZE = 40
+
+function readScopeNode(node: unknown): ScopeRepo | null {
+  if (!node || typeof node !== 'object') return null
+  const name = 'nameWithOwner' in node && typeof node.nameWithOwner === 'string' ? node.nameWithOwner : ''
+  const parts = splitRepo(name)
+  if (!parts) return null
+  const isEmpty = 'isEmpty' in node && node.isEmpty === true
+  const pushedAt = 'pushedAt' in node && typeof node.pushedAt === 'string' ? node.pushedAt : null
+  return { ...parts, full: name, isEmpty, pushedAt }
 }
 
-async function discoverWatching(token: string, fetchImpl: typeof fetch): Promise<ScopeRepo[]> {
+async function discoverRepos(
+  token: string,
+  fetchImpl: typeof fetch,
+  connection: 'repositories' | 'watching',
+  limit: number
+): Promise<{ repos: ScopeRepo[], truncated: boolean }> {
   const repos: ScopeRepo[] = []
   let cursor: string | null = null
-  for (let page = 0; page < 4; page += 1) {
+  let truncated = false
+  const field = connection === 'repositories'
+    ? `repositories(first: ${REPO_PAGE_SIZE}, after: $cursor, ownerAffiliations: [OWNER], orderBy: {field: PUSHED_AT, direction: DESC})`
+    : `watching(first: ${REPO_PAGE_SIZE}, after: $cursor)`
+  const pageCap = Math.max(1, Math.ceil(Math.max(limit, 1) / REPO_PAGE_SIZE) + 1)
+  for (let page = 0; page < pageCap && repos.length < limit; page += 1) {
     const payload = await graphql(token, `
       query($cursor: String) {
         viewer {
-          watching(first: 40, after: $cursor) {
+          ${field} {
             pageInfo { hasNextPage endCursor }
             nodes { nameWithOwner isEmpty pushedAt }
           }
@@ -225,23 +205,28 @@ async function discoverWatching(token: string, fetchImpl: typeof fetch): Promise
       }
     `, { cursor }, fetchImpl)
     const viewer = dataOf(payload).viewer
-    const watching = viewer && typeof viewer === 'object' && 'watching' in viewer
-      ? (viewer as { watching: unknown }).watching
+    const listed = viewer && typeof viewer === 'object' && connection in viewer
+      ? (viewer as Record<string, unknown>)[connection]
       : null
-    const batch = connectionPage(watching)
+    const batch = connectionPage(listed)
     for (const node of batch.nodes) {
-      if (!node || typeof node !== 'object') continue
-      const name = 'nameWithOwner' in node && typeof node.nameWithOwner === 'string' ? node.nameWithOwner : ''
-      const parts = splitRepo(name)
-      if (!parts) continue
-      const isEmpty = 'isEmpty' in node && node.isEmpty === true
-      const pushedAt = 'pushedAt' in node && typeof node.pushedAt === 'string' ? node.pushedAt : null
-      repos.push({ ...parts, full: name, isEmpty, pushedAt })
+      const repo = readScopeNode(node)
+      if (!repo) continue
+      if (repos.length >= limit) {
+        truncated = true
+        break
+      }
+      repos.push(repo)
     }
-    if (!batch.cursor) break
+    if (repos.length >= limit && batch.cursor) truncated = true
+    if (truncated || !batch.cursor) break
+    if (page === pageCap - 1) {
+      truncated = true
+      break
+    }
     cursor = batch.cursor
   }
-  return repos
+  return { repos, truncated }
 }
 
 function metadataQuery(count: number): string {
@@ -283,12 +268,20 @@ async function loadExplicit(token: string, fetchImpl: typeof fetch, repos: reado
   return found
 }
 
-function contentQuery(count: number, withParent: boolean): string {
+function contentQuery(count: number, withParent: boolean, includePulls: boolean): string {
   const vars: string[] = []
   const fields: string[] = []
   const issueFields = withParent ? ISSUE_FIELDS_PARENT : ISSUE_FIELDS
   for (let index = 0; index < count; index += 1) {
-    vars.push(`$o${index}: String!`, `$n${index}: String!`, `$ia${index}: String`, `$pa${index}: String`)
+    vars.push(`$o${index}: String!`, `$n${index}: String!`, `$ia${index}: String`)
+    if (includePulls) vars.push(`$pa${index}: String`)
+    const pulls = includePulls
+      ? `
+        pullRequests(states: OPEN, first: 40, after: $pa${index}, orderBy: {field: UPDATED_AT, direction: DESC}) {
+          pageInfo { hasNextPage endCursor }
+          nodes { ${PR_FIELDS} }
+        }`
+      : ''
     fields.push(`
       r${index}: repository(owner: $o${index}, name: $n${index}) {
         nameWithOwner
@@ -297,11 +290,7 @@ function contentQuery(count: number, withParent: boolean): string {
         issues(states: OPEN, first: 40, after: $ia${index}, orderBy: {field: UPDATED_AT, direction: DESC}) {
           pageInfo { hasNextPage endCursor }
           nodes { ${issueFields} }
-        }
-        pullRequests(states: OPEN, first: 40, after: $pa${index}, orderBy: {field: UPDATED_AT, direction: DESC}) {
-          pageInfo { hasNextPage endCursor }
-          nodes { ${PR_FIELDS} }
-        }
+        }${pulls}
       }
     `)
   }
@@ -325,41 +314,50 @@ async function loadRepoContents(
   let pending: CursorRepo[] = repos.map(repo => ({ ...repo, issueCursor: null, pullCursor: null }))
   for (let page = 0; page < 4 && pending.length > 0; page += 1) {
     const nextPending: CursorRepo[] = []
-    for (let offset = 0; offset < pending.length; offset += 8) {
-      const slice = pending.slice(offset, offset + 8)
-      const variables: Record<string, string | null> = {}
-      slice.forEach((repo, index) => {
-        variables[`o${index}`] = repo.owner
-        variables[`n${index}`] = repo.name
-        variables[`ia${index}`] = repo.issueCursor
-        variables[`pa${index}`] = repo.pullCursor
-      })
-      let payload: unknown
-      try {
-        payload = await graphql(token, contentQuery(slice.length, withParent), variables, fetchImpl)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : ''
-        if (withParent && /parent/i.test(message)) {
-          withParent = false
-          payload = await graphql(token, contentQuery(slice.length, false), variables, fetchImpl)
-        } else {
-          throw error
+    const groups = [
+      pending.filter(repo => repo.isEmpty),
+      pending.filter(repo => !repo.isEmpty)
+    ]
+    for (const group of groups) {
+      if (group.length === 0) continue
+      const includePulls = group.some(repo => !repo.isEmpty)
+      for (let offset = 0; offset < group.length; offset += 8) {
+        const slice = group.slice(offset, offset + 8)
+        const variables: Record<string, string | null> = {}
+        slice.forEach((repo, index) => {
+          variables[`o${index}`] = repo.owner
+          variables[`n${index}`] = repo.name
+          variables[`ia${index}`] = repo.issueCursor
+          if (includePulls) variables[`pa${index}`] = repo.pullCursor
+        })
+        let payload: unknown
+        try {
+          payload = await graphql(token, contentQuery(slice.length, withParent, includePulls), variables, fetchImpl)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : ''
+          if (withParent && /parent/i.test(message)) {
+            withParent = false
+            payload = await graphql(token, contentQuery(slice.length, false, includePulls), variables, fetchImpl)
+          } else {
+            throw error
+          }
         }
+        const data = dataOf(payload)
+        slice.forEach((repo, index) => {
+          const parsed: RepoBatchItem | null = parseRepoNode(data[`r${index}`], login)
+          if (!parsed) return
+          issues.push(...parsed.issues)
+          if (includePulls) pullRequests.push(...parsed.pullRequests)
+          const pullCursor = includePulls ? parsed.pullCursor : null
+          if (parsed.issueCursor || pullCursor) {
+            nextPending.push({
+              ...repo,
+              issueCursor: parsed.issueCursor,
+              pullCursor
+            })
+          }
+        })
       }
-      const data = dataOf(payload)
-      slice.forEach((repo, index) => {
-        const parsed: RepoBatchItem | null = parseRepoNode(data[`r${index}`], login)
-        if (!parsed) return
-        issues.push(...parsed.issues)
-        pullRequests.push(...parsed.pullRequests)
-        if (parsed.issueCursor || parsed.pullCursor) {
-          nextPending.push({
-            ...repo,
-            issueCursor: parsed.issueCursor,
-            pullCursor: parsed.pullCursor
-          })
-        }
-      })
     }
     pending = nextPending
   }
@@ -452,11 +450,11 @@ export async function loadGithubRecords(options: {
   config: WaitingConfig
   watchedRepos: readonly string[]
   fetchImpl?: typeof fetch
-  now: Date
 }): Promise<GithubLoadResult> {
   const fetchImpl = options.fetchImpl ?? fetch
   const bucket = {
     errors: [] as SourceError[],
+    notices: [] as string[],
     resetAt: null as string | null,
     authInvalid: false
   }
@@ -484,6 +482,7 @@ export async function loadGithubRecords(options: {
       bySource,
       fresh,
       errors: [failure.error],
+      notices: [],
       rateLimitResetAt: failure.resetAt,
       auth: failure.auth ? 'invalid' : 'ok'
     }
@@ -491,18 +490,36 @@ export async function loadGithubRecords(options: {
 
   let scope: ScopeRepo[] = []
   try {
-    const discovered = options.watchedRepos.length > 0
-      ? await loadExplicit(options.token, fetchImpl, options.watchedRepos)
-      : [
-        ...await discoverOwned(options.token, fetchImpl, options.now),
-        ...await discoverWatching(options.token, fetchImpl)
-      ]
+    const limit = options.config.maxScopeRepos
+    let discovered: ScopeRepo[] = []
+    let truncated = false
+    if (options.watchedRepos.length > 0) {
+      truncated = options.watchedRepos.length > limit
+      discovered = await loadExplicit(options.token, fetchImpl, options.watchedRepos.slice(0, limit))
+    } else {
+      const owned = await discoverRepos(options.token, fetchImpl, 'repositories', limit)
+      const room = Math.max(0, limit - owned.repos.length)
+      let watchingRepos: ScopeRepo[] = []
+      let watchingTruncated = false
+      if (room > 0) {
+        const watching = await discoverRepos(options.token, fetchImpl, 'watching', room)
+        watchingRepos = watching.repos
+        watchingTruncated = watching.truncated
+      } else if (!owned.truncated) {
+        const peek = await discoverRepos(options.token, fetchImpl, 'watching', 1)
+        watchingTruncated = peek.repos.length > 0
+      }
+      truncated = owned.truncated || watchingTruncated
+      discovered = [...owned.repos, ...watchingRepos]
+    }
+    if (truncated) {
+      bucket.notices.push(`仓库数量达到上限 ${limit}，其余仓库没有继续查询。到设置里调高「仓库数量上限」。`)
+    }
     const seen = new Set<string>()
     scope = []
     for (const repo of discovered) {
-      if (seen.has(repo.full)) continue
-      seen.add(repo.full)
-      if (!repoIsOnWaitingPage({ isEmpty: repo.isEmpty, pushedAt: repo.pushedAt }, options.now)) continue
+      if (seen.has(repo.full.toLowerCase())) continue
+      seen.add(repo.full.toLowerCase())
       scope.push(repo)
     }
   } catch (error) {
@@ -514,11 +531,12 @@ export async function loadGithubRecords(options: {
 
   const scopeNames = new Set(scope.map(repo => repo.full.toLowerCase()))
   const wantContents = options.config.sources.openPrs || options.config.sources.humanIssues
-  const contentsEnabled = wantContents && scope.length > 0 && !bucket.authInvalid
+  const contentScope = scope.filter(repo => !repo.isEmpty || options.config.sources.humanIssues)
+  const contentsEnabled = wantContents && contentScope.length > 0 && !bucket.authInvalid
   const contents = await runSource(
     '仓库内容',
     contentsEnabled,
-    () => loadRepoContents(options.token, fetchImpl, scope, login),
+    () => loadRepoContents(options.token, fetchImpl, contentScope, login),
     undefined,
     bucket
   )
@@ -594,6 +612,7 @@ export async function loadGithubRecords(options: {
     bySource,
     fresh,
     errors: bucket.errors,
+    notices: bucket.notices,
     rateLimitResetAt: bucket.resetAt,
     auth: bucket.authInvalid ? 'invalid' : 'ok'
   }
