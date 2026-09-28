@@ -54,7 +54,7 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
   const todo = el('input', { type: 'checkbox' })
   todo.disabled = true
   todo.checked = false
-  toggles.append(el('label', { class: 'check' }, [todo, '待办「等我」（依赖 #4，尚未接入）']))
+  toggles.append(el('label', { class: 'check' }, [todo, '待办「等我」还没接上（依赖待办 #4）']))
   const keywords = el('textarea', { 'aria-label': '人工动作关键词' })
   keywords.value = config.humanKeywords.join('\n')
   const labels = el('textarea', { 'aria-label': '人工动作标签' })

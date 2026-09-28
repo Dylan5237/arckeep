@@ -202,14 +202,14 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: str
         ? '未配置'
         : scene === 'hotkey-conflict'
           ? '已被其他程序占用'
-          : scene === 'waiting' || scene === 'waiting-narrow'
+          : scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover'
             ? '验收北区截图'
             : scene === 'waiting-empty'
               ? '没有等你处理的事项'
               : scene === 'waiting-no-token'
-                ? '未配置 GitHub 认证，去设置'
+                ? '未配置 GitHub 认证'
                 : scene === 'waiting-invalid-token'
-                  ? 'GitHub 认证无效或已过期，去设置'
+                  ? 'GitHub 认证无效或已过期'
                   : scene === 'waiting-loading'
                     ? '正在刷新'
                     : scene === 'waiting-rate-limit'
@@ -225,6 +225,15 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: str
     await new Promise(resolve => setTimeout(resolve, 50))
   }
   if (!seen) throw new Error(`screenshot scene ${scene} did not show ${expected}`)
+  if (scene === 'waiting-hover') {
+    await window.webContents.executeJavaScript(`
+      const row = document.querySelector('.waiting-row')
+      if (!row) throw new Error('waiting row was not rendered')
+      row.classList.add('show-actions')
+      const details = row.querySelector('details')
+      if (details) details.open = true
+    `)
+  }
   await new Promise(resolve => setTimeout(resolve, 150))
   const image = await window.webContents.capturePage()
   fs.mkdirSync(path.dirname(file), { recursive: true })

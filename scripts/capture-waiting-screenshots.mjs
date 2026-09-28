@@ -17,7 +17,8 @@ const scenes = [
   ['waiting-invalid-token', 'waiting-invalid-token.png'],
   ['waiting-loading', 'waiting-loading.png'],
   ['waiting-rate-limit', 'waiting-rate-limit.png'],
-  ['waiting-narrow', 'waiting-narrow.png']
+  ['waiting-narrow', 'waiting-narrow.png'],
+  ['waiting-hover', 'waiting-hover.png']
 ]
 
 for (const [scene, filename] of scenes) {

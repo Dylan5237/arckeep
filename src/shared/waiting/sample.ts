@@ -48,7 +48,8 @@ const REASON_SETS = [
   ['状态文档'],
   ['要人动手', '指派'],
   ['没推送'],
-  ['提及', '要人动手']
+  ['提及', '要人动手'],
+  ['待办']
 ]
 
 /** Fifty-two synthetic rows spanning several repos, reasons, and ages. */
@@ -64,14 +65,16 @@ export function sampleWaitingRows(): WaitingRow[] {
   return days.map((waitingDays, index) => {
     const repo = REPOS[index % REPOS.length] ?? 'northwind/ledger'
     const reasons = REASON_SETS[index % REASON_SETS.length] ?? ['要人动手']
-    const type = reasons.includes('待你审/合') || reasons.includes('请求 review')
-      ? 'pr' as const
-      : reasons.includes('没推送')
-        ? 'local-branch' as const
-        : reasons.includes('状态文档') && index % 5 === 0
-          ? 'status-doc' as const
-          : 'issue' as const
-    const number = type === 'local-branch' ? null : 120 + index
+    const type = reasons.includes('待办')
+      ? 'todo' as const
+      : reasons.includes('待你审/合') || reasons.includes('请求 review')
+        ? 'pr' as const
+        : reasons.includes('没推送')
+          ? 'local-branch' as const
+          : reasons.includes('状态文档') && index % 5 === 0
+            ? 'status-doc' as const
+            : 'issue' as const
+    const number = type === 'local-branch' || type === 'todo' ? null : 120 + index
     const title = TITLES[index % TITLES.length] ?? '待处理事项'
     const slug = type === 'pr' ? 'pull' : 'issues'
     return {
@@ -79,10 +82,12 @@ export function sampleWaitingRows(): WaitingRow[] {
       repo,
       number,
       type,
-      title: index === 0 ? '验收北区截图' : `${title} ${index + 1}`,
-      url: type === 'local-branch'
-        ? `https://github.com/${repo}/tree/feature-${index}`
-        : `https://github.com/${repo}/${slug}/${number}`,
+      title,
+      url: type === 'todo'
+        ? 'arckeep://todos'
+        : type === 'local-branch'
+          ? `https://github.com/${repo}/tree/feature-${index}`
+          : `https://github.com/${repo}/${slug}/${number}`,
       reasons: [...reasons],
       waitingDays,
       daysEstimated: index % 7 === 0,

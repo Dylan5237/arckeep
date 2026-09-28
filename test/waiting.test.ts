@@ -10,6 +10,7 @@ import { assembleWaiting } from '../src/shared/waiting/assemble.js'
 import { classifyRecord } from '../src/shared/waiting/classify.js'
 import { createWaitingClock } from '../src/shared/waiting/clock.js'
 import { waitingDays } from '../src/shared/waiting/days.js'
+import { localClock, relativeLabel } from '../src/shared/waiting/local-time.js'
 import { dedupeDrafts } from '../src/shared/waiting/dedupe.js'
 import { parseAheadRefLines } from '../src/shared/waiting/local-branch.js'
 import { blankRecord, findMentionTime, parseSearchPayload } from '../src/shared/waiting/parse-github.js'
@@ -861,6 +862,19 @@ describe('cli json', () => {
     const pull = rows.find(row => row.number === 4)
     expect(pull?.reasons).toEqual(expect.arrayContaining(['指派', '请求 review', '待你审/合']))
     expect(pull?.daysEstimated).toBe(false)
+  })
+})
+
+describe('local time', () => {
+  it('says how long ago in minutes and formats the clock in local time', () => {
+    const now = new Date('2026-09-28T12:00:00.000Z')
+    expect(relativeLabel('2026-09-28T11:57:00.000Z', now)).toBe('3 分钟前')
+    expect(relativeLabel('2026-09-28T12:00:20.000Z', now)).toBe('刚刚')
+    const iso = '2026-09-28T18:30:00.000Z'
+    const date = new Date(iso)
+    const pad = (value: number) => String(value).padStart(2, '0')
+    expect(localClock(iso)).toBe(`${pad(date.getHours())}:${pad(date.getMinutes())}`)
+    expect(localClock(iso)).not.toMatch(/UTC/)
   })
 })
 
