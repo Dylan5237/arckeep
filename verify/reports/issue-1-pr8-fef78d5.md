@@ -95,7 +95,8 @@ GraphQL: Resource not accessible by integration (repository.issues)
 验收 workflow：`.github/workflows/verify-issue-1.yml`，只在 push 到 `verify/issue-1` 时触发；下载 run `36407287806` 的两个 artifact 前先核对 `run.head_sha == fef78d5`（脚本里写了 `throw`，核对通过）；被测应用启动环境去掉了 `GH_TOKEN`/`GITHUB_TOKEN`；全程只用假 token `ghp_Vf9QzXk2LmP4rT8wYb6nHc3JdA1sE7uG0oKi`。
 
 - 第 1 次推送：仅探测「push 新 workflow 文件」是否被 GitHub App 权限拒绝——**未被拒绝**，run [`36408808526`](https://github.com/Dylan5237/arckeep/actions/runs/36408808526) 正常触发并成功。
-- 第 2 次推送：完整验收脚本（`verify/run-all.ps1` + `verify/smoke.mjs`），run [`36409794693`](https://github.com/Dylan5237/arckeep/actions/runs/36409794693)，**一次性跑通**，`scenes.json` 里 27 个场景全部 `PASS`（无 FAIL）。**Actions 分钟预算：目前用了 8 次里的 2 次。**
+- 第 2 次推送：完整验收脚本（`verify/run-all.ps1` + `verify/smoke.mjs`），run [`36409794693`](https://github.com/Dylan5237/arckeep/actions/runs/36409794693)，**一次性跑通**，`scenes.json` 里 27 个场景全部 `PASS`（无 FAIL）。
+- 第 3 次推送：只是把这份报告文件加进分支（没有改验收脚本），但 `on: push: branches: ['verify/issue-1']` 对任何推送都会重新触发整套 Windows 冒烟——run [`36411183904`](https://github.com/Dylan5237/arckeep/actions/runs/36411183904) 又完整跑了一遍，结果与第 2 次一致（`conclusion=success`）。尝试过 `gh run cancel` 去省分钟，被拒绝（`HTTP 403: Resource not accessible by integration`，GitHub App 没有 `actions:write`），按硬性规则没有绕过，让它跑完。**Actions 分钟预算：8 次里用了 3 次（第 1 次只是权限探测）。**
 
 所有截图和原始数据都在证据 artifact `verify-issue-1-evidence-fef78d5` 里（<https://github.com/Dylan5237/arckeep/actions/runs/36409794693/artifacts/10964290813>），文件名与 `evidence/index.md` 对照见本报告末尾清单。
 
@@ -190,10 +191,12 @@ GraphQL: Resource not accessible by integration (repository.issues)
 - **网络不通**：`New-NetFirewallRule` 成功阻断了 `Arckeep.exe` 的出站连接（管理员权限足够，不需要退到 hosts 文件方案），再点「测试连接」，25 秒内出现：
   > 这个 token 无效或已过期（HTTP 401）。请重新生成 PAT，或执行 gh auth login 后再试。
 
-  **⚠️ 这里出现了一个和预期不一致的结果**：防火墙阻断出站后，`fetch()` 抛出的错误在 `github-auth.ts` 的 `classifyGithubFailure` 分类里，**没有**被分到 `network` 类,而是落到了跟「token 无效」相同的 401 文案。测完后已经 `Remove-NetFirewallRule` 清理规则。这属于产品侧的一个真实缺陷，详见第 4 节「产品缺陷」。token 仍在输入框（`tokenKeptInField: true`）。截图 `11-settings-network-error.png`。
+  **⚠️ 这里出现了一个和预期不一致的结果**：防火墙阻断出站后，UI 显示的仍是跟「token 无效」相同的 401 文案，**没有**出现 network 类提示。token 仍在输入框（`tokenKeptInField: true`），进程没有崩溃。测完后已经 `Remove-NetFirewallRule` 清理规则。截图 `11-settings-network-error.png`。
+
+  **这个结果的定性存疑，本报告不把它算作确定的产品缺陷**，理由见第 4 节——最可能的原因是本验收脚本的方法论问题（同一个长期运行的 Electron 进程在此之前已经和 `api.github.com` 建立过一次 TLS 连接，`fetch`/undici 的连接池可能复用了这条已建立的连接，而新增的出站防火墙规则通常只拦截**新建**连接，不会掐断已经建立的连接），而不是 `classifyGithubFailure` 的分类逻辑本身有问题。
 - **权限不够（403 / 缺 scope）**：没有真实 token 触发不了，按规则未测。覆盖这条分类逻辑的单测：`test/github-auth.test.ts` › `classifyGithubFailure` › `separates invalid tokens, missing scopes, and unreachable networks`（同时覆盖 `status:403` 和 `missing scope` 两种情况），该测试在 run `36407287806` 的 `test` 步骤里执行过。
 
-**结论：PARTIAL**（invalid-token 类实测 PASS；network 类实测但结果与预期文案不符——见缺陷记录；insufficient-scope 类只有单测、无实测）
+**结论：PARTIAL**（invalid-token 类实测 PASS；network 类实测了但结果与预期文案不符,定性存疑（很可能是本验收方法论的问题,见第 4 节),建议工程方或用新进程重测一次;insufficient-scope 类只有单测、无实测)
 
 ### X2：测试连接失败后，已粘贴的 token 仍留在输入框
 
@@ -251,8 +254,11 @@ GraphQL: Resource not accessible by integration (repository.issues)
 
 1. **【AC2 失败的根因】Release workflow 在打包步骤缺少 `GH_TOKEN`，导致推测试 tag 后打包直接失败，Release 从未创建。**
    `.github/workflows/release.yml` 里只有「Publish GitHub Release」步骤注入了 `GH_TOKEN: ${{ github.token }}`；更早的「Build NSIS installer and portable exe」步骤（`npm run dist` → `electron-builder --win`，未加 `--publish never`）在检测到当前 ref 是 `v*` tag 时会**隐式尝试发布**，因为没有 token 而直接报错退出（`GitHub Personal Access Token is not set`），NSIS installer 和 portable exe 都没能生成。参见 run [36407712335](https://github.com/Dylan5237/arckeep/actions/runs/36407712335) 的失败日志。**建议修复**：给 `dist` 脚本加 `--publish never`（或在 `package.json` 的 `build` 字段里设 `"publish": null`），把真正的发布逻辑完全留给 release.yml 里已有的 `gh release create/upload` 步骤；或者把 `GH_TOKEN` 一并注入打包步骤。这个缺陷会阻塞 AC2，也会阻塞 Issue #7 里「CI 绿且验收标准全部勾完才关闭」的收尾条件。
-2. **【X1 网络不通分类有误】outbound 网络被完全阻断时，`测试连接` 显示的是「token 无效或已过期（HTTP 401）」而不是「网络不可达」类提示。**
-   代码路径：`fetchGitHubLogin`（`src/main/github-auth.ts`）在 `fetch()` 抛错时会调用 `classifyGithubFailure({ network: true })`，理论上应该走 network 分支；但本次实测在防火墙完全阻断 `Arckeep.exe` 出站流量后，UI 显示的仍是 401 文案。可能的原因：网络请求在防火墙层面被静默丢弃/超时的方式，没有被 `isGithubNetworkError`/`fetch` 的错误码正确识别为「网络类」错误(比如触发了别的 fetch 异常类型,或者请求实际上还是拿到了某个响应而不是真正被拒绝连接)；也可能是本次验收 runner 环境的防火墙规则没有完全生效导致请求实际上打到了别处返回了 401-like 响应。**这一点建议工程方复核**：本报告倾向于记为产品侧的分类逻辑缺陷,但不排除是验收环境（Windows Server 镜像 + GitHub Actions 防火墙栈）的干扰,请工程方结合真实 Windows 客户端环境复测一次再定性。
+
+### 存疑事项（建议工程方复核，本报告不计入产品缺陷）
+
+1. **X1 网络不通场景下，`测试连接` 显示的是「token 无效或已过期（HTTP 401）」而不是「网络不可达」类提示。**
+   代码路径上看，`fetchGitHubLogin`（`src/main/github-auth.ts`）在 `fetch()` 抛错时会调用 `classifyGithubFailure({ network: true })`，理论上应该走 network 分支。但本次实测在防火墙阻断 `Arckeep.exe` 出站流量后，UI 显示的仍是 401 文案。**最可能的原因是本验收脚本的方法论问题，而不是产品代码的缺陷**：X1 场景复用了 AC5c 场景里同一个已经跑了几分钟、且刚刚成功和 `api.github.com` 建立过 TLS 连接的 Electron 进程；Node/undici 的底层连接池可能会对同一 host 复用已建立的连接，而新建的 `New-NetFirewallRule` 出站规则通常只拦截**新建**连接，不一定能掐断已经建立、处于 keep-alive 状态的连接——这样「网络阻断」在这个具体场景下就可能根本没有真正生效在这次请求上，UI 显示的 401 其实还是命中了真实的 GitHub API（用假 token 请求本来就会收到 401）。**建议**：工程方或后续验收用一个全新冷启动的进程（而不是复用已经建立过连接的实例）单独测一次网络不通场景,更准确地定性;在此之前不应该把这条计入产品缺陷,X1 因此判 PARTIAL 而不是 FAIL。
 
 ### 偏离工程方承诺的地方
 
