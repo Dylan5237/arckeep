@@ -1,24 +1,36 @@
 import { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, safeStorage } from 'electron'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { IpcChannel } from '../shared/ipc.js'
 import { createGracefulShutdownHandler } from './graceful-shutdown.js'
 import { requireSender } from './ipc-validators.js'
 import { settingsFilePath, userDataDir } from './paths.js'
+import {
+  MOCK_GITHUB_LOGIN,
+  createScreenshotSettings,
+  parseScreenshotScene,
+  screenshotOpensSettings,
+  screenshotWindowSize
+} from './screenshot-scene.js'
 import { SettingsService } from './settings-service.js'
 import { createSafeStorageBox } from './token-store.js'
 import { createUrlGuard } from './url-trust.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const screenshotPath = process.env.ARCKEEP_SCREENSHOT
+const screenshotScene = parseScreenshotScene(process.env.ARCKEEP_SCREENSHOT_SCENE)
 
-if (process.env.ARCKEEP_SCREENSHOT) {
+if (screenshotPath) {
   app.commandLine.appendSwitch('no-sandbox')
   app.disableHardwareAcceleration()
 }
 
 app.setName('Arckeep')
-app.setPath('userData', userDataDir(app.getPath('appData')))
+app.setPath('userData', screenshotPath
+  ? fs.mkdtempSync(path.join(os.tmpdir(), 'arckeep-screenshot-'))
+  : userDataDir(app.getPath('appData')))
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -63,10 +75,11 @@ function createTray(): void {
 }
 
 function createWindow(): BrowserWindow {
+  const size = screenshotWindowSize(screenshotScene)
   const window = new BrowserWindow({
-    width: 1120,
-    height: 760,
-    minWidth: 880,
+    width: size.width,
+    height: size.height,
+    minWidth: 720,
     minHeight: 600,
     show: false,
     title: 'Arckeep',
@@ -98,32 +111,73 @@ function createWindow(): BrowserWindow {
     window.show()
   })
 
-  const screenshot = process.env.ARCKEEP_SCREENSHOT
-  if (screenshot) {
+  if (screenshotPath) {
     window.webContents.once('did-finish-load', () => {
-      setTimeout(() => {
-        window.webContents.capturePage().then(image => {
-          fs.mkdirSync(path.dirname(screenshot), { recursive: true })
-          fs.writeFileSync(screenshot, image.toPNG())
-          isQuitting = true
-          app.exit(0)
-        }).catch(error => {
-          console.error(error)
-          app.exit(1)
-        })
-      }, 400)
+      void captureScreenshot(window, screenshotPath, screenshotScene).catch(error => {
+        console.error(error)
+        app.exit(1)
+      })
     })
   }
 
+  const openSettings = screenshotPath ? screenshotOpensSettings(screenshotScene) : false
   if (devServerOrigin) {
-    const page = process.env.ARCKEEP_SCREENSHOT ? `${devServerOrigin}?page=settings` : devServerOrigin
+    const page = openSettings ? `${devServerOrigin}?page=settings` : devServerOrigin
     void window.loadURL(page)
   } else {
     void window.loadFile(path.join(rendererDir, 'index.html'), {
-      query: process.env.ARCKEEP_SCREENSHOT ? { page: 'settings' } : {}
+      query: openSettings ? { page: 'settings' } : {}
     })
   }
   return window
+}
+
+async function captureScreenshot(window: BrowserWindow, file: string, scene: string): Promise<void> {
+  if (scene === 'invalid-token' || scene === 'connected') {
+    await window.webContents.executeJavaScript(`
+      new Promise((resolve, reject) => {
+        const start = Date.now()
+        const timer = setInterval(() => {
+          const button = [...document.querySelectorAll('button')].find(item => item.textContent === '测试连接')
+          if (button) {
+            clearInterval(timer)
+            button.click()
+            resolve(true)
+            return
+          }
+          if (Date.now() - start > 5000) {
+            clearInterval(timer)
+            reject(new Error('测试连接 button was not rendered'))
+          }
+        }, 50)
+      })
+    `)
+  }
+  const expected = scene === 'connected'
+    ? MOCK_GITHUB_LOGIN
+    : scene === 'invalid-token'
+      ? 'HTTP 401'
+      : scene === 'signed-out'
+        ? '未配置'
+        : scene === 'hotkey-conflict'
+          ? '冲突'
+          : '等我处理'
+  const start = Date.now()
+  let seen = false
+  while (Date.now() - start < 5000) {
+    seen = await window.webContents.executeJavaScript(
+      `document.body.innerText.includes(${JSON.stringify(expected)})`
+    )
+    if (seen) break
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+  if (!seen) throw new Error(`screenshot scene ${scene} did not show ${expected}`)
+  await new Promise(resolve => setTimeout(resolve, 150))
+  const image = await window.webContents.capturePage()
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, image.toPNG())
+  isQuitting = true
+  app.exit(0)
 }
 
 function registerIpc(settings: SettingsService): void {
@@ -163,14 +217,18 @@ if (!gotLock) {
   app.on('second-instance', () => showMainWindow())
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null)
-    service = new SettingsService({
-      file: settingsFilePath(app.getPath('userData')),
-      secretBox: createSafeStorageBox(safeStorage),
-      registrar: globalShortcut,
-      onHotkey: () => showMainWindow(),
-      log: message => console.error(message)
-    })
-    service.init()
+    if (screenshotPath) {
+      service = createScreenshotSettings(screenshotScene, settingsFilePath(app.getPath('userData')))
+    } else {
+      service = new SettingsService({
+        file: settingsFilePath(app.getPath('userData')),
+        secretBox: createSafeStorageBox(safeStorage),
+        registrar: globalShortcut,
+        onHotkey: () => showMainWindow(),
+        log: message => console.error(message)
+      })
+      service.init()
+    }
     registerIpc(service)
     mainWindow = createWindow()
     try {

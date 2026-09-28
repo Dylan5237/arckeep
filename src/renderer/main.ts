@@ -183,7 +183,7 @@ function renderReposCard(state: AppState): HTMLElement {
       list.append(el('li', {}, [el('span', {}, [repo]), remove]))
     }
   }
-  const input = el('input', { type: 'text', placeholder: 'Dylan5237/arckeep', 'aria-label': '关注仓库' })
+  const input = el('input', { type: 'text', placeholder: 'example/demo', 'aria-label': '关注仓库' })
   const add = el('button', { type: 'button', class: 'primary' }, ['添加'])
   add.addEventListener('click', async () => {
     const result = await window.arckeep.setRepos([...state.watchedRepos, input.value])
