@@ -298,4 +298,13 @@ GraphQL: Resource not accessible by integration (repository.issues)
 | `invalid-token-message.txt` / `hotkey-warning-message.txt` | 提示文案原文 |
 | `index.md` | 文件与勾选项对照表 |
 
+## 6. 事后动态（仅供参考，不改变本报告对 `fef78d5`/`699736c` 的结论）
+
+本报告的全部结论都绑定在 `fef78d5`（PR #8 head）/ `699736c`（main 合并提交）。在本次验收进行期间，`main` 分支上出现了新的提交，**超出了本次验收的范围**，本报告不因此改判任何一条结论，只如实记录时间线：
+
+- 2026-09-28 18:47:45 北京时间：Dylan5237 合并了 [PR #11](https://github.com/Dylan5237/arckeep/pull/11)「#1 打包时关闭 electron-builder 隐式发布」，`main` 从 `699736c` 前进到 `4c5f83b`。commit message：「push 和 tag 的 CI 会被 electron-builder 当成要发布，缺少 GH_TOKEN 时 dist 在产物生成后退出 1。所有 electron-builder 调用显式 `--publish never`，并让 PR 上的 windows package 按 push 条件跑。」——修复方式（给 `dist`/`build` 脚本加 `--publish never`）与本报告第 4 节「产品缺陷」第 1 条给出的建议**完全一致**。
+- `v0.0.1-test` tag 被重新指向 `4c5f83b`；对应 Release workflow run [`36411825544`](https://github.com/Dylan5237/arckeep/actions/runs/36411825544) `conclusion=success`；`gh release view v0.0.1-test` 现在能看到 Release，附件里有 `Arckeep-Setup-0.1.0.exe` 和 `Arckeep-0.1.0-portable.exe`（`publishedAt: 2026-09-28T10:50:58Z` = 18:50:58 北京时间）。
+
+**本报告没有对 `4c5f83b` 做任何验收动作**（没有下载新产物、没有跑新的 Windows 冒烟、没有核对新的 Release 附件的 SHA256），因为这超出了「验收 PR #8 / `fef78d5`」这个既定任务范围；如果需要对 `4c5f83b`（或 PR #11）单独出一份验收报告，应该作为新的验收任务另外发起。**AC2 在 `699736c` 上的结论仍然是 FAIL**——这是基于当时代码状态的确定性事实，不是"过时"的判断。
+
 ——本报告完——
