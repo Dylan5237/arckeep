@@ -5,6 +5,7 @@ import type { WaitingConfig } from '../shared/waiting/types.js'
 import { DEFAULT_HOTKEY } from '../shared/types.js'
 import { normalizeAccelerator } from './hotkey.js'
 import { normalizeWatchedRepos } from './ipc-validators.js'
+import { toolShelfExampleText } from './tool-assets.js'
 
 export interface PersistedSettings {
   version: 1
@@ -12,6 +13,7 @@ export interface PersistedSettings {
   hotkey: string
   patCiphertext: string | null
   waiting: WaitingConfig
+  toolShelfJson: string
 }
 
 export function defaultSettings(): PersistedSettings {
@@ -20,7 +22,8 @@ export function defaultSettings(): PersistedSettings {
     watchedRepos: [],
     hotkey: DEFAULT_HOTKEY,
     patCiphertext: null,
-    waiting: defaultWaitingConfig()
+    waiting: defaultWaitingConfig(),
+    toolShelfJson: toolShelfExampleText()
   }
 }
 
@@ -52,7 +55,10 @@ export function parseSettings(raw: unknown): PersistedSettings {
   } catch {
     waiting = defaultWaitingConfig()
   }
-  return { version: 1, watchedRepos, hotkey, patCiphertext, waiting }
+  const toolShelfJson = typeof raw.toolShelfJson === 'string' && raw.toolShelfJson.trim()
+    ? raw.toolShelfJson
+    : defaults.toolShelfJson
+  return { version: 1, watchedRepos, hotkey, patCiphertext, waiting, toolShelfJson }
 }
 
 export function loadSettings(file: string): PersistedSettings {

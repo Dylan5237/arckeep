@@ -6,6 +6,7 @@ import { type HotkeyRegistrar } from '../src/main/hotkey.js'
 import { settingsFilePath, userDataDir } from '../src/main/paths.js'
 import { SettingsService } from '../src/main/settings-service.js'
 import { loadSettings } from '../src/main/settings-store.js'
+import { toolShelfExampleText } from '../src/main/tool-assets.js'
 import type { SecretBox } from '../src/main/token-store.js'
 import { DEFAULT_HOTKEY } from '../src/shared/types.js'
 
@@ -76,6 +77,34 @@ describe('settings persistence', () => {
       watchedRepos: ['Dylan5237/arckeep', 'Dylan5237/kcc-workbench'],
       hotkey: 'Ctrl+Shift+A'
     })
+  })
+
+  it('keeps a valid tool shelf across a restart and refuses invalid JSON', async () => {
+    const file = tempFile()
+    const first = new SettingsService({
+      file,
+      secretBox: xorBox(),
+      registrar: new FakeShortcuts(),
+      onHotkey: () => {},
+      readGh: async () => ({ ok: false, reason: 'not-installed' })
+    })
+    first.init()
+    expect(first.getSettings().toolShelfJson).toBe(toolShelfExampleText())
+    const empty = '{\n  "version": 1,\n  "actions": []\n}\n'
+    expect(first.setToolShelfJson(empty).ok).toBe(true)
+    const bad = first.setToolShelfJson('{\n  "version": 1,\n}\n')
+    expect(bad.ok).toBe(false)
+    if (!bad.ok) expect(bad.error).toContain('行')
+    expect(loadSettings(file).toolShelfJson).toBe(empty)
+    const second = new SettingsService({
+      file,
+      secretBox: xorBox(),
+      registrar: new FakeShortcuts(),
+      onHotkey: () => {},
+      readGh: async () => ({ ok: false, reason: 'not-installed' })
+    })
+    const state = await second.getState()
+    expect(state.toolShelfJson).toBe(empty)
   })
 
   it('stores an empty repo list as auto mode and starts from the default hotkey', () => {

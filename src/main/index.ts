@@ -11,14 +11,17 @@ import {
   MOCK_GITHUB_LOGIN,
   createScreenshotSettings,
   parseScreenshotScene,
-  screenshotOpensSettings,
+  screenshotStartPage,
   screenshotWindowSize
 } from './screenshot-scene.js'
+import { toolScreenshotExpectation } from './screenshot-tools.js'
 import { createScreenshotWaiting } from './screenshot-waiting.js'
 import { SettingsService } from './settings-service.js'
 import { WaitingService } from './waiting-service.js'
 import { dispatchTestHook, installTrayTestHooks, parseTestHookAction, type TrayActions } from './test-hooks.js'
 import { createSafeStorageBox } from './token-store.js'
+import { registerToolIpc } from './tool-ipc.js'
+import { ToolRunner } from './tool-runner.js'
 import { createUrlGuard, isTrustedBrowserUrl } from './url-trust.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -40,6 +43,11 @@ let tray: Tray | null = null
 let isQuitting = false
 let service: SettingsService | null = null
 let waiting: WaitingService | ReturnType<typeof createScreenshotWaiting> | null = null
+const toolRunner = new ToolRunner(event => {
+  const win = mainWindow
+  if (!win || win.isDestroyed()) return
+  win.webContents.send(IpcChannel.toolEvent, event)
+})
 
 const devServerOrigin = process.env.ARCKEEP_DEV === '1' ? process.env.VITE_DEV_SERVER_URL ?? null : null
 const rendererDir = path.join(__dirname, '../renderer')
@@ -161,13 +169,13 @@ function createWindow(): BrowserWindow {
     })
   }
 
-  const openSettings = screenshotPath ? screenshotOpensSettings(screenshotScene) : false
+  const startPage = screenshotPath ? screenshotStartPage(screenshotScene) : 'inbox'
   if (devServerOrigin) {
-    const page = openSettings ? `${devServerOrigin}?page=settings` : devServerOrigin
+    const page = startPage === 'inbox' ? devServerOrigin : `${devServerOrigin}?page=${startPage}`
     void window.loadURL(page)
   } else {
     void window.loadFile(path.join(rendererDir, 'index.html'), {
-      query: openSettings ? { page: 'settings' } : {}
+      query: startPage === 'inbox' ? {} : { page: startPage }
     })
   }
   return window
@@ -194,7 +202,8 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: str
       })
     `)
   }
-  const expected = scene === 'connected'
+  const toolExpected = toolScreenshotExpectation(scene)
+  const expected = toolExpected ?? (scene === 'connected'
     ? MOCK_GITHUB_LOGIN
     : scene === 'invalid-token'
       ? 'HTTP 401'
@@ -214,7 +223,7 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: str
                     ? '正在刷新'
                     : scene === 'waiting-rate-limit'
                       ? '速率限制'
-                      : '等我处理'
+                      : '等我处理')
   const start = Date.now()
   let seen = false
   while (Date.now() - start < 5000) {
@@ -347,6 +356,13 @@ if (!gotLock) {
       })
     }
     registerIpc(service)
+    registerToolIpc({
+      guard: event => requireSender(event, mainWindow?.webContents ?? null),
+      getWindow: () => mainWindow,
+      settings: service,
+      runner: toolRunner,
+      screenshotScene
+    })
     mainWindow = createWindow()
     try {
       createTray()
@@ -363,6 +379,7 @@ if (!gotLock) {
 const handleBeforeQuit = createGracefulShutdownHandler({
   quit: () => app.quit(),
   shutdown: () => {
+    toolRunner.abortAll()
     globalShortcut.unregisterAll()
     tray?.destroy()
     tray = null
