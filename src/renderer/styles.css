@@ -1,0 +1,190 @@
+@import "../../docs/brand/arckeep-brand-tokens.css";
+
+:root {
+  color: var(--arckeep-deep-charcoal);
+  background: var(--arckeep-warm-ivory);
+  font-family: "Segoe UI", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--arckeep-warm-ivory);
+  color: var(--arckeep-deep-charcoal);
+}
+
+button, input {
+  font: inherit;
+  color: inherit;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  min-height: 100vh;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px 14px 16px;
+  background: var(--arckeep-deep-charcoal);
+  color: var(--arckeep-warm-ivory);
+}
+
+.brand {
+  padding: 4px 8px 18px;
+}
+
+.brand img {
+  display: block;
+  width: 168px;
+  height: auto;
+}
+
+#nav, #settings-button {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#nav button, #settings-button {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--arckeep-warm-ivory);
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+#nav button:hover, #settings-button:hover {
+  background: rgba(245, 242, 234, 0.08);
+}
+
+#nav button.active, #settings-button.active {
+  background: var(--arckeep-olive);
+  color: var(--arckeep-warm-ivory);
+}
+
+#settings-button {
+  margin-top: auto;
+}
+
+main {
+  padding: 36px 40px;
+}
+
+.page h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.lede {
+  margin: 0 0 24px;
+  color: var(--arckeep-muted-graphite);
+}
+
+.card {
+  background: var(--arckeep-white);
+  border: 1px solid var(--arckeep-soft-stone);
+  border-radius: 12px;
+  padding: 18px 18px 16px;
+  margin-bottom: 16px;
+}
+
+.card h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.hint, .source {
+  margin: 0 0 12px;
+  color: var(--arckeep-muted-graphite);
+}
+
+.source strong {
+  color: var(--arckeep-deep-charcoal);
+  font-weight: 600;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+input[type="text"], input[type="password"] {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--arckeep-soft-stone);
+  background: var(--arckeep-warm-ivory);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+button.primary, button.ghost {
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+button.primary {
+  border: 0;
+  background: var(--arckeep-olive);
+  color: var(--arckeep-warm-ivory);
+}
+
+button.ghost {
+  border: 1px solid var(--arckeep-soft-stone);
+  background: transparent;
+}
+
+.repo-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.repo-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--arckeep-soft-stone);
+}
+
+.repo-list li:last-child { border-bottom: 0; }
+
+.alert {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f3efe4;
+  border: 1px solid var(--arckeep-warm-sand);
+  color: var(--arckeep-deep-charcoal);
+}
+
+.alert.error {
+  background: #f7f1ea;
+  border-color: #b08968;
+}
+
+.placeholder {
+  max-width: 36rem;
+}

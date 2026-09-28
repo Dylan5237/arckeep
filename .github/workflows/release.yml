@@ -1,0 +1,79 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: lint
+        run: npm run lint
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: test
+        run: npm test
+
+      - name: Build NSIS installer and portable exe
+        run: npm run dist
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $repo = "${{ github.repository }}"
+          $setup = Get-ChildItem -LiteralPath "dist" -File -Filter "*.exe" |
+            Where-Object { $_.Name -like "*Setup*" } |
+            Select-Object -First 1
+          $portable = Get-ChildItem -LiteralPath "dist" -File -Filter "*.exe" |
+            Where-Object { $_.Name -like "*portable*" } |
+            Select-Object -First 1
+          if (-not $setup) { throw "NSIS installer (*Setup*.exe) was not generated." }
+          if (-not $portable) { throw "Portable exe was not generated." }
+
+          $ErrorActionPreference = "Continue"
+          $PSNativeCommandUseErrorActionPreference = $false
+          $prerelease = $tag.Contains("-")
+          gh release view $tag --repo $repo | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            $arguments = @(
+              "release", "create", $tag,
+              "--repo", $repo,
+              "--title", "Arckeep $tag",
+              "--generate-notes"
+            )
+            if ($prerelease) { $arguments += "--prerelease" }
+            $arguments += @($setup.FullName, $portable.FullName)
+            & gh @arguments
+            if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
+          } else {
+            if ($prerelease) {
+              gh release edit $tag --repo $repo --prerelease
+              if ($LASTEXITCODE -ne 0) { throw "gh release edit failed" }
+            }
+            gh release upload $tag $setup.FullName $portable.FullName --repo $repo --clobber
+            if ($LASTEXITCODE -ne 0) { throw "gh release upload failed" }
+          }
