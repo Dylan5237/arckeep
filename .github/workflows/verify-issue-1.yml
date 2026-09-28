@@ -1,0 +1,26 @@
+name: verify-issue-1
+
+on:
+  push:
+    branches: ['verify/issue-1']
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+env:
+  SOURCE_RUN_ID: '36407287806'
+  TESTED_SHA: 'fef78d58ce1cd879472afded059ea0830c8fb358'
+  FAKE_TOKEN: 'ghp_Vf9QzXk2LmP4rT8wYb6nHc3JdA1sE7uG0oKi'
+
+jobs:
+  smoke:
+    name: windows-smoke
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: probe-permission-only
+        shell: pwsh
+        run: |
+          Write-Host "permission probe ok"
