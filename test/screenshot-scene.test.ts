@@ -20,6 +20,11 @@ describe('screenshot fixtures', () => {
     expect(screenshotOpensSettings('nav')).toBe(false)
     expect(screenshotOpensSettings('narrow')).toBe(false)
     expect(screenshotOpensSettings('signed-out')).toBe(true)
+    expect(screenshotOpensSettings('waiting')).toBe(false)
+    expect(screenshotOpensSettings('waiting-narrow')).toBe(false)
+    expect(screenshotWindowSize('waiting-narrow')).toEqual({ width: 800, height: 1680 })
+    expect(screenshotWindowSize('waiting-hover')).toEqual({ width: 1180, height: 900 })
+    expect(screenshotOpensSettings('waiting-hover')).toBe(false)
     expect(parseScreenshotScene('not-a-scene')).toBe('nav')
   })
 

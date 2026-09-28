@@ -36,6 +36,21 @@ export function isTrustedAppUrl(value: string, options: UrlTrustOptions = {}): b
   }
 }
 
+/** https://github.com links opened in the system browser. */
+export function isTrustedBrowserUrl(value: string): boolean {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'https:') return false
+  if (url.username || url.password) return false
+  const host = url.hostname.toLowerCase()
+  if (host !== 'github.com' && host !== 'www.github.com') return false
+  return url.pathname.length > 1
+}
+
 export function createUrlGuard(getOptions: () => UrlTrustOptions): (value: string) => boolean {
   if (typeof getOptions !== 'function') {
     throw new TypeError('getOptions must be a function')

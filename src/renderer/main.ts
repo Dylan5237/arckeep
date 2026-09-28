@@ -1,7 +1,10 @@
 import brandMark from '../../docs/brand/logo/Arckeep_Master_Horizontal_Reverse.svg'
+import brandSymbol from '../../docs/brand/logo/Arckeep_Symbol_White.svg'
 import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
 import { DEFAULT_HOTKEY } from '../shared/types'
+import { renderWaiting } from './waiting-page'
+import { renderWaitingSettings } from './waiting-settings'
 
 type ViewId = 'inbox' | 'projects' | 'todos' | 'tools' | 'settings'
 
@@ -26,6 +29,8 @@ const PAGES: Record<Exclude<ViewId, 'settings'>, { title: string, body: string }
 
 const brand = document.querySelector<HTMLImageElement>('#brand-mark')
 if (brand) brand.src = brandMark
+const symbol = document.querySelector<HTMLImageElement>('#brand-symbol')
+if (symbol) symbol.src = brandSymbol
 
 const content = document.querySelector<HTMLElement>('#content')
 const navButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-view]')]
@@ -68,7 +73,7 @@ function messageBox(parent: HTMLElement, kind: 'info' | 'error', text: string): 
   parent.append(el('div', { class: kind === 'error' ? 'alert error' : 'alert', role: 'alert' }, [text]))
 }
 
-async function renderSettings(): Promise<void> {
+async function renderSettings(options?: { focusToken?: boolean }): Promise<void> {
   if (!content) return
   const page = el('section', { class: 'page' }, [
     el('h1', {}, ['设置']),
@@ -88,8 +93,12 @@ async function renderSettings(): Promise<void> {
   page.append(
     renderGithubCard(state),
     renderReposCard(state),
-    renderHotkeyCard(state)
+    renderHotkeyCard(state),
+    renderWaitingSettings(state, renderSettings)
   )
+  if (options?.focusToken) {
+    page.querySelector<HTMLInputElement>('#github-pat')?.focus()
+  }
 }
 
 function renderGithubCard(state: AppState): HTMLElement {
@@ -115,6 +124,7 @@ function renderGithubCard(state: AppState): HTMLElement {
   }
 
   const tokenInput = el('input', {
+    id: 'github-pat',
     type: 'password',
     autocomplete: 'off',
     spellcheck: 'false',
@@ -277,9 +287,11 @@ function hotkeyWarningRow(warning: string): HTMLElement {
   ])
 }
 
-async function show(view: ViewId): Promise<void> {
+async function show(view: ViewId, options?: { focusToken?: boolean }): Promise<void> {
   setActive(view)
-  if (view === 'settings') await renderSettings()
+  if (!content) return
+  if (view === 'settings') await renderSettings(options)
+  else if (view === 'inbox') await renderWaiting(content, (next, nextOptions) => { void show(next, nextOptions) })
   else renderPlaceholder(view)
 }
 

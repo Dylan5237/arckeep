@@ -1,3 +1,7 @@
+import type { WaitingConfig, WaitingSnapshot } from './waiting/types.js'
+
+export type { WaitingConfig, WaitingSnapshot } from './waiting/types.js'
+
 export const DEFAULT_HOTKEY = 'Ctrl+Alt+Space'
 
 export type GithubSource = 'gh-cli' | 'pat' | 'none'
@@ -13,6 +17,7 @@ export interface AppState {
   hotkey: string
   hotkeyWarning: string | null
   github: PublicGithubAuth
+  waiting: WaitingConfig
 }
 
 export interface OkResult<T> {
@@ -34,6 +39,15 @@ export interface ArckeepApi {
   setPat(token: string): Promise<IpcResult<{ patSaved: true }>>
   clearPat(): Promise<IpcResult<{ patSaved: false }>>
   testGithub(pastedToken?: string): Promise<{ ok: true, login: string } | { ok: false, error: string }>
+  getWaiting(): Promise<WaitingSnapshot>
+  refreshWaiting(): Promise<WaitingSnapshot>
+  snoozeWaiting(id: string, days: 1 | 3 | 7): Promise<IpcResult<WaitingSnapshot>>
+  ignoreWaiting(id: string): Promise<IpcResult<WaitingSnapshot>>
+  restoreWaiting(id: string): Promise<IpcResult<WaitingSnapshot>>
+  setShowIgnored(show: boolean): Promise<IpcResult<WaitingSnapshot>>
+  setWaiting(config: WaitingConfig): Promise<IpcResult<AppState>>
+  openExternal(url: string): Promise<IpcResult<true>>
+  advanceWaitingDays(days: number): Promise<IpcResult<WaitingSnapshot>>
 }
 
 export function githubSourceLabel(source: GithubSource): string {

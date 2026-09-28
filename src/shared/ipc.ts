@@ -5,5 +5,14 @@ export const IpcChannel = {
   setPat: 'app:set-pat',
   clearPat: 'app:clear-pat',
   testGithub: 'app:test-github',
-  testHook: 'app:test-hook'
+  testHook: 'app:test-hook',
+  getWaiting: 'waiting:get',
+  refreshWaiting: 'waiting:refresh',
+  snoozeWaiting: 'waiting:snooze',
+  ignoreWaiting: 'waiting:ignore',
+  restoreWaiting: 'waiting:restore',
+  setShowIgnored: 'waiting:show-ignored',
+  setWaiting: 'waiting:set-config',
+  openExternal: 'waiting:open-external',
+  advanceWaitingDays: 'waiting:advance-days'
 } as const
