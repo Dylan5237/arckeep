@@ -113,15 +113,19 @@ export class SettingsService {
     return { ok: true, data: { patSaved: false } }
   }
 
-  async testConnection(): Promise<{ ok: true, login: string } | { ok: false, error: string }> {
+  async testConnection(pasted?: unknown): Promise<{ ok: true, login: string } | { ok: false, error: string }> {
     try {
+      if (typeof pasted === 'string' && pasted.trim()) {
+        const token = normalizePat(pasted)
+        return await testGithubConnection({ token, fetchImpl: this.deps.fetchImpl })
+      }
       const resolved = await this.resolveAuth()
       return await testGithubConnection({
         token: resolved.token,
         fetchImpl: this.deps.fetchImpl
       })
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : '测试连接失败' }
+      return { ok: false, error: error instanceof Error ? error.message : '测试连接失败。请稍后重试。' }
     }
   }
 

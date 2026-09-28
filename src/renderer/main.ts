@@ -1,4 +1,5 @@
 import brandMark from '../../docs/brand/logo/Arckeep_Master_Horizontal_Reverse.svg'
+import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
 import { DEFAULT_HOTKEY } from '../shared/types'
 
@@ -124,8 +125,9 @@ function renderGithubCard(state: AppState): HTMLElement {
   const clearButton = el('button', { type: 'button', class: 'ghost' }, ['清除 PAT'])
   const testButton = el('button', { type: 'button', class: 'primary' }, ['测试连接'])
   saveButton.addEventListener('click', async () => {
-    const result = await window.arckeep.setPat(tokenInput.value)
-    tokenInput.value = ''
+    const pasted = tokenInput.value
+    const result = await window.arckeep.setPat(pasted)
+    tokenInput.value = pastedTokenAfterAttempt(pasted, result.ok)
     if (!result.ok) {
       messageBox(card, 'error', result.error)
       return
@@ -142,13 +144,16 @@ function renderGithubCard(state: AppState): HTMLElement {
     await renderSettings()
   })
   testButton.addEventListener('click', async () => {
+    const pasted = tokenInput.value
     testButton.disabled = true
     try {
-      const result = await window.arckeep.testGithub()
+      const result = await window.arckeep.testGithub(pasted)
+      tokenInput.value = pastedTokenAfterAttempt(pasted, result.ok)
       if (result.ok) messageBox(card, 'info', `已连接：${result.login}`)
       else messageBox(card, 'error', result.error)
     } catch (error) {
-      messageBox(card, 'error', error instanceof Error ? error.message : '测试连接失败')
+      tokenInput.value = pastedTokenAfterAttempt(pasted, false)
+      messageBox(card, 'error', error instanceof Error ? error.message : '测试连接失败。请稍后重试。')
     } finally {
       testButton.disabled = false
     }
@@ -200,25 +205,76 @@ function renderReposCard(state: AppState): HTMLElement {
   return card
 }
 
+function acceleratorFromEvent(event: KeyboardEvent): string | null {
+  const mods: string[] = []
+  if (event.ctrlKey || event.metaKey) mods.push('Ctrl')
+  if (event.altKey) mods.push('Alt')
+  if (event.shiftKey) mods.push('Shift')
+  if (mods.length === 0) return null
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) return null
+  const named: Record<string, string> = {
+    ' ': 'Space',
+    Escape: 'Esc',
+    Enter: 'Enter',
+    Tab: 'Tab',
+    ArrowUp: 'Up',
+    ArrowDown: 'Down',
+    ArrowLeft: 'Left',
+    ArrowRight: 'Right'
+  }
+  const key = event.key.length === 1 ? event.key.toUpperCase() : (named[event.key] ?? event.key)
+  return [...mods, key].join('+')
+}
+
+async function applyHotkeyValue(value: string): Promise<void> {
+  await window.arckeep.setHotkey(value)
+  await renderSettings()
+}
+
 function renderHotkeyCard(state: AppState): HTMLElement {
   const card = el('section', { class: 'card' }, [
     el('h2', {}, ['全局热键']),
-    el('p', { class: 'hint' }, [`默认 ${DEFAULT_HOTKEY}。注册失败或与其他程序冲突时会在这里提示。`])
+    el('p', { class: 'hint' }, [`默认 ${DEFAULT_HOTKEY}。注册失败时会写出被占用的组合，并可在提示旁边直接换一个。`])
   ])
   const input = el('input', { type: 'text', value: state.hotkey, 'aria-label': '全局热键' })
   const save = el('button', { type: 'button', class: 'primary' }, ['保存热键'])
-  save.addEventListener('click', async () => {
-    const result = await window.arckeep.setHotkey(input.value)
-    if (!result.ok) {
-      messageBox(card, 'error', result.error)
-      return
-    }
-    messageBox(card, 'info', `已注册 ${result.data.hotkey}`)
-    await renderSettings()
-  })
+  save.addEventListener('click', () => { void applyHotkeyValue(input.value) })
   card.append(el('div', { class: 'row' }, [input, save]))
-  if (state.hotkeyWarning) messageBox(card, 'error', state.hotkeyWarning)
+  if (state.hotkeyWarning) card.append(hotkeyWarningRow(state.hotkeyWarning))
   return card
+}
+
+function hotkeyWarningRow(warning: string): HTMLElement {
+  const replacement = el('input', {
+    type: 'text',
+    'aria-label': '新的热键组合',
+    placeholder: 'Ctrl+Alt+K'
+  })
+  const record = el('button', { type: 'button', class: 'ghost' }, ['录制'])
+  let recording = false
+  record.addEventListener('click', () => {
+    recording = true
+    record.textContent = '请按键…'
+    replacement.focus()
+  })
+  replacement.addEventListener('keydown', event => {
+    if (!recording) return
+    event.preventDefault()
+    const combo = acceleratorFromEvent(event)
+    if (!combo) return
+    recording = false
+    record.textContent = '录制'
+    replacement.value = combo
+    void applyHotkeyValue(combo)
+  })
+  const apply = el('button', { type: 'button', class: 'primary' }, ['改用这个'])
+  apply.addEventListener('click', () => { void applyHotkeyValue(replacement.value) })
+  return el('div', { class: 'alert error hotkey-alert', role: 'alert' }, [
+    el('span', {}, [warning]),
+    replacement,
+    record,
+    apply
+  ])
 }
 
 async function show(view: ViewId): Promise<void> {

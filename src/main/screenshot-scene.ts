@@ -32,7 +32,8 @@ export function parseScreenshotScene(value: string | undefined): ScreenshotScene
 
 export function screenshotWindowSize(scene: ScreenshotScene): { width: number, height: number } {
   if (scene === 'narrow') return { width: 800, height: 760 }
-  return { width: 1120, height: 760 }
+  if (scene === 'nav') return { width: 1120, height: 760 }
+  return { width: 1120, height: 900 }
 }
 
 export function screenshotOpensSettings(scene: ScreenshotScene): boolean {

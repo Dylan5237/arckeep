@@ -42,7 +42,7 @@ describe('applyHotkey', () => {
 
     const conflict = applyHotkey('Ctrl+Alt+K', shortcuts, () => {}, first.hotkey)
     expect(conflict.ok).toBe(false)
-    expect(conflict.warning).toMatch(/冲突/)
+    expect(conflict.warning).toBe('Ctrl+Alt+K 已被其他程序占用')
     expect(conflict.hotkey).toBe(DEFAULT_HOTKEY)
     expect(shortcuts.registered.has(DEFAULT_HOTKEY)).toBe(true)
     expect(shortcuts.registered.has('Ctrl+Alt+K')).toBe(false)
@@ -54,7 +54,7 @@ describe('applyHotkey', () => {
     shortcuts.isRegistered = () => false
     const result = applyHotkey('Ctrl+Alt+K', shortcuts, () => {}, null)
     expect(result.ok).toBe(false)
-    expect(result.warning).toMatch(/冲突/)
+    expect(result.warning).toBe('Ctrl+Alt+K 已被其他程序占用')
   })
 
   it('does not unregister the current accelerator when the input is invalid', () => {

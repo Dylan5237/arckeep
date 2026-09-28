@@ -108,7 +108,7 @@ describe('settings persistence', () => {
     })
     service.init()
     const state = await service.getState()
-    expect(state.hotkeyWarning).toMatch(/注册失败/)
+    expect(state.hotkeyWarning).toBe('Ctrl+Alt+Space 已被其他程序占用')
   })
 
   it('reports a hotkey conflict without replacing the saved accelerator', async () => {
@@ -125,10 +125,10 @@ describe('settings persistence', () => {
     shortcuts.blocked.add('Ctrl+Alt+K')
     const result = service.setHotkey('Ctrl+Alt+K')
     expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.error).toMatch(/冲突/)
+    if (!result.ok) expect(result.error).toBe('Ctrl+Alt+K 已被其他程序占用')
     expect(loadSettings(file).hotkey).toBe(DEFAULT_HOTKEY)
     const state = await service.getState()
-    expect(state.hotkeyWarning).toMatch(/冲突/)
+    expect(state.hotkeyWarning).toBe('Ctrl+Alt+K 已被其他程序占用')
     expect(state.hotkey).toBe(DEFAULT_HOTKEY)
   })
 

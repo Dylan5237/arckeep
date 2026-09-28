@@ -8,7 +8,7 @@ const api: ArckeepApi = {
   setHotkey: hotkey => ipcRenderer.invoke(IpcChannel.setHotkey, hotkey),
   setPat: token => ipcRenderer.invoke(IpcChannel.setPat, token),
   clearPat: () => ipcRenderer.invoke(IpcChannel.clearPat),
-  testGithub: () => ipcRenderer.invoke(IpcChannel.testGithub)
+  testGithub: (pastedToken?: string) => ipcRenderer.invoke(IpcChannel.testGithub, pastedToken)
 }
 
 contextBridge.exposeInMainWorld('arckeep', api)

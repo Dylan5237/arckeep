@@ -45,6 +45,6 @@ describe('screenshot fixtures', () => {
 
     const conflict = createScreenshotSettings('hotkey-conflict', settingsFilePath(`${dir}-hotkey`))
     const hotkey = await conflict.getState()
-    expect(hotkey.hotkeyWarning).toMatch(/冲突/)
+    expect(hotkey.hotkeyWarning).toBe('Ctrl+Alt+Space 已被其他程序占用')
   })
 })

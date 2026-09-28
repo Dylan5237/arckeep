@@ -77,7 +77,9 @@ button, input {
 }
 
 main {
-  padding: 36px 40px;
+  height: 100vh;
+  overflow: auto;
+  padding: 24px 32px 28px;
 }
 
 .page h1 {
@@ -96,8 +98,8 @@ main {
   background: var(--arckeep-white);
   border: 1px solid var(--arckeep-soft-stone);
   border-radius: 12px;
-  padding: 18px 18px 16px;
-  margin-bottom: 16px;
+  padding: 14px 16px 12px;
+  margin-bottom: 12px;
 }
 
 .card h2 {
@@ -184,6 +186,17 @@ button.ghost {
 .alert.error {
   background: #f7f1ea;
   border-color: #b08968;
+}
+
+.hotkey-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.hotkey-alert span {
+  flex: 1 1 14rem;
 }
 
 .placeholder {

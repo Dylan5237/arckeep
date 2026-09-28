@@ -50,7 +50,7 @@ export function normalizeAccelerator(input: unknown): string {
 }
 
 export function hotkeyConflictWarning(accelerator: string): string {
-  return `热键 ${accelerator} 注册失败，可能与其他程序冲突`
+  return `${accelerator} 已被其他程序占用`
 }
 
 /** True only when register() and isRegistered() both report success. */

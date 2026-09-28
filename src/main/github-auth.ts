@@ -98,13 +98,90 @@ export function toPublicGithubAuth(resolved: ResolvedGithubAuth): {
   }
 }
 
+export type GithubFailureKind = 'invalid-token' | 'insufficient-scope' | 'network' | 'other'
+
+const NETWORK_CODES = new Set([
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EAI_NODATA',
+  'ETIMEDOUT',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_SOCKET'
+])
+
+export function isGithubNetworkError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const code = 'code' in error && typeof error.code === 'string' ? error.code : ''
+  if (NETWORK_CODES.has(code)) return true
+  const name = 'name' in error && typeof error.name === 'string' ? error.name : ''
+  if (name === 'AbortError' || name === 'TimeoutError') return true
+  const message = 'message' in error && typeof error.message === 'string' ? error.message.toLowerCase() : ''
+  return message.includes('timeout')
+    || message.includes('timed out')
+    || message.includes('network')
+    || message.includes('fetch failed')
+    || message.includes('getaddrinfo')
+    || message.includes('enotfound')
+    || message.includes('eai_again')
+    || message.includes('econnrefused')
+    || message.includes('offline')
+}
+
+export function scopesAreMissing(granted: string | null | undefined, accepted: string | null | undefined): boolean {
+  if (!accepted?.trim()) return false
+  const have = new Set(
+    (granted ?? '').split(/[,\s]+/).map(scope => scope.trim().toLowerCase()).filter(Boolean)
+  )
+  return accepted.split(/[,\s]+/).some(scope => {
+    const name = scope.trim().toLowerCase()
+    return name.length > 0 && !have.has(name)
+  })
+}
+
+export function classifyGithubFailure(input: {
+  status?: number | null
+  grantedScopes?: string | null
+  acceptedScopes?: string | null
+  network?: boolean
+}): { kind: GithubFailureKind, message: string } {
+  if (input.network) {
+    return {
+      kind: 'network',
+      message: '连不上 GitHub（网络不可达、DNS 失败或超时）。请检查网络或代理，恢复后再点一次测试连接。'
+    }
+  }
+  if (input.status === 401) {
+    return {
+      kind: 'invalid-token',
+      message: '这个 token 无效或已过期（HTTP 401）。请重新生成 PAT，或执行 gh auth login 后再试。'
+    }
+  }
+  if (input.status === 403 || scopesAreMissing(input.grantedScopes, input.acceptedScopes)) {
+    return {
+      kind: 'insufficient-scope',
+      message: '这个 token 的权限不够（HTTP 403 或缺少 scope）。请在 GitHub 上补齐所需权限后再试。'
+    }
+  }
+  const status = input.status ?? '未知'
+  return {
+    kind: 'other',
+    message: `GitHub 返回了意外错误（HTTP ${status}）。请稍后重试，或换一个 token。`
+  }
+}
+
 export class GitHubConnectionError extends Error {
   readonly status: number | null
+  readonly kind: GithubFailureKind
 
-  constructor(message: string, status: number | null) {
+  constructor(message: string, status: number | null, kind: GithubFailureKind) {
     super(message)
     this.name = 'GitHubConnectionError'
     this.status = status
+    this.kind = kind
   }
 }
 
@@ -124,27 +201,29 @@ export async function fetchGitHubLogin(token: string, fetchImpl: typeof fetch = 
       }
     })
   } catch {
-    throw new GitHubConnectionError('无法连接 GitHub，请检查网络后重试', null)
+    const failure = classifyGithubFailure({ network: true })
+    throw new GitHubConnectionError(failure.message, null, failure.kind)
   }
 
-  if (response.status === 401 || response.status === 403) {
-    throw new GitHubConnectionError(
-      `GitHub 拒绝了这个 token（HTTP ${response.status}）。请检查 PAT 权限，或重新执行 gh auth login。`,
-      response.status
-    )
-  }
-  if (!response.ok) {
-    throw new GitHubConnectionError(`GitHub 返回错误（HTTP ${response.status}）`, response.status)
+  const grantedScopes = response.headers.get('x-oauth-scopes')
+  const acceptedScopes = response.headers.get('x-accepted-oauth-scopes')
+  const failure = classifyGithubFailure({
+    status: response.status,
+    grantedScopes,
+    acceptedScopes
+  })
+  if (!response.ok || scopesAreMissing(grantedScopes, acceptedScopes)) {
+    throw new GitHubConnectionError(failure.message, response.status, failure.kind)
   }
 
   let body: unknown
   try {
     body = await response.json()
   } catch {
-    throw new GitHubConnectionError('GitHub 响应无法解析', response.status)
+    throw new GitHubConnectionError('GitHub 响应无法解析。请稍后重试。', response.status, 'other')
   }
   const login = isRecord(body) && typeof body.login === 'string' ? body.login : ''
-  if (!login) throw new GitHubConnectionError('GitHub 响应里没有用户名', response.status)
+  if (!login) throw new GitHubConnectionError('GitHub 响应里没有用户名。请稍后重试，或换一个 token。', response.status, 'other')
   return login
 }
 
@@ -158,6 +237,7 @@ export async function testGithubConnection(options: {
     return { ok: true, login }
   } catch (error) {
     if (error instanceof GitHubConnectionError) return { ok: false, error: error.message }
-    return { ok: false, error: '测试连接失败' }
+    if (isGithubNetworkError(error)) return { ok: false, error: classifyGithubFailure({ network: true }).message }
+    return { ok: false, error: '测试连接失败。请稍后重试。' }
   }
 }

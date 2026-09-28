@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  classifyGithubFailure,
+  isGithubNetworkError,
   readGhAuthToken,
   resolveGithubAuth,
   testGithubConnection,
@@ -72,6 +74,27 @@ describe('resolveGithubAuth', () => {
   })
 })
 
+describe('classifyGithubFailure', () => {
+  it('separates invalid tokens, missing scopes, and unreachable networks', () => {
+    const invalid = classifyGithubFailure({ status: 401 })
+    const forbidden = classifyGithubFailure({ status: 403 })
+    const missing = classifyGithubFailure({ status: 200, grantedScopes: 'read:user', acceptedScopes: 'repo, read:user' })
+    const dns = classifyGithubFailure({ network: true })
+    expect(invalid.kind).toBe('invalid-token')
+    expect(forbidden.kind).toBe('insufficient-scope')
+    expect(missing.kind).toBe('insufficient-scope')
+    expect(dns.kind).toBe('network')
+    for (const failure of [invalid, forbidden, missing, dns]) {
+      expect(failure.message).toMatch(/。/)
+      expect(failure.message).toMatch(/请/)
+    }
+    expect(isGithubNetworkError(Object.assign(new Error('getaddrinfo ENOTFOUND github.com'), { code: 'ENOTFOUND' }))).toBe(true)
+    expect(isGithubNetworkError(Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' }))).toBe(true)
+    expect(isGithubNetworkError(new Error('offline'))).toBe(true)
+    expect(isGithubNetworkError(new Error('nope'))).toBe(false)
+  })
+})
+
 describe('testGithubConnection', () => {
   it('returns the login and a clear error for a rejected token', async () => {
     const ok = await testGithubConnection({
@@ -86,15 +109,19 @@ describe('testGithubConnection', () => {
     })
     expect(denied.ok).toBe(false)
     if (!denied.ok) {
-      expect(denied.error).toMatch(/401/)
+      expect(denied.error).toBe(classifyGithubFailure({ status: 401 }).message)
       expect(denied.error.includes(TOKEN.slice(0, 8))).toBe(false)
     }
 
     const offline = await testGithubConnection({
       token: TOKEN,
-      fetchImpl: async () => { throw new Error(`network down ${TOKEN}`) }
+      fetchImpl: async () => { throw Object.assign(new Error(`network down ${TOKEN}`), { code: 'ENOTFOUND' }) }
     })
-    expect(offline).toEqual({ ok: false, error: '无法连接 GitHub，请检查网络后重试' })
+    expect(offline.ok).toBe(false)
+    if (!offline.ok) {
+      expect(offline.error).toBe(classifyGithubFailure({ network: true }).message)
+      expect(offline.error.includes(TOKEN.slice(0, 8))).toBe(false)
+    }
     expect(await testGithubConnection({ token: null })).toEqual({
       ok: false,
       error: '尚未配置 GitHub token'

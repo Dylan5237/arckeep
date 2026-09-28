@@ -33,7 +33,7 @@ export interface ArckeepApi {
   setHotkey(hotkey: string): Promise<IpcResult<{ hotkey: string }>>
   setPat(token: string): Promise<IpcResult<{ patSaved: true }>>
   clearPat(): Promise<IpcResult<{ patSaved: false }>>
-  testGithub(): Promise<{ ok: true, login: string } | { ok: false, error: string }>
+  testGithub(pastedToken?: string): Promise<{ ok: true, login: string } | { ok: false, error: string }>
 }
 
 export function githubSourceLabel(source: GithubSource): string {

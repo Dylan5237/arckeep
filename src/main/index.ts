@@ -15,7 +15,7 @@ import {
   screenshotWindowSize
 } from './screenshot-scene.js'
 import { SettingsService } from './settings-service.js'
-import { parseTestHookAction, runTestHook, testHooksEnabled, type TrayActions } from './test-hooks.js'
+import { dispatchTestHook, installTrayTestHooks, parseTestHookAction, type TrayActions } from './test-hooks.js'
 import { createSafeStorageBox } from './token-store.js'
 import { createUrlGuard } from './url-trust.js'
 
@@ -93,19 +93,23 @@ function createTray(): void {
 }
 
 function installTestHooks(): void {
-  if (!testHooksEnabled()) return
-  const actions = trayActions()
-  Object.defineProperty(globalThis, '__ARCKEEP_TEST_HOOKS__', {
-    configurable: true,
-    enumerable: false,
-    value: {
-      close: () => runTestHook('close', actions),
-      show: () => runTestHook('show', actions),
-      quit: () => runTestHook('quit', actions)
+  installTrayTestHooks(process.env, {
+    argv: process.argv,
+    actions: trayActions(),
+    expose(handlers) {
+      Object.defineProperty(globalThis, '__ARCKEEP_TEST_HOOKS__', {
+        configurable: true,
+        enumerable: false,
+        value: handlers
+      })
+    },
+    registerIpc(handler) {
+      ipcMain.handle(IpcChannel.testHook, (event, action: unknown) => {
+        requireSender(event, mainWindow?.webContents ?? null)
+        handler(action)
+      })
     }
   })
-  const action = parseTestHookAction(process.argv)
-  if (action) runTestHook(action, actions)
 }
 
 function createWindow(): BrowserWindow {
@@ -194,7 +198,7 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: str
       : scene === 'signed-out'
         ? '未配置'
         : scene === 'hotkey-conflict'
-          ? '冲突'
+          ? '已被其他程序占用'
           : '等我处理'
   const start = Date.now()
   let seen = false
@@ -238,9 +242,9 @@ function registerIpc(settings: SettingsService): void {
     guard(event)
     return settings.clearPat()
   })
-  ipcMain.handle(IpcChannel.testGithub, event => {
+  ipcMain.handle(IpcChannel.testGithub, (event, pasted: unknown) => {
     guard(event)
-    return settings.testConnection()
+    return settings.testConnection(pasted)
   })
 }
 
@@ -249,13 +253,7 @@ if (!gotLock) {
   app.quit()
 } else {
   app.on('second-instance', (_event, argv) => {
-    if (testHooksEnabled()) {
-      const action = parseTestHookAction(argv)
-      if (action) {
-        runTestHook(action, trayActions())
-        return
-      }
-    }
+    if (dispatchTestHook(process.env, parseTestHookAction(argv), trayActions())) return
     showMainWindow()
   })
   app.whenReady().then(() => {
