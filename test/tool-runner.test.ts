@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -106,9 +106,30 @@ function expectedData(shell: ShellKind, payload: string): string {
   return out
 }
 
-async function assertPayloadIsData(shell: ShellKind, payload: string, marker: string): Promise<void> {
+function windowsPowerShellHosts(): string[] {
+  const hosts = ['powershell.exe']
+  const found = spawnSync('where.exe', ['pwsh'], { encoding: 'utf8', windowsHide: true })
+  if (found.status !== 0) return hosts
+  for (const line of found.stdout.split(/\r?\n/)) {
+    const file = line.trim()
+    if (!file || hosts.some(host => host.toLowerCase() === file.toLowerCase())) continue
+    const probe = spawnSync(file, ['-NoProfile', '-NonInteractive', '-Command', 'exit 0'], {
+      windowsHide: true,
+      timeout: 20_000
+    })
+    if (probe.status === 0) hosts.push(file)
+  }
+  return hosts
+}
+
+async function assertPayloadIsData(
+  shell: ShellKind,
+  payload: string,
+  marker: string,
+  env?: NodeJS.ProcessEnv
+): Promise<void> {
   const script = expandCommand(roundTripTemplate, { payload }, shell)
-  const plan = planShell(shell, script)
+  const plan = planShell(shell, script, env)
   const cwd = mkdtempSync(path.join(tmpdir(), 'arckeep-shell-'))
   const result = await runPlan(plan, cwd)
   const detail = `${shell}\n${script}\nstdout=${JSON.stringify(result.stdout)}\nstderr=${JSON.stringify(result.stderr)}\ncode=${result.code} error=${result.error ?? ''}`
@@ -123,24 +144,31 @@ const shells: ShellKind[] = ['cmd', 'powershell', 'git-bash']
 
 describe('live shell injection', () => {
   for (const shell of shells) {
-    const available = shell === 'git-bash'
-      ? resolveBash(process.env, process.platform) !== null && (process.platform !== 'win32' || existsSync(resolveBash(process.env, process.platform) ?? ''))
-      : process.platform === 'win32'
+    const hosts = shell === 'powershell' && process.platform === 'win32' ? windowsPowerShellHosts() : [shell]
+    for (const host of hosts) {
+      const label = shell === 'powershell' && process.platform === 'win32' ? `powershell ${path.basename(host)}` : shell
+      const env = shell === 'powershell' && process.platform === 'win32'
+        ? { ...process.env, ARCKEEP_POWERSHELL: host }
+        : undefined
+      const available = shell === 'git-bash'
+        ? resolveBash(process.env, process.platform) !== null && (process.platform !== 'win32' || existsSync(resolveBash(process.env, process.platform) ?? ''))
+        : process.platform === 'win32'
 
-    it.skipIf(!available)(`${shell} keeps hostile parameters as data`, async () => {
-      for (const [index, build] of hostilePayloads.entries()) {
-        const marker = markerPath(`${shell}-${index}`)
-        await assertPayloadIsData(shell, build(marker), marker)
-      }
-    }, 60_000)
+      it.skipIf(!available)(`${label} keeps hostile parameters as data`, async () => {
+        for (const [index, build] of hostilePayloads.entries()) {
+          const marker = markerPath(`${label}-${index}`)
+          await assertPayloadIsData(shell, build(marker), marker, env)
+        }
+      }, 60_000)
 
-    it.skipIf(!available)(`${shell} reports exit code 3`, async () => {
-      const plan = planShell(shell, 'node -e "process.exit(3)"')
-      const cwd = mkdtempSync(path.join(tmpdir(), 'arckeep-exit-'))
-      const result = await runPlan(plan, cwd)
-      expect(result.code, result.stderr).toBe(3)
-      rmSync(cwd, { recursive: true, force: true })
-    }, 20_000)
+      it.skipIf(!available)(`${label} reports exit code 3`, async () => {
+        const plan = planShell(shell, 'node -e "process.exit(3)"', env)
+        const cwd = mkdtempSync(path.join(tmpdir(), 'arckeep-exit-'))
+        const result = await runPlan(plan, cwd)
+        expect(result.code, `${result.stderr}\n${result.stdout}`).toBe(3)
+        rmSync(cwd, { recursive: true, force: true })
+      }, 20_000)
+    }
   }
 
   it('streams stdout and stderr', async () => {

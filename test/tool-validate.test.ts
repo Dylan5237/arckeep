@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { toolShelfExampleText } from '../src/main/tool-assets.js'
 import { validateToolShelfText } from '../src/main/tool-validate.js'
 import { indexToLocation } from '../src/shared/tools/locate.js'
+import { powershellLaunchScript } from '../src/shared/tools/quote.js'
 import { buildPreview } from '../src/shared/tools/preview.js'
 import { cmdScriptFromPlan, planShell, powershellScriptFromPlan } from '../src/main/tool-launch.js'
 
@@ -24,7 +25,7 @@ describe('tool shelf schema', () => {
     expect(text).toContain('apo init --dry-run')
     const apo = result.config.actions[2]
     const preview = buildPreview(apo, { cwd: 'C:\\work\\demo', name: 'demo' }, 'C:\\work\\demo')
-    expect(preview.text).toBe("apo init --dry-run --name 'demo'")
+    expect(preview.text).toBe(powershellLaunchScript("apo init --dry-run --name 'demo'"))
     expect(preview.shell).toBe('powershell')
     const onDisk = readFileSync(new URL('../schema/tool-shelf.example.json', import.meta.url), 'utf8')
     expect(onDisk).toBe(text)
@@ -76,8 +77,20 @@ describe('launch plan matches the preview script', () => {
   it('passes the PowerShell script through EncodedCommand unchanged', () => {
     const script = "apo init --dry-run --name 'demo'"
     const plan = planShell('powershell', script, {}, 'win32')
-    expect(powershellScriptFromPlan(plan)).toBe(script)
-    expect(plan.args.slice(0, 3)).toEqual(['-NoProfile', '-NonInteractive', '-EncodedCommand'])
+    expect(powershellScriptFromPlan(plan)).toBe(powershellLaunchScript(script))
+    expect(plan.args.slice(0, 5)).toEqual([
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-EncodedCommand'
+    ])
+    const core = planShell('powershell', script, { ARCKEEP_POWERSHELL: 'pwsh.exe' }, 'win32')
+    expect(core.file).toBe('pwsh.exe')
+    expect(powershellScriptFromPlan(core)).toBe(powershellLaunchScript(script, 'pwsh.exe'))
+    expect(powershellScriptFromPlan(planShell('powershell', powershellLaunchScript(script), {}, 'win32'))).toBe(
+      powershellScriptFromPlan(plan)
+    )
   })
 
   it('wraps the cmd script once for /d /s /c', () => {

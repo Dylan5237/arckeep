@@ -33,9 +33,70 @@ export function quoteCmdArg(value: string): string {
   return `"${body}"`
 }
 
+/**
+ * Windows PowerShell 5.1 appends a native argument as raw command-line text.
+ * A value whose only character is `"` is appended as `"`, and CommandLineToArgvW
+ * reads that as an empty argument. Emit a token the legacy binder copies through
+ * unchanged (`NeedQuotes` is false) and that CommandLineToArgvW parses back to
+ * the original value. pwsh must run with `$PSNativeCommandArgumentPassing = 'Legacy'`
+ * or it would pass this token through ArgumentList literally.
+ */
+export function windowsNativeArgumentToken(value: string): string {
+  if (value.length === 0) return '""'
+  let quote = false
+  for (const ch of value) {
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '"') {
+      quote = true
+      break
+    }
+  }
+  if (!quote) return value
+  let out = '"'
+  let backslashes = 0
+  for (const ch of value) {
+    if (ch === '\\') {
+      backslashes += 1
+      continue
+    }
+    if (ch === '"') {
+      out += '\\'.repeat(backslashes * 2 + 1)
+      out += '"'
+      backslashes = 0
+      continue
+    }
+    if (backslashes > 0) {
+      out += '\\'.repeat(backslashes)
+      backslashes = 0
+    }
+    out += ch
+  }
+  if (backslashes > 0) out += '\\'.repeat(backslashes * 2)
+  out += '"'
+  return out
+}
+
+const POWERSHELL_LEGACY_LINE = "$PSNativeCommandArgumentPassing = 'Legacy'"
+const POWERSHELL_EXIT_LINE = 'exit $LASTEXITCODE'
+
+/** Human-readable script that powershell.exe / pwsh actually executes. */
+export function powershellLaunchScript(userScript: string, executable = 'powershell.exe'): string {
+  const exitSuffix = `\n${POWERSHELL_EXIT_LINE}`
+  const legacyPrefix = `${POWERSHELL_LEGACY_LINE}\n`
+  let body = userScript
+  if (body.endsWith(exitSuffix)) {
+    body = body.slice(0, -exitSuffix.length)
+    if (body.startsWith(legacyPrefix)) body = body.slice(legacyPrefix.length)
+  }
+  const base = executable.replace(/^.*[\\/]/, '').toLowerCase()
+  const core = base === 'pwsh' || base === 'pwsh.exe'
+  return `${core ? legacyPrefix : ''}${body}${exitSuffix}`
+}
+
 /** PowerShell single-quoted string. Only `'` is special, and it is doubled. */
 export function quotePowerShellArg(value: string): string {
-  return `'${value.replace(/\0/g, '').replace(/'/g, "''")}'`
+  const cleaned = value.replace(/\0/g, '')
+  const embedded = cleaned.includes('"') ? windowsNativeArgumentToken(cleaned) : cleaned
+  return `'${embedded.replace(/'/g, "''")}'`
 }
 
 /** Bash single-quoted string. Embedded quotes use the `'\''` break. */

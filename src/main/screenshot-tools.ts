@@ -1,5 +1,6 @@
 import type { ToolFixture } from '../shared/tools/fixture.js'
 import { buildPreview, formatDuration } from '../shared/tools/preview.js'
+import { powershellLaunchScript } from '../shared/tools/quote.js'
 import type { ToolAction } from '../shared/tools/types.js'
 import { validateToolShelfText } from './tool-validate.js'
 
@@ -167,7 +168,7 @@ export function buildToolFixture(scene: string): ToolFixture | null {
       shellLabel: 'PowerShell'
     }
   }
-  const command = "apo init --dry-run --name '北区'"
+  const command = powershellLaunchScript("apo init --dry-run --name '北区'")
   const lines = [
     { stream: 'stdout' as const, text: '正在编译北区' },
     { stream: 'stderr' as const, text: '警告：示例输出，没有真正执行' }

@@ -32,7 +32,7 @@ export function previewStoredAction(
   if (!validated.ok) throw new Error(validated.error)
   const action = validated.config.actions.find(item => item.id === actionId)
   if (!action) throw new Error('没有这个动作')
-  const preview = buildPreview(action, params, baseCwd)
+  const preview = buildPreview(action, params, baseCwd, process.env.ARCKEEP_POWERSHELL || 'powershell.exe')
   if (preview.cwd) preview.cwd = path.resolve(preview.cwd)
   return preview
 }

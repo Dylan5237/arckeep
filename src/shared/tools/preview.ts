@@ -1,4 +1,4 @@
-import { assertPlaceholders, expandCommand, expandRaw } from './quote.js'
+import { assertPlaceholders, expandCommand, expandRaw, powershellLaunchScript } from './quote.js'
 import type { ActionPreview, ToolAction } from './types.js'
 
 export function formatDuration(ms: number): string {
@@ -54,7 +54,8 @@ function displayArgv(argv: string[]): string {
 export function buildPreview(
   action: ToolAction,
   input: Readonly<Record<string, string>>,
-  baseCwd: string
+  baseCwd: string,
+  powershellExecutable = 'powershell.exe'
 ): ActionPreview {
   const params = collectParams(action, input)
   if (action.type === 'open-url') {
@@ -96,7 +97,7 @@ export function buildPreview(
     actionId: action.id,
     title: action.title,
     type: action.type,
-    text: script,
+    text: action.shell === 'powershell' ? powershellLaunchScript(script, powershellExecutable) : script,
     shell: action.shell,
     cwd
   }

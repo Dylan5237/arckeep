@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { powershellLaunchScript } from '../shared/tools/quote.js'
 import type { ShellKind } from '../shared/tools/types.js'
 
 export interface ShellPlan {
@@ -38,12 +39,14 @@ export function planShell(
     }
   }
   if (shell === 'powershell') {
-    const encoded = Buffer.from(script, 'utf16le').toString('base64')
+    const file = env.ARCKEEP_POWERSHELL?.trim() || 'powershell.exe'
+    const runnable = powershellLaunchScript(script, file)
+    const encoded = Buffer.from(runnable, 'utf16le').toString('base64')
     return {
       shell,
-      script,
-      file: 'powershell.exe',
-      args: ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+      script: runnable,
+      file,
+      args: ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
       windowsVerbatimArguments: false
     }
   }
@@ -59,7 +62,8 @@ export function planShell(
 }
 
 export function powershellScriptFromPlan(plan: ShellPlan): string {
-  const encoded = plan.args[3]
+  const index = plan.args.indexOf('-EncodedCommand')
+  const encoded = index >= 0 ? plan.args[index + 1] : undefined
   if (!encoded) throw new Error('缺少 EncodedCommand')
   return Buffer.from(encoded, 'base64').toString('utf16le')
 }
