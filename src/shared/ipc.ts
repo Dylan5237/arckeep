@@ -14,5 +14,8 @@ export const IpcChannel = {
   setShowIgnored: 'waiting:show-ignored',
   setWaiting: 'waiting:set-config',
   openExternal: 'waiting:open-external',
-  advanceWaitingDays: 'waiting:advance-days'
+  advanceWaitingDays: 'waiting:advance-days',
+  getOverview: 'overview:get',
+  refreshOverview: 'overview:refresh',
+  setOverview: 'overview:set-config'
 } as const

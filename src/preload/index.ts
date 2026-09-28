@@ -17,7 +17,10 @@ const api: ArckeepApi = {
   setShowIgnored: show => ipcRenderer.invoke(IpcChannel.setShowIgnored, show),
   setWaiting: config => ipcRenderer.invoke(IpcChannel.setWaiting, config),
   openExternal: url => ipcRenderer.invoke(IpcChannel.openExternal, url),
-  advanceWaitingDays: days => ipcRenderer.invoke(IpcChannel.advanceWaitingDays, days)
+  advanceWaitingDays: days => ipcRenderer.invoke(IpcChannel.advanceWaitingDays, days),
+  getOverview: () => ipcRenderer.invoke(IpcChannel.getOverview),
+  refreshOverview: () => ipcRenderer.invoke(IpcChannel.refreshOverview),
+  setOverview: config => ipcRenderer.invoke(IpcChannel.setOverview, config)
 }
 
 contextBridge.exposeInMainWorld('arckeep', api)

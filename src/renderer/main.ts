@@ -3,6 +3,8 @@ import brandSymbol from '../../docs/brand/logo/Arckeep_Symbol_White.svg'
 import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
 import { DEFAULT_HOTKEY } from '../shared/types'
+import { renderOverview } from './overview-page'
+import { renderOverviewSettings } from './overview-settings'
 import { renderWaiting } from './waiting-page'
 import { renderWaitingSettings } from './waiting-settings'
 
@@ -94,7 +96,8 @@ async function renderSettings(options?: { focusToken?: boolean }): Promise<void>
     renderGithubCard(state),
     renderReposCard(state),
     renderHotkeyCard(state),
-    renderWaitingSettings(state, renderSettings)
+    renderWaitingSettings(state, renderSettings),
+    renderOverviewSettings(state, renderSettings)
   )
   if (options?.focusToken) {
     page.querySelector<HTMLInputElement>('#github-pat')?.focus()
@@ -292,6 +295,7 @@ async function show(view: ViewId, options?: { focusToken?: boolean }): Promise<v
   if (!content) return
   if (view === 'settings') await renderSettings(options)
   else if (view === 'inbox') await renderWaiting(content, (next, nextOptions) => { void show(next, nextOptions) })
+  else if (view === 'projects') await renderOverview(content, (next, nextOptions) => { void show(next, nextOptions) })
   else renderPlaceholder(view)
 }
 
@@ -305,4 +309,7 @@ for (const button of navButtons) {
 }
 
 const initial = new URLSearchParams(location.search).get('page')
-void show(initial === 'settings' ? 'settings' : 'inbox')
+const initialView = initial === 'settings' || initial === 'projects' || initial === 'todos' || initial === 'tools' || initial === 'inbox'
+  ? initial
+  : 'inbox'
+void show(initialView)

@@ -15,7 +15,14 @@ export const SCREENSHOT_SCENES = [
   'waiting-loading',
   'waiting-rate-limit',
   'waiting-narrow',
-  'waiting-hover'
+  'waiting-hover',
+  'overview',
+  'overview-empty',
+  'overview-no-token',
+  'overview-invalid-token',
+  'overview-loading',
+  'overview-row-error',
+  'overview-narrow'
 ] as const
 
 export type ScreenshotScene = (typeof SCREENSHOT_SCENES)[number]
@@ -39,16 +46,42 @@ export function parseScreenshotScene(value: string | undefined): ScreenshotScene
 }
 
 export function screenshotWindowSize(scene: ScreenshotScene): { width: number, height: number } {
-  if (scene === 'waiting-narrow') return { width: 800, height: 1680 }
+  if (scene === 'waiting-narrow' || scene === 'overview-narrow') return { width: 800, height: 1680 }
   if (scene === 'waiting-hover') return { width: 1180, height: 900 }
   if (scene === 'narrow') return { width: 800, height: 760 }
-  if (scene === 'waiting' || scene === 'waiting-rate-limit') return { width: 1180, height: 1680 }
+  if (scene === 'waiting' || scene === 'waiting-rate-limit' || scene === 'overview') return { width: 1180, height: 1680 }
   if (scene === 'nav') return { width: 1120, height: 760 }
   return { width: 1120, height: 900 }
 }
 
 export function screenshotOpensSettings(scene: ScreenshotScene): boolean {
-  return scene !== 'nav' && scene !== 'narrow' && !scene.startsWith('waiting')
+  return scene !== 'nav' && scene !== 'narrow' && !scene.startsWith('waiting') && !scene.startsWith('overview')
+}
+
+export function screenshotStartPage(scene: ScreenshotScene): 'inbox' | 'projects' | 'settings' {
+  if (screenshotOpensSettings(scene)) return 'settings'
+  if (scene.startsWith('overview')) return 'projects'
+  return 'inbox'
+}
+
+export function screenshotReadyText(scene: ScreenshotScene): string {
+  if (scene === 'connected') return MOCK_GITHUB_LOGIN
+  if (scene === 'invalid-token') return 'HTTP 401'
+  if (scene === 'signed-out') return '未配置'
+  if (scene === 'hotkey-conflict') return '已被其他程序占用'
+  if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover') return '验收北区截图'
+  if (scene === 'waiting-empty') return '没有等你处理的事项'
+  if (scene === 'waiting-no-token') return '未配置 GitHub 认证'
+  if (scene === 'waiting-invalid-token') return 'GitHub 认证无效或已过期'
+  if (scene === 'waiting-loading') return '正在刷新'
+  if (scene === 'waiting-rate-limit') return '速率限制'
+  if (scene === 'overview' || scene === 'overview-narrow') return 'harbor/lumen'
+  if (scene === 'overview-empty') return '没有可显示的仓库'
+  if (scene === 'overview-no-token') return '未配置 GitHub 认证'
+  if (scene === 'overview-invalid-token') return 'GitHub 认证无效或已过期'
+  if (scene === 'overview-loading') return '正在刷新'
+  if (scene === 'overview-row-error') return '仓库不存在或无权访问'
+  return '等我处理'
 }
 
 function fixtureSecretBox(): SecretBox {

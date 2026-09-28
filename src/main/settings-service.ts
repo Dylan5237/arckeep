@@ -1,3 +1,5 @@
+import { parseOverviewConfig } from '../shared/overview/rules.js'
+import type { OverviewConfig } from '../shared/overview/types.js'
 import { parseWaitingConfig } from '../shared/waiting/rules.js'
 import type { WaitingConfig } from '../shared/waiting/types.js'
 import type { AppState, IpcResult } from '../shared/types.js'
@@ -58,7 +60,19 @@ export class SettingsService {
       hotkey: this.settings.hotkey,
       hotkeyWarning: this.hotkeyWarning,
       github,
-      waiting: this.settings.waiting
+      waiting: this.settings.waiting,
+      overview: this.settings.overview
+    }
+  }
+
+  setOverview(input: unknown): IpcResult<{ overview: OverviewConfig }> {
+    try {
+      const overview = parseOverviewConfig(input)
+      this.settings.overview = overview
+      this.persist()
+      return { ok: true, data: { overview } }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : '项目总览的规则无效' }
     }
   }
 

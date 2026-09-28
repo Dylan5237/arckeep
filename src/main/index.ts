@@ -6,14 +6,17 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { IpcChannel } from '../shared/ipc.js'
 import { createGracefulShutdownHandler } from './graceful-shutdown.js'
 import { requireSender } from './ipc-validators.js'
-import { settingsFilePath, userDataDir, waitingCachePath, waitingDismissalPath } from './paths.js'
+import { overviewCachePath, settingsFilePath, userDataDir, waitingCachePath, waitingDismissalPath } from './paths.js'
+import { OverviewService } from './overview-service.js'
 import {
-  MOCK_GITHUB_LOGIN,
   createScreenshotSettings,
   parseScreenshotScene,
-  screenshotOpensSettings,
-  screenshotWindowSize
+  screenshotReadyText,
+  screenshotStartPage,
+  screenshotWindowSize,
+  type ScreenshotScene
 } from './screenshot-scene.js'
+import { createScreenshotOverview } from './screenshot-overview.js'
 import { createScreenshotWaiting } from './screenshot-waiting.js'
 import { SettingsService } from './settings-service.js'
 import { WaitingService } from './waiting-service.js'
@@ -40,6 +43,7 @@ let tray: Tray | null = null
 let isQuitting = false
 let service: SettingsService | null = null
 let waiting: WaitingService | ReturnType<typeof createScreenshotWaiting> | null = null
+let overview: OverviewService | ReturnType<typeof createScreenshotOverview> | null = null
 
 const devServerOrigin = process.env.ARCKEEP_DEV === '1' ? process.env.VITE_DEV_SERVER_URL ?? null : null
 const rendererDir = path.join(__dirname, '../renderer')
@@ -161,19 +165,19 @@ function createWindow(): BrowserWindow {
     })
   }
 
-  const openSettings = screenshotPath ? screenshotOpensSettings(screenshotScene) : false
+  const startPage = screenshotPath ? screenshotStartPage(screenshotScene) : 'inbox'
   if (devServerOrigin) {
-    const page = openSettings ? `${devServerOrigin}?page=settings` : devServerOrigin
+    const page = startPage === 'inbox' ? devServerOrigin : `${devServerOrigin}?page=${startPage}`
     void window.loadURL(page)
   } else {
     void window.loadFile(path.join(rendererDir, 'index.html'), {
-      query: openSettings ? { page: 'settings' } : {}
+      query: startPage === 'inbox' ? {} : { page: startPage }
     })
   }
   return window
 }
 
-async function captureScreenshot(window: BrowserWindow, file: string, scene: string): Promise<void> {
+async function captureScreenshot(window: BrowserWindow, file: string, scene: ScreenshotScene): Promise<void> {
   if (scene === 'invalid-token' || scene === 'connected') {
     await window.webContents.executeJavaScript(`
       new Promise((resolve, reject) => {
@@ -194,27 +198,7 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: str
       })
     `)
   }
-  const expected = scene === 'connected'
-    ? MOCK_GITHUB_LOGIN
-    : scene === 'invalid-token'
-      ? 'HTTP 401'
-      : scene === 'signed-out'
-        ? '未配置'
-        : scene === 'hotkey-conflict'
-          ? '已被其他程序占用'
-          : scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover'
-            ? '验收北区截图'
-            : scene === 'waiting-empty'
-              ? '没有等你处理的事项'
-              : scene === 'waiting-no-token'
-                ? '未配置 GitHub 认证'
-                : scene === 'waiting-invalid-token'
-                  ? 'GitHub 认证无效或已过期'
-                  : scene === 'waiting-loading'
-                    ? '正在刷新'
-                    : scene === 'waiting-rate-limit'
-                      ? '速率限制'
-                      : '等我处理'
+  const expected = screenshotReadyText(scene)
   const start = Date.now()
   let seen = false
   while (Date.now() - start < 5000) {
@@ -225,6 +209,12 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: str
     await new Promise(resolve => setTimeout(resolve, 50))
   }
   if (!seen) throw new Error(`screenshot scene ${scene} did not show ${expected}`)
+  if (scene === 'overview' || scene === 'overview-narrow') {
+    await window.webContents.executeJavaScript(`
+      const details = document.querySelector('details.stale-group')
+      if (details) details.open = true
+    `)
+  }
   if (scene === 'waiting-hover') {
     await window.webContents.executeJavaScript(`
       const row = document.querySelector('.waiting-row')
@@ -314,6 +304,20 @@ function registerIpc(settings: SettingsService): void {
     guard(event)
     return waiting?.advanceDays(days) ?? { ok: false, error: '等我处理尚未就绪' }
   })
+  ipcMain.handle(IpcChannel.getOverview, event => {
+    guard(event)
+    return overview?.current()
+  })
+  ipcMain.handle(IpcChannel.refreshOverview, event => {
+    guard(event)
+    return overview?.refresh() ?? Promise.reject(new Error('项目总览尚未就绪'))
+  })
+  ipcMain.handle(IpcChannel.setOverview, (event, config: unknown) => {
+    guard(event)
+    const saved = settings.setOverview(config)
+    if (!saved.ok) return saved
+    return settings.getState().then(state => ({ ok: true as const, data: state }))
+  })
 }
 
 const gotLock = app.requestSingleInstanceLock()
@@ -330,6 +334,7 @@ if (!gotLock) {
     if (screenshotPath) {
       service = createScreenshotSettings(screenshotScene, settingsFilePath(userData))
       waiting = createScreenshotWaiting(screenshotScene)
+      overview = createScreenshotOverview(screenshotScene)
     } else {
       service = new SettingsService({
         file: settingsFilePath(userData),
@@ -343,6 +348,9 @@ if (!gotLock) {
         cache: waitingCachePath(userData),
         dismissals: waitingDismissalPath(userData)
       }, {
+        log: message => console.error(message)
+      })
+      overview = new OverviewService(service, overviewCachePath(userData), {
         log: message => console.error(message)
       })
     }

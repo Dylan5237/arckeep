@@ -1,5 +1,7 @@
+import type { OverviewConfig, OverviewSnapshot } from './overview/types.js'
 import type { WaitingConfig, WaitingSnapshot } from './waiting/types.js'
 
+export type { OverviewConfig, OverviewSnapshot } from './overview/types.js'
 export type { WaitingConfig, WaitingSnapshot } from './waiting/types.js'
 
 export const DEFAULT_HOTKEY = 'Ctrl+Alt+Space'
@@ -18,6 +20,7 @@ export interface AppState {
   hotkeyWarning: string | null
   github: PublicGithubAuth
   waiting: WaitingConfig
+  overview: OverviewConfig
 }
 
 export interface OkResult<T> {
@@ -48,6 +51,9 @@ export interface ArckeepApi {
   setWaiting(config: WaitingConfig): Promise<IpcResult<AppState>>
   openExternal(url: string): Promise<IpcResult<true>>
   advanceWaitingDays(days: number): Promise<IpcResult<WaitingSnapshot>>
+  getOverview(): Promise<OverviewSnapshot>
+  refreshOverview(): Promise<OverviewSnapshot>
+  setOverview(config: OverviewConfig): Promise<IpcResult<AppState>>
 }
 
 export function githubSourceLabel(source: GithubSource): string {

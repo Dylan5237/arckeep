@@ -19,6 +19,10 @@ export function waitingDismissalPath(userData: string, join: (...parts: string[]
   return join(userData, 'waiting-dismissals.json')
 }
 
+export function overviewCachePath(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'overview-cache.json')
+}
+
 /** Same folder the Electron app uses for `%APPDATA%\\Arckeep`. */
 export function defaultAppDataDir(
   env: NodeJS.ProcessEnv,
