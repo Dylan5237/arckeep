@@ -87,7 +87,14 @@ jobs:
         run: npm ci
 
       - name: Build NSIS installer and portable exe
-        run: npm run dist
+        shell: pwsh
+        run: |
+          # Push and tag runs leave GITHUB_BASE_REF empty, so electron-builder treats
+          # CI as a publish and fails without GH_TOKEN. Pull requests set
+          # GITHUB_BASE_REF, which is why this job stayed green until after merge.
+          Remove-Item Env:\GITHUB_BASE_REF -ErrorAction SilentlyContinue
+          if ($env:GITHUB_BASE_REF) { throw "GITHUB_BASE_REF is still set; push-style packaging was not simulated" }
+          npm run dist
 
       - name: Zip win-unpacked
         shell: pwsh
