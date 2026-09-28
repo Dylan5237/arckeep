@@ -1,11 +1,10 @@
 # Arckeep Issue #1「骨架 + CI + Windows 打包」独立验收报告
 
 - **验收方角色**：独立验收（只验收、只报告，不改产品代码；只在 `verify/issue-1` 分支新增 `.github/workflows/verify-issue-1.yml` 与 `verify/**`）
-- **报告写成时间**：2026-09-28 18:37（北京时间，UTC+8）
-- **被测 PR**：[#8 "#1 骨架 + CI + Windows 打包"](https://github.com/Dylan5237/arckeep/pull/8)（已合并）
-- **被测 head SHA**：`fef78d58ce1cd879472afded059ea0830c8fb358`（下称 `fef78d5`）
-- **合并提交（main）**：`699736cea1a51abb2b65ee58af6c3f85e7660022`（下称 `699736c`）
-- **tree 一致性核对**：`git rev-parse fef78d5^{tree} 699736c^{tree}` 两者均为 `fc485eccbedf3fb70a4d0b901319dafc799d3504` —— **一致**。`699736c` 是 `fef78d5` 的纯合并提交，没有额外改动。
+- **报告写成时间**：2026-09-28 18:37（北京时间，UTC+8）；19:05 补充 AC2（Release 已修好）；19:35 补充第 5 节（X1 隔离重测、AC9 不滚动截图、Release 下载+启动冒烟）
+- **被测对象分两组，互不混用，每条结论各自绑定各自的 SHA：**
+  1. **PR #8 产物组**（AC1、AC3–AC9、X1–X6 用这一组）：[PR #8 "#1 骨架 + CI + Windows 打包"](https://github.com/Dylan5237/arckeep/pull/8)（已合并），head SHA `fef78d58ce1cd879472afded059ea0830c8fb358`（下称 `fef78d5`），合并提交（main）`699736cea1a51abb2b65ee58af6c3f85e7660022`（下称 `699736c`）。**tree 一致性核对**：`git rev-parse fef78d5^{tree} 699736c^{tree}` 两者均为 `fc485eccbedf3fb70a4d0b901319dafc799d3504` —— **一致**，`699736c` 是 `fef78d5` 的纯合并提交，没有额外改动。
+  2. **Release 产物组**（只用于 AC2）：修复 PR [#11](https://github.com/Dylan5237/arckeep/pull/11)「#1 打包时关闭 electron-builder 隐式发布」合并后，`main` 前进到 `4c5f83b903faf2dd38f3108a84465d34f12efd4f`（下称 `4c5f83b`），`v0.0.1-test` tag 被重新指向这个提交（`git ls-remote --tags origin` 确认 `4c5f83b903faf2dd38f3108a84465d34f12efd4f refs/tags/v0.0.1-test`）。**`4c5f83b` 不等于 `699736c`／`fef78d5`，是一次独立于 PR #8 的后续修复提交**，AC2 的结论单独绑定在 `4c5f83b` 上，不影响本报告其余各条绑定在 `fef78d5`/`699736c` 上的结论。
 - **冒烟产物来源**：CI run [`36407287806`](https://github.com/Dylan5237/arckeep/actions/runs/36407287806)（`event=pull_request`，`head_sha=fef78d5`，`conclusion=success`）
   - `arckeep-windows`：`Arckeep-Setup-0.1.0.exe`（NSIS 安装包）+ `Arckeep-0.1.0-portable.exe`（portable）
   - `arckeep-win-unpacked`：`arckeep-win-unpacked.zip` → `win-unpacked/Arckeep.exe`
@@ -15,8 +14,11 @@
     | `win-unpacked/Arckeep.exe` | `AD51406F3D652B409F1EA8A17B5617A8EC251C68CAF643E37A1EEA7845BEEC18` |
     | `Arckeep-0.1.0-portable.exe` | `40CCEE64864F31F7E17D564613AB5A98956B360D5C90A1AC94966F5D6E58BA7A` |
     | `Arckeep-Setup-0.1.0.exe` | `92624B3A596325C83F58DBFF29E3B3E2AFF81B9648A923A30474412875E4372D` |
-- **验收 workflow run（Windows 冒烟）**：<https://github.com/Dylan5237/arckeep/actions/runs/36409794693>（`verify-issue-1`，push 到 `verify/issue-1`，`conclusion=success`，第 2 次推送即跑通，共用了 8 次预算里的 2 次：第 1 次是权限探测）
-- **证据 artifact**：`verify-issue-1-evidence-fef78d5` — <https://github.com/Dylan5237/arckeep/actions/runs/36409794693/artifacts/10964290813>
+- **验收 workflow run（Windows 冒烟，首次完整跑通）**：<https://github.com/Dylan5237/arckeep/actions/runs/36409794693>（`conclusion=success`，第 2 次推送即跑通）
+- **验收 workflow run（补测：X1 隔离重测 + AC9 截图补证 + Release 冒烟，最新最完整的一次）**：<https://github.com/Dylan5237/arckeep/actions/runs/36414606477>（`conclusion=success`，一次推送即跑通）
+- **证据 artifact（首次）**：`verify-issue-1-evidence-fef78d5` — <https://github.com/Dylan5237/arckeep/actions/runs/36409794693/artifacts/10964290813>
+- **证据 artifact（补测，最新）**：`verify-issue-1-evidence-fef78d5-retest` — <https://github.com/Dylan5237/arckeep/actions/runs/36414606477/artifacts/10966793560>
+- **Actions 推送预算**：8 次里用了 6 次（1 次权限探测 + 5 次实际推送，全部成功；其中 3 次只改了报告文本却仍触发全量冒烟，已如实记录），本轮补测后还剩 2 次余量
 
 ## 0. 无法核对的项目（验收环境限制，如实说明）
 
@@ -73,8 +75,12 @@ GraphQL: Resource not accessible by integration (repository.issues)
 
 ### AC2：推测试 tag（`v0.0.1-test`）后，windows-latest 打包 job 成功，Release 附件里有 `*Setup*.exe` 和 portable `*.exe`
 
+这一条**先出现过一次 FAIL，随后被工程方修复，现在改判 PASS**，两次判定分别绑定不同的 SHA，都如实记录：
+
+**第一次核对（绑定 `699736c`）—— FAIL：**
+
 - `gh release view v0.0.1-test` → `release not found`（截至 2026-09-28 18:36 北京时间，Release **不存在**）。
-- 对应打包 run [`36407712335`](https://github.com/Dylan5237/arckeep/actions/runs/36407712335)（`push`，`head_branch=v0.0.1-test`，`head_sha=699736c`）：**`conclusion=failure`**（不是「还在跑」——本报告核对时该 run 已经跑完并失败，比验收清单附件里 17:36 记录的「18:09 还在跑」更新）。`lint`/`typecheck`/`test` 三步 success，但 `Build NSIS installer and portable exe` 步骤失败，`Publish GitHub Release` 被 `skipped`：
+- 对应打包 run [`36407712335`](https://github.com/Dylan5237/arckeep/actions/runs/36407712335)（`push`，`head_branch=v0.0.1-test`，`head_sha=699736c`）：**`conclusion=failure`**。`lint`/`typecheck`/`test` 三步 success，但 `Build NSIS installer and portable exe` 步骤失败，`Publish GitHub Release` 被 `skipped`：
   ```
   • building        target=portable file=dist\Arckeep-0.1.0-portable.exe archs=x64
   • signing with signtool.exe  path=dist\Arckeep-0.1.0-portable.exe
@@ -85,10 +91,22 @@ GraphQL: Resource not accessible by integration (repository.issues)
   ```
   • Implicit publishing triggered by git tag. This behavior will be disabled in electron-builder v27. Please use --publish explicitly.  tag=v0.0.1-test
   ```
+  根因：`.github/workflows/release.yml` 只在「Publish GitHub Release」这一步注入了 `GH_TOKEN`；更早的「Build NSIS installer and portable exe」步骤（`npm run dist` → `electron-builder --win`，未带 `--publish never`）在检测到 `v*` tag 时隐式尝试发布，因为没有 token 而直接失败，连 exe 都没生成，Release 从未创建。
 
-**根因（产品缺陷，详见第 4 节）**：`.github/workflows/release.yml` 只在**「Publish GitHub Release」**这一步注入了 `GH_TOKEN: ${{ github.token }}`；而更早的**「Build NSIS installer and portable exe」**步骤执行 `npm run dist`（即 `electron-builder --win`，未带 `--publish never`）。electron-builder 26.x 检测到当前 ref 是 `v*` 格式的 git tag，就会**隐式**尝试发布（打包阶段就要用 token 签发 publish 相关的元数据），而这一步的环境里没有 `GH_TOKEN`，导致打包本身失败,连 NSIS/portable exe 都没生成，Release 从未被创建。
+**第二次核对（绑定 `4c5f83b`）—— PASS：**
 
-**结论：FAIL**（不是 BLOCKED——已有确定性的失败日志和「release not found」的确定性证据，不是「还没跑完」）
+- 2026-09-28 18:47:45 北京时间，Dylan5237 合并 [PR #11](https://github.com/Dylan5237/arckeep/pull/11)「#1 打包时关闭 electron-builder 隐式发布」，修复方式（给 `dist`/`build` 脚本加 `--publish never`）与本报告第一次核对时给出的建议一致；`main` 从 `699736c` 前进到 `4c5f83b`。
+- `v0.0.1-test` tag 被重新指向 `4c5f83b`（`git ls-remote --tags origin` 确认）；main push CI 新 run [`36411815385`](https://github.com/Dylan5237/arckeep/actions/runs/36411815385) 绿；对应 Release run [`36411825544`](https://github.com/Dylan5237/arckeep/actions/runs/36411825544)（`Windows Release`，`push`，`head_branch=v0.0.1-test`）：**`conclusion=success`**。
+- Release 页面 <https://github.com/Dylan5237/arckeep/releases/tag/v0.0.1-test>（`isPrerelease=true`，`publishedAt=2026-09-28T10:50:58Z` = 18:50:58 北京时间），附件正好两个，命名符合要求：
+  | 资产名 | SHA256（`gh release view --json assets` 里的 digest，与本验收 workflow 里 `gh release download` 后现算的哈希一致，见 `24-release-exe-sha256.txt`） |
+  |---|---|
+  | `Arckeep-Setup-0.1.0.exe` | `B2BB471DC471EFC6045AC140F7D16619E2EC1F987193423222C84828F60FE47A` |
+  | `Arckeep-0.1.0-portable.exe` | `1F7F323E437027518D6280DDA40A28527488F678CF633EF42018398BA9641EFC` |
+- **前一次跑残留的记录也如实归档**：旧的红色打包 run `36407712335` 和它对应的旧 main push CI run `36407703708` 现在已经作废（分别被 `36411825544` 和 `36411815385` 取代），本报告不删除前一次的 FAIL 记录，只在此标注「已被取代」。
+- **额外做的实测**（`verify/release-smoke.ps1`，只用 workflow 自带的 `GITHUB_TOKEN`，没有用任何其它 token）：`gh release download v0.0.1-test` 下载两个资产后，`Get-FileHash` 现算的 SHA256 与上表完全一致；`portable.exe` 不带参数启动，25 秒后 `Get-Process Arckeep` 有进程、`MainWindowTitle` 非空（截图 `25-release-portable-launch.png`）；`Setup.exe /S -Wait` 静默安装，`exitCode=0`，能找到 `Arckeep*.lnk` 快捷方式并解析出目标路径，启动后 20 秒进程存在（截图 `26-release-installed-launch.png`）。这满足「从 Release 下载后三步内能跑起来」这条附加检查。**完整步骤和 SHA256 逐字比对表见第 5.3 节「补测」。**
+- **附注（不算缺陷）**：安装包/portable exe 文件名里的版本号是 `0.1.0`（来自 `package.json` 的 `version` 字段），和 tag 名 `v0.0.1-test` 不是同一个版本号体系——`v0.0.1-test` 是一次性的手动测试 tag，`0.1.0` 是产品的语义化版本号，两者本来就不需要一致，只是命名上容易让人误会，记为附注即可，不影响 AC2 判定。
+
+**结论：PASS**（绑定 `4c5f83b`；`699736c` 上的历史结论仍是 FAIL，已在上面完整保留，不做删除式修改）
 
 ## 2. Windows 冒烟验收（AC3–AC9、X1–X6）
 
@@ -96,9 +114,10 @@ GraphQL: Resource not accessible by integration (repository.issues)
 
 - 第 1 次推送：仅探测「push 新 workflow 文件」是否被 GitHub App 权限拒绝——**未被拒绝**，run [`36408808526`](https://github.com/Dylan5237/arckeep/actions/runs/36408808526) 正常触发并成功。
 - 第 2 次推送：完整验收脚本（`verify/run-all.ps1` + `verify/smoke.mjs`），run [`36409794693`](https://github.com/Dylan5237/arckeep/actions/runs/36409794693)，**一次性跑通**，`scenes.json` 里 27 个场景全部 `PASS`（无 FAIL）。
-- 第 3 次推送：只是把这份报告文件加进分支（没有改验收脚本），但 `on: push: branches: ['verify/issue-1']` 对任何推送都会重新触发整套 Windows 冒烟——run [`36411183904`](https://github.com/Dylan5237/arckeep/actions/runs/36411183904) 又完整跑了一遍，结果与第 2 次一致（`conclusion=success`）。尝试过 `gh run cancel` 去省分钟，被拒绝（`HTTP 403: Resource not accessible by integration`，GitHub App 没有 `actions:write`），按硬性规则没有绕过，让它跑完。**Actions 分钟预算：8 次里用了 3 次（第 1 次只是权限探测）。**
+- 第 3、4、5 次推送：分别是加报告文件、微调 X1 措辞、加 Release 冒烟骨架，都没有改验收脚本的核心逻辑，但 `on: push: branches: ['verify/issue-1']` 对任何推送都会重新触发整套 Windows 冒烟——run [`36411183904`](https://github.com/Dylan5237/arckeep/actions/runs/36411183904)、[`36411910710`](https://github.com/Dylan5237/arckeep/actions/runs/36411910710)、[`36412546852`](https://github.com/Dylan5237/arckeep/actions/runs/36412546852) 都又完整跑了一遍，结果都与第 2 次一致（`conclusion=success`）。曾尝试 `gh run cancel` 去省分钟，被拒绝（`HTTP 403: Resource not accessible by integration`，GitHub App 没有 `actions:write`），按硬性规则没有绕过，让它们跑完。
+- 第 6 次推送：加上 X1 隔离重测脚本、AC9 不滚动截图逻辑、Release 冒烟脚本，run [`36414606477`](https://github.com/Dylan5237/arckeep/actions/runs/36414606477)，**一次性跑通**，见第 5 节「补测」。**Actions 分钟预算：截至目前 8 次里用了 6 次（1 次权限探测 + 5 次实际推送，全部成功）。**
 
-所有截图和原始数据都在证据 artifact `verify-issue-1-evidence-fef78d5` 里（<https://github.com/Dylan5237/arckeep/actions/runs/36409794693/artifacts/10964290813>），文件名与 `evidence/index.md` 对照见本报告末尾清单。
+所有截图和原始数据都在证据 artifact `verify-issue-1-evidence-fef78d5`（首次）和 `verify-issue-1-evidence-fef78d5-retest`（补测，最新最完整）里，文件名与 `evidence/index.md` 对照见本报告末尾清单（第 6 节）。
 
 ### AC3：干净 Win10/11 装安装包 / portable 双击启动
 
@@ -178,25 +197,24 @@ GraphQL: Resource not accessible by integration (repository.issues)
 ### AC9：热键冲突提示 + X3（提示写明组合键、旁边能改）
 
 - `verify/hold-hotkey.ps1` 用 `RegisterHotKey` 抢占 `Ctrl+Alt+K`，确认 `registered=True`。
-- 在设置页把热键改成 `Ctrl+Alt+K` 并保存：出现警告 `Ctrl+Alt+K 已被其他程序占用`（写明了具体组合键，满足 X3 第一条）；警告容器 `boundingBox` 为 `{x:281,y:684,w:663,h:62.5}`，其内部的「新的热键组合」输入框（`x:632.5,y:695`）、「录制」按钮（`x:783,y:695`）、「改用这个」按钮（`x:847,y:696`）都在**同一个 DOM 容器、同一行**（Y 坐标几乎相同），满足 X3「提示旁边就有输入框/录制/改用这个」。截图 `08-settings-hotkey-conflict.png`。
+- 在设置页把热键改成 `Ctrl+Alt+K` 并保存：出现警告 `Ctrl+Alt+K 已被其他程序占用`（写明了具体组合键，满足 X3 第一条）；`scrollIntoViewIfNeeded()` 之后测得警告容器 `boundingBox` 为 `{x:281,y:565,w:663,h:62.5}`，其内部的「新的热键组合」输入框（`x:632.5,y:576`）、「录制」按钮（`x:783,y:576`）、「改用这个」按钮（`x:847,y:577`）都在**同一个 DOM 容器、同一行**（Y 坐标几乎相同），满足 X3「提示旁边就有输入框/录制/改用这个」。截图 `08-settings-hotkey-conflict.png`。
+- **⚠️ 补测发现（见「补测」小节）：不滚动时这条警告在默认窗口尺寸下看不见。** 点击「保存热键」后**不做任何滚动**立即截的图（`08a-settings-hotkey-conflict-no-scroll.png`）显示页面还停在设置页顶部，`全局热键` 卡片的「保存热键」按钮已经贴着窗口底边，警告完全在可视区域之外；只有程序或用户主动往下滚动，才能看到 `08-settings-hotkey-conflict.png` 里的完整警告。**这是一个真实的 UX 问题**：用户点了保存之后，第一眼看不出保存失败、也看不出为什么，除非往下滚。记入第 4 节「产品缺陷」。
 - `settings.json` 里没有出现过 `Ctrl+Alt+K`（`settingsFileHasConflictCombo: false`）——失败的组合没有被持久化。
 - **对照组**：改成空闲组合 `Ctrl+Alt+Shift+A`，保存后没有出现 `.hotkey-alert`（`warningVisible: 0`）。
 - **附加检查**（不影响 AC9 结论）：先占住默认热键 `Ctrl+Alt+Space`，再冷启动应用，截图 `23-bonus-default-hotkey-occupied.png`（应用启动时是否显式提示默认热键被占用，见截图；这条不影响 AC9 判定）。
 
-**结论：PASS**（AC9 与 X3 均 PASS）
+**结论：PASS**（AC9 功能性判定与 X3 均 PASS；警告内容和相邻控件都符合要求；不滚动时不可见是产品侧的 UX 缺陷，记入第 4 节，不改变本条 PASS 判定，因为标准原文只要求「有提示」，没有要求「不滚动就能看到」）
 
 ### X1：失败原因三分类（token 无效 / 权限不够 / 网络不通），每类附下一步
 
 - **token 无效（401）**：见 AC5c，提示 `这个 token 无效或已过期（HTTP 401）。请重新生成 PAT，或执行 gh auth login 后再试。`——已实测。
-- **网络不通**：`New-NetFirewallRule` 成功阻断了 `Arckeep.exe` 的出站连接（管理员权限足够，不需要退到 hosts 文件方案），再点「测试连接」，25 秒内出现：
-  > 这个 token 无效或已过期（HTTP 401）。请重新生成 PAT，或执行 gh auth login 后再试。
+- **网络不通：已用全新进程重测，结论 PASS。** 第一次尝试（复用长期运行的进程）拿到的是 401 文案而不是网络类文案；按要求做了一次严格重测（见下方「补测」小节），**先**用防火墙彻底切断网络（程序级 + `140.82.112.0/20` CIDR + 解析出的具体 IP，三条规则同时生效），用 `Test-NetConnection api.github.com -Port 443` 确认网络确实断了（`TcpTestSucceeded: false`），**然后才**冷启动一个全新的 Arckeep 进程去测试连接。这一次拿到的提示是：
+  > 连不上 GitHub（网络不可达、DNS 失败或超时）。请检查网络或代理，恢复后再点一次测试连接。
 
-  **⚠️ 这里出现了一个和预期不一致的结果**：防火墙阻断出站后，UI 显示的仍是跟「token 无效」相同的 401 文案，**没有**出现 network 类提示。token 仍在输入框（`tokenKeptInField: true`），进程没有崩溃。测完后已经 `Remove-NetFirewallRule` 清理规则。截图 `11-settings-network-error.png`。
-
-  **这个结果的定性存疑，本报告不把它算作确定的产品缺陷**，理由见第 4 节——最可能的原因是本验收脚本的方法论问题（同一个长期运行的 Electron 进程在此之前已经和 `api.github.com` 建立过一次 TLS 连接，`fetch`/undici 的连接池可能复用了这条已建立的连接，而新增的出站防火墙规则通常只拦截**新建**连接，不会掐断已经建立的连接），而不是 `classifyGithubFailure` 的分类逻辑本身有问题。
+  提示分类正确（`isNetworkClassMessage: true`），点击前后 `Test-NetConnection` 都确认网络处于断开状态，token 仍在输入框，进程没有崩溃。**结论：这不是产品缺陷，是第一次验收方法论的问题**（同一进程复用了已建立的连接）；已在 `verify/smoke.mjs` 里修好了判定逻辑（第一次那种「拿到任意提示就算 PASS」的写法本身是验收脚本的缺陷，现在改成必须匹配「网络不可达」类文案才算 PASS，第一次的场景现在会正确地显示为 FAIL 并带上「结果存疑，请看隔离重测」的说明，不再误报 PASS）。
 - **权限不够（403 / 缺 scope）**：没有真实 token 触发不了，按规则未测。覆盖这条分类逻辑的单测：`test/github-auth.test.ts` › `classifyGithubFailure` › `separates invalid tokens, missing scopes, and unreachable networks`（同时覆盖 `status:403` 和 `missing scope` 两种情况），该测试在 run `36407287806` 的 `test` 步骤里执行过。
 
-**结论：PARTIAL**（invalid-token 类实测 PASS；network 类实测了但结果与预期文案不符,定性存疑（很可能是本验收方法论的问题,见第 4 节),建议工程方或用新进程重测一次;insufficient-scope 类只有单测、无实测)
+**结论：PARTIAL**（invalid-token 类实测 PASS；network 类经隔离重测后确认 PASS，第一次的异常结果已排查清楚是验收方法论问题、不是产品缺陷；insufficient-scope 类只有单测、无实测，所以整条仍然是 PARTIAL 而不是 PASS）
 
 ### X2：测试连接失败后，已粘贴的 token 仍留在输入框
 
@@ -233,15 +251,15 @@ GraphQL: Resource not accessible by integration (repository.issues)
 | # | 标准原文（摘自 PR #8「怎么验证」清单，逐字对应 Issue #1；Issue #1 正文本身因权限无法直接读取，见第 0 节） | 结论 | 绑定 SHA | 证据（run/step 链接、截图文件名、日志片段、退出码） | 复现步骤（命令级） | 问题描述 |
 |---|---|---|---|---|---|---|
 | AC1 | 任意 PR 自动触发 CI，lint/typecheck/test 三步都执行并通过；故意带 lint 错误的 PR 会让 CI 变红（PR 里附 run 链接） | **PASS**（附注：链接在 PR 评论而非描述里） | `fef78d5`（CI）/ `fada735`（lint 红） | run [36407287806](https://github.com/Dylan5237/arckeep/actions/runs/36407287806) 三步 success；run [36407721575](https://github.com/Dylan5237/arckeep/actions/runs/36407721575) lint 失败；[PR #8 评论](https://github.com/Dylan5237/arckeep/pull/8#issuecomment-5867843319) | `gh run view 36407287806 --json jobs`；`gh run view 36407721575 --json jobs`；`gh api repos/Dylan5237/arckeep/issues/8/comments` | 无 |
-| AC2 | 推测试 tag 后 windows-latest 打包成功，Release 有 `*Setup*.exe` 和 portable `*.exe` | **FAIL** | `699736c` | run [36407712335](https://github.com/Dylan5237/arckeep/actions/runs/36407712335) `conclusion=failure`；`release not found` | `gh run view 36407712335 --json conclusion,jobs`；`gh release view v0.0.1-test` | 期望：Release 创建成功，两个附件齐全。实际：`Build NSIS installer and portable exe` 步骤报错 `GitHub Personal Access Token is not set`，electron-builder 因检测到 `v*` tag 而隐式触发发布，但该步骤没有 `GH_TOKEN`；Release 从未创建 |
+| AC2 | 推测试 tag 后 windows-latest 打包成功，Release 有 `*Setup*.exe` 和 portable `*.exe` | **PASS**（绑定 `4c5f83b`；`699736c` 上历史结论是 FAIL，已被 PR #11 取代，详见 AC2 小节） | `4c5f83b`（历史：`699736c`） | Release run [36411825544](https://github.com/Dylan5237/arckeep/actions/runs/36411825544) success；Release 页面两个资产齐全，SHA256 与 `24-release-exe-sha256.txt` 一致；`25-release-portable-launch.png`/`26-release-installed-launch.png` 冒烟通过 | `gh release download v0.0.1-test`（workflow 自带 `GITHUB_TOKEN`）→ 启动/静默安装 | 无（历史缺陷已由 PR #11 修复；文件名版本号 `0.1.0` 与 tag `v0.0.1-test` 不一致，记为附注不算缺陷） |
 | AC3 | 干净 Win10/11 装安装包能启动；portable 双击能启动 | **PARTIAL** | `fef78d5` | `21-ac3-installer.json`（exitCode=0，快捷方式已解析）、`22-ac3-installed-launch.png`、`20-ac3-portable.json`/`.png`（进程存活、标题非空）；Crashpad 目录始终为空 | `Start-Process Setup.exe -ArgumentList '/S' -Wait`；`Start-Process portable.exe` | 无失败；仍需 Dylan 在真实干净 Win10/11 上补验（产品经理已认可 CI 只能到 PARTIAL） |
 | AC4 | 左侧导航从上到下 等我处理/项目总览/待办/工具架 + 设置，点击切换 | **PASS** | `fef78d5` | `02-nav-waiting.png`…`06-settings-empty.png`；`AC4-order` 场景 boundingBox 数据 | Playwright `_electron.launch` + `boundingBox()` + 逐个 `click()` | 无 |
 | AC5 | gh 已登录显示来源 gh CLI 且测试连接显示 Dylan5237；gh 不在 PATH 可粘贴 PAT 测试成功；错误 token 有明确提示不崩溃 | **PARTIAL** | `fef78d5` | `06-settings-empty.png`（未误报 gh-cli）；`AC5b-pat-path` 场景（sourceLabel 变为「来源：本机 PAT」）；`07-settings-invalid-token.png` + `invalid-token-message.txt` | 见 AC5 小节 | 5a 按产品经理决定固定 PARTIAL；5b 缺真实 token 验证「测试连接成功」；5c 已实测 PASS |
 | AC6 | `%APPDATA%\Arckeep\` 下 `findstr /s` 搜 token 前 8 位搜不到 | **PASS** | `fef78d5` | `AC6-findstr` 场景：两次 `findstr` `exitCode=1` 无输出，UTF-16 匹配数 0；`17-settings.json.copy.json` 只含密文 | `findstr /s /m /c:"ghp_Vf9Q" "%APPDATA%\Arckeep\*"` → `exit=1` | 无 |
 | AC7 | 加 2 个关注仓库 + 改热键，托盘退出再启动，设置还在 | **PASS** | `fef78d5` | `13-settings-repos-hotkey-saved.png`、`18-settings-after-restart.png`；`AC7-restart` 场景数据 | `__ARCKEEP_TEST_HOOKS__.quit()` → 重启 → 读设置页 | 无 |
 | AC8 | 关窗口留托盘；托盘菜单能重新打开/退出 | **PASS** | `fef78d5` | `14-hook-close-fullscreen.png`、`15-hook-show.png`；`src/main/index.ts:74-113` 源码引用；`AC8-second-instance` 场景 | `__ARCKEEP_TEST_HOOKS__.close()/.show()/.quit()`；二次实例 `--arckeep-test=close` | 无（托盘图标视觉外观未做 UIA 验证，按允许口径不影响结论，需人工补充） |
-| AC9 | 热键设成已占用组合时有提示 | **PASS** | `fef78d5` | `08-settings-hotkey-conflict.png`；`hotkey-warning-message.txt`；`AC9-conflict`/`AC9-control` 场景数据 | `verify/hold-hotkey.ps1` 占住 `Ctrl+Alt+K` → 设置页改热键保存 | 无 |
-| X1 | 失败原因三分类（token 无效/权限不够/网络不通），每类附下一步 | **PARTIAL** | `fef78d5` | `07-settings-invalid-token.png`（401 类，PASS）；`11-settings-network-error.png`（网络断开后，PASS/实测但文案分类有缺陷，见问题描述） | 见 X1 小节 | 网络不通场景下，`classifyGithubFailure` 把 `fetch` 失败误判为「token 无效或已过期（HTTP 401）」而不是「网络不可达」类文案；权限不够类无真实 token，只有单测覆盖 |
+| AC9 | 热键设成已占用组合时有提示 | **PASS**（附注：不滚动看不见，见问题描述） | `fef78d5` | `08-settings-hotkey-conflict.png`（滚动后）、`08a-settings-hotkey-conflict-no-scroll.png`（不滚动）；`hotkey-warning-message.txt`；`AC9-conflict`/`AC9-control` 场景数据 | `verify/hold-hotkey.ps1` 占住 `Ctrl+Alt+K` → 设置页改热键保存 | 提示本身内容和控件都正确，但保存后页面不会自动滚动，默认窗口尺寸下用户第一眼看不到这条提示（在可视区域下方），需要手动往下滚才能看到；不影响 PASS 判定（标准原文只要求「有提示」），但记为产品侧 UX 缺陷 |
+| X1 | 失败原因三分类（token 无效/权限不够/网络不通），每类附下一步 | **PARTIAL** | `fef78d5` | `07-settings-invalid-token.png`（401 类，PASS）；`11-settings-network-error-retest.png`（**全新进程**+确认断网后重测，PASS，见「补测」小节） | 见 X1 小节和「补测」小节 | 网络不通类：第一次用复用进程测得 401 文案，怀疑是分类逻辑缺陷；用全新进程+确认断网重测后拿到正确的「网络不可达」文案，**排查清楚是验收方法论问题（连接复用），不是产品缺陷**；权限不够类无真实 token，只有单测覆盖 |
 | X2 | 测试连接失败后 token 仍在输入框 | **PASS** | `fef78d5` | AC5c、X1 两个场景 `tokenKeptInField: true` | 见上 | 无 |
 | X3 | 热键冲突提示写明组合键，旁边就能直接改 | **PASS** | `fef78d5` | `08-settings-hotkey-conflict.png`；`AC9-conflict` 场景 boundingBox 数据 | 见 AC9 | 无 |
 | X4 | 不设 ARCKEEP_TEST_HOOKS=1 时钩子完全不起作用（反向检查） | **PASS** | `fef78d5` | `12-hooks-off.png`；`X4-hooks-off-typeof`/`X4-hooks-value-0`/`X4-hooks-value-true` 场景数据 | 见 X4 小节 | 无 |
@@ -252,13 +270,15 @@ GraphQL: Resource not accessible by integration (repository.issues)
 
 ### 产品缺陷
 
-1. **【AC2 失败的根因】Release workflow 在打包步骤缺少 `GH_TOKEN`，导致推测试 tag 后打包直接失败，Release 从未创建。**
-   `.github/workflows/release.yml` 里只有「Publish GitHub Release」步骤注入了 `GH_TOKEN: ${{ github.token }}`；更早的「Build NSIS installer and portable exe」步骤（`npm run dist` → `electron-builder --win`，未加 `--publish never`）在检测到当前 ref 是 `v*` tag 时会**隐式尝试发布**，因为没有 token 而直接报错退出（`GitHub Personal Access Token is not set`），NSIS installer 和 portable exe 都没能生成。参见 run [36407712335](https://github.com/Dylan5237/arckeep/actions/runs/36407712335) 的失败日志。**建议修复**：给 `dist` 脚本加 `--publish never`（或在 `package.json` 的 `build` 字段里设 `"publish": null`），把真正的发布逻辑完全留给 release.yml 里已有的 `gh release create/upload` 步骤；或者把 `GH_TOKEN` 一并注入打包步骤。这个缺陷会阻塞 AC2，也会阻塞 Issue #7 里「CI 绿且验收标准全部勾完才关闭」的收尾条件。
+1. **【已修复】Release workflow 曾在打包步骤缺少 `GH_TOKEN`，导致推测试 tag 后打包直接失败，Release 从未创建。**
+   `699736c` 上的 `.github/workflows/release.yml` 只有「Publish GitHub Release」步骤注入了 `GH_TOKEN: ${{ github.token }}`；更早的「Build NSIS installer and portable exe」步骤（`npm run dist` → `electron-builder --win`，未加 `--publish never`）在检测到当前 ref 是 `v*` tag 时会**隐式尝试发布**，因为没有 token 而直接报错退出（`GitHub Personal Access Token is not set`），NSIS installer 和 portable exe 都没能生成。参见 run [36407712335](https://github.com/Dylan5237/arckeep/actions/runs/36407712335) 的失败日志。**状态：已修复**——[PR #11](https://github.com/Dylan5237/arckeep/pull/11)（2026-09-28 18:47:45 北京时间合并，`main` → `4c5f83b`）给 `dist`/`build` 脚本加了 `--publish never`，修复方式与本报告当时给出的建议一致；修复后的 Release run [36411825544](https://github.com/Dylan5237/arckeep/actions/runs/36411825544) 成功，AC2 现在改判 PASS（详见 AC2 小节）。记录在案是为了说明这条缺陷确实存在过、也确实被修复了，不是本报告判断有误。
+2. **【AC9 UX 问题】热键冲突警告保存后不会自动滚动到可视区域，默认窗口尺寸下用户第一眼看不到。**
+   详见 AC9 小节和下方「补测」小节的 `08a-settings-hotkey-conflict-no-scroll.png` 截图。警告本身的内容、位置关系（和输入框/录制/改用这个同一容器）都是对的，只是页面没有在警告出现时自动滚动或把警告放到可视区域内。**建议**：保存热键失败时，把 `.hotkey-alert` `scrollIntoView()` 一次，或者把警告放在卡片顶部而不是最下面。这不影响 AC9/X3 的 PASS 判定（标准原文只要求「有提示」），但是个值得修的真实可用性问题。
 
-### 存疑事项（建议工程方复核，本报告不计入产品缺陷）
+### 已排查清楚、确认不是产品缺陷的事项
 
-1. **X1 网络不通场景下，`测试连接` 显示的是「token 无效或已过期（HTTP 401）」而不是「网络不可达」类提示。**
-   代码路径上看，`fetchGitHubLogin`（`src/main/github-auth.ts`）在 `fetch()` 抛错时会调用 `classifyGithubFailure({ network: true })`，理论上应该走 network 分支。但本次实测在防火墙阻断 `Arckeep.exe` 出站流量后，UI 显示的仍是 401 文案。**最可能的原因是本验收脚本的方法论问题，而不是产品代码的缺陷**：X1 场景复用了 AC5c 场景里同一个已经跑了几分钟、且刚刚成功和 `api.github.com` 建立过 TLS 连接的 Electron 进程；Node/undici 的底层连接池可能会对同一 host 复用已建立的连接，而新建的 `New-NetFirewallRule` 出站规则通常只拦截**新建**连接，不一定能掐断已经建立、处于 keep-alive 状态的连接——这样「网络阻断」在这个具体场景下就可能根本没有真正生效在这次请求上，UI 显示的 401 其实还是命中了真实的 GitHub API（用假 token 请求本来就会收到 401）。**建议**：工程方或后续验收用一个全新冷启动的进程（而不是复用已经建立过连接的实例）单独测一次网络不通场景,更准确地定性;在此之前不应该把这条计入产品缺陷,X1 因此判 PARTIAL 而不是 FAIL。
+1. **X1 网络不通场景第一次实测显示了「token 无效或已过期（HTTP 401）」而不是「网络不可达」类提示——已用全新进程重测，确认是验收方法论问题，不是产品缺陷。**
+   第一次测试复用了 AC5c 场景里已经成功连接过 `api.github.com` 的长期运行进程，`fetch`/undici 的连接池很可能复用了已建立的 TLS 连接，绕开了新增的出站防火墙规则。按要求做了一次严格的隔离重测（`verify/x1-network-retest.mjs`）：**先**用三条防火墙规则（程序级 + `140.82.112.0/20` CIDR + DNS 解析出的具体 IP）彻底切断网络，用 `Test-NetConnection` 确认网络确实断了，**然后才**冷启动一个全新进程去点「测试连接」。这一次拿到的是正确的「连不上 GitHub（网络不可达、DNS 失败或超时）...」提示，`isNetworkClassMessage: true`，`Test-NetConnection` 在点击前后都确认网络处于断开状态。**结论：`classifyGithubFailure` 的分类逻辑本身没有问题，第一次的异常结果是验收脚本方法论的缺陷**（已在 `verify/smoke.mjs` 里修好判定逻辑，避免同类问题被误判为 PASS）。详见「补测」小节。
 
 ### 偏离工程方承诺的地方
 
@@ -274,7 +294,63 @@ GraphQL: Resource not accessible by integration (repository.issues)
 5. **X1 权限不够（403/缺 scope）分类**：没有真实的、权限不足的 token 可用于实测，只能引用单测佐证。
 6. **验收 workflow 的事件日志检查脚本**（`crash-and-eventlog` 场景）本次跑出的是空字符串，既不是明确的「查询失败」提示也不是明确列出的「无匹配事件」提示——这条证据本身有轻微的不确定性，但结合 Crashpad 目录全程为空、所有进程存活性检查全部通过，没有观察到任何实际崩溃现象，不影响 AC3 的最终判定。
 
-## 5. 附：证据 artifact 内容清单（`verify-issue-1-evidence-fef78d5`）
+## 5. 补测（4c5f83b / Release + X1 隔离重测 + AC9 截图补证）
+
+补测时间：2026-09-28 19:35 北京时间。补测 run（一次跑完全部三项）：<https://github.com/Dylan5237/arckeep/actions/runs/36414606477>（`conclusion=success`，一次推送即跑通）。证据 artifact：`verify-issue-1-evidence-fef78d5-retest` — <https://github.com/Dylan5237/arckeep/actions/runs/36414606477/artifacts/10966793560>。
+
+### 5.1 X1 网络不通隔离重测（绑定 `fef78d5`）
+
+用 `verify/x1-network-retest.mjs`（全新脚本，和其余场景共用的长期进程完全隔离）：
+
+1. 冷启动前先测一次网络：`Test-NetConnection api.github.com -Port 443` → `TcpTestSucceeded: true`（正常）。
+2. DNS 解析 `api.github.com` → `140.82.114.5`。
+3. 建 3 条出站防火墙规则：按 `Arckeep.exe` 程序路径、按 `140.82.112.0/20` CIDR、按刚解析出的 `140.82.114.5`，三条都成功创建（`ok: true`）。
+4. 再测一次网络：`TcpTestSucceeded: false`——网络确认已经断开。
+5. **这时才**冷启动一个全新的 Arckeep 进程（此前从未连接过网络），进入设置页，粘贴假 token，点「测试连接」。
+6. 30 秒内出现提示：
+   > 连不上 GitHub（网络不可达、DNS 失败或超时）。请检查网络或代理，恢复后再点一次测试连接。
+
+   `isNetworkClassMessage: true`；token 仍在输入框（`tokenKeptInField: true`）。截图 `11-settings-network-error-retest.png` / `-retest-win.png`。
+7. 点击后再测一次网络：`TcpTestSucceeded: false`——确认整个测试过程中网络一直是断开的，不是网络中途恢复导致的假阳性。
+8. 清理 3 条防火墙规则后最后一次测网络：`TcpTestSucceeded: true`——确认清理干净，没有影响后续步骤（包括随后需要联网的 Release 冒烟）。
+
+**判定：PASS。** 第一次（复用进程）的异常结果确认是验收方法论问题（连接复用），不是产品缺陷。完整步骤记录见 `x1-retest.json`，一句话结论见 `x1-retest-verdict.txt`。
+
+### 5.2 AC9 不滚动可见性截图补证（绑定 `fef78d5`）
+
+点击「保存热键」→ 出现冲突警告后，**立即**（不做任何滚动）截图 `08a-settings-hotkey-conflict-no-scroll.png`：页面仍停在设置页顶部（GitHub 认证卡片在最上面），`全局热键` 卡片的「保存热键」按钮已经贴着窗口下边缘，**冲突警告完全看不到**。
+
+然后对警告元素调用 `scrollIntoViewIfNeeded()`，再截图 `08-settings-hotkey-conflict.png`：这时能看到完整的警告文字、旁边的「新的热键组合」输入框、「录制」和「改用这个」按钮。
+
+**结论：不滚动时提示不可见。** 这是一个真实的产品 UX 问题（已记入第 4 节「产品缺陷」第 2 条），但不改变 AC9/X3 的 PASS 判定——标准原文只要求「有提示」，没有要求「不滚动也能看到」。
+
+### 5.3 Release（`v0.0.1-test` / `4c5f83b`）冒烟测试（绑定 `4c5f83b`）
+
+用 `verify/release-smoke.ps1`，只用 workflow 自带的 `GITHUB_TOKEN`（没有用任何其它 token）：
+
+1. `gh release view v0.0.1-test` 确认 tag 对应的 commit sha：`4c5f83b903faf2dd38f3108a84465d34f12efd4f`（与 `git ls-remote --tags` 结果一致）。见 `24-release-view.json` / `24-release-tag-sha.txt`。
+2. `gh release download v0.0.1-test --repo Dylan5237/arckeep` 下载两个资产。
+3. `Get-FileHash` 现算 SHA256，和预期值逐字比对：
+
+   | 资产 | 现算 SHA256 | 预期 SHA256 | 一致？ |
+   |---|---|---|---|
+   | `Arckeep-Setup-0.1.0.exe` | `B2BB471DC471EFC6045AC140F7D16619E2EC1F987193423222C84828F60FE47A` | `b2bb471dc471efc6045ac140f7d16619e2ec1f987193423222c84828f60fe47a` | ✅ 一致（大小写不同，内容相同） |
+   | `Arckeep-0.1.0-portable.exe` | `1F7F323E437027518D6280DDA40A28527488F678CF633EF42018398BA9641EFC` | `1f7f323e437027518d6280dda40a28527488f678cf633ef42018398ba9641efc` | ✅ 一致 |
+
+   见 `24-release-exe-sha256.txt`；脚本里也做了程序化比对，两个都通过，没有触发 `hash mismatch` 异常。
+4. **portable 启动冒烟**：不带参数启动 `Arckeep-0.1.0-portable.exe`，25 秒后 `Get-Process Arckeep` 有进程（4 个同名子进程，Electron 多进程模型），`MainWindowTitle="Arckeep"`。截图 `25-release-portable-launch.png` 显示主窗口正常打开在「等我处理」页。见 `25-release-portable-launch.json`。
+5. **安装包冒烟**：`Arckeep-Setup-0.1.0.exe /S` 静默安装，`exitCode=0`；在开始菜单找到 `Arckeep.lnk`，解析出目标 `C:\Users\runneradmin\AppData\Local\Programs\Arckeep\Arckeep.exe`；从这个快捷方式目标启动，20 秒后截图 `26-release-installed-launch.png`，同样显示主窗口正常打开。见 `26-release-installer.json`。
+
+**判定：满足「从 Release 下载后三步内能跑起来」——下载 → 校验哈希 → 启动（或静默安装后启动），两种资产都在这三步内跑起来了。** `release-smoke-errors.txt` 没有产生（脚本里所有 `Write-Section` 都没有捕获到异常）。
+
+**附注（不算缺陷）**：两个 exe 文件名里的版本号是 `0.1.0`（来自 `package.json` 的 `version` 字段），tag 名是 `v0.0.1-test`——这是两套不同的版本号体系（`0.1.0` 是产品语义化版本号，`v0.0.1-test` 是这次一次性的手动测试 tag），本来就不需要一致，只是命名容易让人以为对不上，这里明确记为附注，不影响 AC2 判定。
+
+## 6. 附：证据 artifact 内容清单
+
+本报告涉及两个 GitHub Actions 证据 artifact：
+
+- **`verify-issue-1-evidence-fef78d5`**（第 1～4 节引用的原始证据，来自 run [36409794693](https://github.com/Dylan5237/arckeep/actions/runs/36409794693) 及其后 3 次仅改报告文本、结果一致的重跑）
+- **`verify-issue-1-evidence-fef78d5-retest`**（第 5 节引用的补测证据，来自 run [36414606477](https://github.com/Dylan5237/arckeep/actions/runs/36414606477)，同时包含了修好判定逻辑后完整重跑一遍的全部 27 个原有场景 + 新增的 X1 隔离重测 + Release 冒烟，**这是当前最新、最完整的一份证据**）— <https://github.com/Dylan5237/arckeep/actions/runs/36414606477/artifacts/10966793560>
 
 | 文件 | 对应勾选项 |
 |---|---|
@@ -283,28 +359,33 @@ GraphQL: Resource not accessible by integration (repository.issues)
 | `02-nav-waiting.png` … `05-nav-toolshelf.png` | AC4（四个模块页面） |
 | `06-settings-empty.png` | AC4/AC5（首次设置页空状态） |
 | `07-settings-invalid-token.png` | AC5c / X2 |
-| `08-settings-hotkey-conflict.png` | AC9 / X3 |
+| `08a-settings-hotkey-conflict-no-scroll.png` | AC9/X3（不滚动，警告不可见） |
+| `08-settings-hotkey-conflict.png` | AC9 / X3（滚动后，警告 + 控件都可见） |
 | `09-window-narrow-800.png` / `10-window-narrow-min.png` | X6 |
-| `11-settings-network-error.png` | X1（网络不通） |
+| `11-settings-network-error.png` | X1（复用进程，方法论存疑，参考用） |
+| `11-settings-network-error-retest.png` / `-retest-win.png` | X1（全新进程 + 确认断网，权威结果） |
+| `x1-retest.json` / `x1-retest-verdict.txt` | X1 隔离重测完整记录 |
 | `12-hooks-off.png` | X4 |
 | `13-settings-repos-hotkey-saved.png` | AC7 |
 | `14-hook-close-fullscreen.png` / `15-hook-show.png` | AC8 |
 | `16-appdata-tree.txt` / `17-settings.json.copy.json` | AC6 / AC7 |
 | `18-settings-after-restart.png` | AC7 |
 | `19-eventlog-arckeep.txt` | AC3（见环境限制第 6 条） |
-| `20-ac3-portable.png` / `.json`，`21-ac3-installer.json`，`22-ac3-installed-launch.png` | AC3 |
+| `20-ac3-portable.png` / `.json`，`21-ac3-installer.json`，`22-ac3-installed-launch.png` | AC3（PR #8 产物，`fef78d5`） |
 | `23-bonus-default-hotkey-occupied.png` | AC9 附加检查（不影响结论） |
-| `scenes.json` | 27 个场景的机器可读结果（本次全部 PASS） |
+| `24-release-view.json` / `24-release-tag-sha.txt` / `24-release-exe-sha256.txt` | AC2（Release 产物，`4c5f83b`） |
+| `25-release-portable-launch.png` / `.json` | AC2（Release portable 冒烟） |
+| `26-release-installer.json` / `26-release-installed-launch.png` | AC2（Release 安装包冒烟） |
+| `scenes.json` | 27 个场景的机器可读结果 |
 | `invalid-token-message.txt` / `hotkey-warning-message.txt` | 提示文案原文 |
 | `index.md` | 文件与勾选项对照表 |
 
-## 6. 事后动态（仅供参考，不改变本报告对 `fef78d5`/`699736c` 的结论）
+## 7. 时间线备注
 
-本报告的全部结论都绑定在 `fef78d5`（PR #8 head）/ `699736c`（main 合并提交）。在本次验收进行期间，`main` 分支上出现了新的提交，**超出了本次验收的范围**，本报告不因此改判任何一条结论，只如实记录时间线：
-
-- 2026-09-28 18:47:45 北京时间：Dylan5237 合并了 [PR #11](https://github.com/Dylan5237/arckeep/pull/11)「#1 打包时关闭 electron-builder 隐式发布」，`main` 从 `699736c` 前进到 `4c5f83b`。commit message：「push 和 tag 的 CI 会被 electron-builder 当成要发布，缺少 GH_TOKEN 时 dist 在产物生成后退出 1。所有 electron-builder 调用显式 `--publish never`，并让 PR 上的 windows package 按 push 条件跑。」——修复方式（给 `dist`/`build` 脚本加 `--publish never`）与本报告第 4 节「产品缺陷」第 1 条给出的建议**完全一致**。
-- `v0.0.1-test` tag 被重新指向 `4c5f83b`；对应 Release workflow run [`36411825544`](https://github.com/Dylan5237/arckeep/actions/runs/36411825544) `conclusion=success`；`gh release view v0.0.1-test` 现在能看到 Release，附件里有 `Arckeep-Setup-0.1.0.exe` 和 `Arckeep-0.1.0-portable.exe`（`publishedAt: 2026-09-28T10:50:58Z` = 18:50:58 北京时间）。
-
-**本报告没有对 `4c5f83b` 做任何验收动作**（没有下载新产物、没有跑新的 Windows 冒烟、没有核对新的 Release 附件的 SHA256），因为这超出了「验收 PR #8 / `fef78d5`」这个既定任务范围；如果需要对 `4c5f83b`（或 PR #11）单独出一份验收报告，应该作为新的验收任务另外发起。**AC2 在 `699736c` 上的结论仍然是 FAIL**——这是基于当时代码状态的确定性事实，不是"过时"的判断。
+- 本报告最初（18:37 北京时间）判定 AC2 为 FAIL，绑定在 `699736c`。
+- 18:47:45 北京时间，Dylan5237 合并 [PR #11](https://github.com/Dylan5237/arckeep/pull/11) 修复了这个问题（`main` → `4c5f83b`），修复方式与本报告给出的建议一致。
+- 18:52 北京时间，收到明确指示，把 AC2 的结论按 `4c5f83b` 上的新状态改判，并授权用 workflow 自带的 `GITHUB_TOKEN` 去下载 Release 资产做一次实测——19:05 北京时间更新，AC2 一节改写为「PASS（绑定 `4c5f83b`）」，历史上 `699736c` 的 FAIL 记录原样保留，标注「已被取代」。
+- 19:07 北京时间，收到进一步指示：X1 网络场景要用全新进程重测并修正验收脚本的判定 bug、AC9 要补不滚动的截图、Release 要做真正的下载+启动冒烟。19:35 北京时间完成，即本报告第 5 节。
+- 本报告除 AC2 外的其余各条（AC1、AC3–AC9、X1–X6）仍然只绑定 `fef78d5`/`699736c`，没有因为 `main` 前进而重新验证——那些结论描述的是 PR #8 那次提交本身的状态，这个事实不会因为后续有没有新提交而改变。
 
 ——本报告完——
