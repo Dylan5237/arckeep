@@ -201,6 +201,9 @@ async function discoverOwned(token: string, fetchImpl: typeof fetch, now: Date):
       }
       repos.push({ ...parts, full: name, isEmpty, pushedAt })
     }
+    // Owned repos are ordered by push time, so the first stale page ends this
+    // scan. That only shrinks the repo-scoped batch. User-level Search
+    // (assignee / review / mention) is a separate query and keeps going.
     if (stale || !batch.cursor) break
     cursor = batch.cursor
   }

@@ -147,21 +147,48 @@ describe('source classification', () => {
     expect(open?.reasons).toEqual(['待你审/合'])
   })
 
-  it('skips empty repositories and repositories with no push for more than 30 days', () => {
+  it('keeps explicit asks in quiet repos and drops only repo-scoped reasons', () => {
     const rules = config()
+    const quiet = '2026-07-30T00:00:00.000Z'
+    const assigned = classifyRecord(record({
+      kind: 'issue',
+      number: 2,
+      title: 'Assigned in a quiet repo',
+      fromAssignee: true,
+      assignedAt: '2026-08-01T00:00:00.000Z',
+      repoPushedAt: quiet
+    }), rules, NOW)
+    expect(assigned?.reasons).toEqual(['指派'])
+
+    expect(classifyRecord(record({
+      kind: 'pr',
+      number: 8,
+      title: 'Open pull with nobody asking',
+      fromOpenPr: true,
+      inScopeRepo: true,
+      isDraft: false,
+      repoPushedAt: quiet
+    }), rules, NOW)).toBeNull()
+
+    const both = classifyRecord(record({
+      kind: 'pr',
+      number: 9,
+      title: 'Assigned pull in a quiet repo',
+      fromAssignee: true,
+      fromOpenPr: true,
+      inScopeRepo: true,
+      isDraft: false,
+      assignedAt: '2026-08-15T00:00:00.000Z',
+      repoPushedAt: quiet
+    }), rules, NOW)
+    expect(both?.reasons).toEqual(['指派'])
+
     expect(classifyRecord(record({
       kind: 'pr',
       number: 1,
       title: 'Empty',
       fromOpenPr: true,
       repoIsEmpty: true
-    }), rules, NOW)).toBeNull()
-    expect(classifyRecord(record({
-      kind: 'issue',
-      number: 2,
-      title: 'Stale',
-      fromAssignee: true,
-      repoPushedAt: '2026-08-01T00:00:00.000Z'
     }), rules, NOW)).toBeNull()
     expect(classifyRecord(record({
       kind: 'issue',
@@ -325,6 +352,109 @@ describe('status documents and local branches', () => {
   it('leaves the todo provider empty until issue 4 exists', async () => {
     expect(pendingTodoProvider.available).toBe(false)
     await expect(pendingTodoProvider.listWaitingOnMe()).resolves.toEqual([])
+  })
+})
+
+describe('repo activity scope', () => {
+  it('stops owned-repo paging at the first stale page without dropping user search', async () => {
+    const rules = config({
+      sources: {
+        ...defaultWaitingConfig().sources,
+        reviewRequested: false,
+        mentions: false,
+        humanIssues: false,
+        statusDocs: false,
+        localBranches: false,
+        openPrs: true,
+        assignee: true
+      }
+    })
+    const quietPush = '2026-07-30T00:00:00.000Z'
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      const body = String(init?.body ?? '')
+      if (body.includes('ownerAffiliations') && body.includes('NEXT')) {
+        throw new Error('stale break should not request another owned-repo page')
+      }
+      if (body.includes('viewer { login }')) {
+        return new Response(JSON.stringify({ data: { viewer: { login: 'ada' } } }), { status: 200 })
+      }
+      if (body.includes('ownerAffiliations')) {
+        return new Response(JSON.stringify({
+          data: {
+            viewer: {
+              repositories: {
+                pageInfo: { hasNextPage: true, endCursor: 'NEXT' },
+                nodes: [
+                  { nameWithOwner: 'example/active', isEmpty: false, pushedAt: '2026-09-20T00:00:00.000Z' },
+                  { nameWithOwner: 'example/quiet', isEmpty: false, pushedAt: quietPush }
+                ]
+              }
+            }
+          }
+        }), { status: 200 })
+      }
+      if (body.includes('watching(')) {
+        return new Response(JSON.stringify({
+          data: { viewer: { watching: { pageInfo: { hasNextPage: false }, nodes: [] } } }
+        }), { status: 200 })
+      }
+      if (body.includes('pullRequests')) {
+        if (body.includes('quiet')) throw new Error('quiet repo must not be in the repo-scope batch')
+        return new Response(JSON.stringify({
+          data: {
+            r0: {
+              nameWithOwner: 'example/active',
+              isEmpty: false,
+              pushedAt: '2026-09-20T00:00:00.000Z',
+              issues: { pageInfo: { hasNextPage: false }, nodes: [] },
+              pullRequests: { pageInfo: { hasNextPage: false }, nodes: [] }
+            }
+          }
+        }), { status: 200 })
+      }
+      if (body.includes('assignee:@me')) {
+        return new Response(JSON.stringify({
+          data: {
+            search: {
+              pageInfo: { hasNextPage: false },
+              nodes: [{
+                __typename: 'Issue',
+                number: 60,
+                title: 'Still waiting in a quiet repo',
+                url: 'https://github.com/example/quiet/issues/60',
+                body: '',
+                createdAt: '2026-07-01T00:00:00.000Z',
+                updatedAt: '2026-08-01T00:00:00.000Z',
+                repository: { nameWithOwner: 'example/quiet', isEmpty: false, pushedAt: quietPush },
+                labels: { nodes: [] },
+                comments: { nodes: [] },
+                timelineItems: { nodes: [{ __typename: 'AssignedEvent', createdAt: '2026-08-01T00:00:00.000Z', assignee: { login: 'ada' } }] }
+              }]
+            }
+          }
+        }), { status: 200 })
+      }
+      return new Response('unexpected', { status: 500 })
+    }
+    const loaded = await loadGithubRecords({
+      token: 'test-token',
+      config: rules,
+      watchedRepos: [],
+      fetchImpl,
+      now: NOW
+    })
+    expect(loaded.fresh.assignee).toBe(true)
+    expect(loaded.bySource.assignee.map(item => item.repo)).toEqual(['example/quiet'])
+    expect(loaded.bySource.openPrs).toEqual([])
+    const rows = assembleWaiting({
+      records: [...loaded.bySource.assignee, ...loaded.bySource.openPrs],
+      statusDocs: [],
+      branches: [],
+      todos: [],
+      config: rules,
+      now: NOW
+    })
+    expect(rows.map(row => row.reasons)).toEqual([['指派']])
   })
 })
 

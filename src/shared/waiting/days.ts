@@ -15,7 +15,8 @@ export function addDays(date: Date, days: number): Date {
 
 /**
  * Empty repositories and repositories with no push for more than 30 days
- * stay off this page (they belong on the project overview).
+ * are skipped by the repo-scoped sources (open PRs and human-action issues).
+ * Assignments, review requests, and mentions are not filtered here.
  * A missing push time is not treated as stale.
  */
 export function repoIsOnWaitingPage(
