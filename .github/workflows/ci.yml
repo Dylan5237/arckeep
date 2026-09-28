@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: lint
+        run: npm run lint
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: test
+        run: npm test
+
+  ubuntu:
+    name: ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: lint
+        run: npm run lint
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: test
+        run: npm test
+
+  windows-package:
+    name: windows package
+    runs-on: windows-latest
+    needs: windows
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build NSIS installer and portable exe
+        run: npm run dist
+
+      - name: Zip win-unpacked
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath "dist/win-unpacked/Arckeep.exe")) {
+            throw "dist/win-unpacked/Arckeep.exe was not produced"
+          }
+          if (-not (Get-ChildItem -LiteralPath "dist" -File -Filter "*portable*.exe")) {
+            throw "portable exe was not produced"
+          }
+          Compress-Archive -Path "dist/win-unpacked" -DestinationPath "dist/arckeep-win-unpacked.zip" -Force
+
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: arckeep-windows
+          path: |
+            dist/*Setup*.exe
+            dist/*portable*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload unpacked app
+        uses: actions/upload-artifact@v4
+        with:
+          name: arckeep-win-unpacked
+          path: dist/arckeep-win-unpacked.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Launch unpacked smoke
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $exe = Get-Item -LiteralPath "dist/win-unpacked/Arckeep.exe"
+          $proc = Start-Process -FilePath $exe.FullName -PassThru
+          Start-Sleep -Seconds 8
+          if ($proc.HasExited) { throw "Arckeep exited early with code $($proc.ExitCode)" }
+          Stop-Process -Id $proc.Id -Force
+          Get-Process Arckeep -ErrorAction SilentlyContinue | Stop-Process -Force
