@@ -113,7 +113,7 @@ GraphQL: Resource not accessible by integration (repository.issues)
 验收 workflow：`.github/workflows/verify-issue-1.yml`，只在 push 到 `verify/issue-1` 时触发；下载 run `36407287806` 的两个 artifact 前先核对 `run.head_sha == fef78d5`（脚本里写了 `throw`，核对通过）；被测应用启动环境去掉了 `GH_TOKEN`/`GITHUB_TOKEN`；全程只用假 token `ghp_Vf9QzXk2LmP4rT8wYb6nHc3JdA1sE7uG0oKi`。
 
 - 第 1 次推送：仅探测「push 新 workflow 文件」是否被 GitHub App 权限拒绝——**未被拒绝**，run [`36408808526`](https://github.com/Dylan5237/arckeep/actions/runs/36408808526) 正常触发并成功。
-- 第 2 次推送：完整验收脚本（`verify/run-all.ps1` + `verify/smoke.mjs`），run [`36409794693`](https://github.com/Dylan5237/arckeep/actions/runs/36409794693)，**一次性跑通**，`scenes.json` 里 27 个场景全部 `PASS`（无 FAIL）。
+- 第 2 次推送：完整验收脚本（`verify/run-all.ps1` + `verify/smoke.mjs`），run [`36409794693`](https://github.com/Dylan5237/arckeep/actions/runs/36409794693)，**一次性跑通**。第一次运行时脚本的判定逻辑有误（X1-network 场景被错判为 PASS），所以当时的 scenes.json 汇总结果作废。各项结论以验证方人工核对和第 5 节补测为准。修正判定逻辑后重跑的结果是 25 PASS / 1 FAIL（X1-network，原因是复用长期进程，已由 5.1 的隔离重测取代）/ 2 INFO。
 - 第 3、4、5 次推送：分别是加报告文件、微调 X1 措辞、加 Release 冒烟骨架，都没有改验收脚本的核心逻辑，但 `on: push: branches: ['verify/issue-1']` 对任何推送都会重新触发整套 Windows 冒烟——run [`36411183904`](https://github.com/Dylan5237/arckeep/actions/runs/36411183904)、[`36411910710`](https://github.com/Dylan5237/arckeep/actions/runs/36411910710)、[`36412546852`](https://github.com/Dylan5237/arckeep/actions/runs/36412546852) 都又完整跑了一遍，结果都与第 2 次一致（`conclusion=success`）。曾尝试 `gh run cancel` 去省分钟，被拒绝（`HTTP 403: Resource not accessible by integration`，GitHub App 没有 `actions:write`），按硬性规则没有绕过，让它们跑完。
 - 第 6 次推送：加上 X1 隔离重测脚本、AC9 不滚动截图逻辑、Release 冒烟脚本，run [`36414606477`](https://github.com/Dylan5237/arckeep/actions/runs/36414606477)，**一次性跑通**，见第 5 节「补测」。**Actions 分钟预算：截至目前 8 次里用了 6 次（1 次权限探测 + 5 次实际推送，全部成功）。**
 
@@ -340,6 +340,8 @@ GraphQL: Resource not accessible by integration (repository.issues)
    见 `24-release-exe-sha256.txt`；脚本里也做了程序化比对，两个都通过，没有触发 `hash mismatch` 异常。
 4. **portable 启动冒烟**：不带参数启动 `Arckeep-0.1.0-portable.exe`，25 秒后 `Get-Process Arckeep` 有进程（4 个同名子进程，Electron 多进程模型），`MainWindowTitle="Arckeep"`。截图 `25-release-portable-launch.png` 显示主窗口正常打开在「等我处理」页。见 `25-release-portable-launch.json`。
 5. **安装包冒烟**：`Arckeep-Setup-0.1.0.exe /S` 静默安装，`exitCode=0`；在开始菜单找到 `Arckeep.lnk`，解析出目标 `C:\Users\runneradmin\AppData\Local\Programs\Arckeep\Arckeep.exe`；从这个快捷方式目标启动，20 秒后截图 `26-release-installed-launch.png`，同样显示主窗口正常打开。见 `26-release-installer.json`。
+
+   **附注（证据较弱，如实说明）**：`26-release-installed-launch.png` 和 `25-release-portable-launch.png` 逐字节相同。脚本在两次启动之间已经 `Stop-Process` 了所有 `Arckeep` 进程，所以相同的原因是画面确定、两张截图都是同一个「等我处理」默认页面、在同一分钟内截取，不是脚本没有真的重新启动。但 `26-release-installer.json` 没有记下已安装 exe 那次启动的进程路径（只记了 `exitCode`、快捷方式链接和目标），没有像 `25-release-portable-launch.json` 一样留下 `pids`/`title` 之类能证明「这次启动确实用的是已安装路径」的进程级证据，这一点记为证据较弱，建议下次补上启动后 `Get-Process Arckeep -FileVersionInfo` 或等效的进程路径记录。
 
 **判定：满足「从 Release 下载后三步内能跑起来」——下载 → 校验哈希 → 启动（或静默安装后启动），两种资产都在这三步内跑起来了。** `release-smoke-errors.txt` 没有产生（脚本里所有 `Write-Section` 都没有捕获到异常）。
 
