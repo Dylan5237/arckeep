@@ -1,0 +1,12 @@
+{
+  "name": "arckeep-verify-issue-1",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Read-only Windows smoke verification for Arckeep Issue #1 / PR #8 (fef78d5). Not part of the product.",
+  "scripts": {
+    "smoke": "node smoke.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.63.0"
+  }
+}

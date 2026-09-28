@@ -20,7 +20,47 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - name: probe-permission-only
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download PR #8 artifacts (run 36407287806, head fef78d5)
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          Write-Host "permission probe ok"
+          $run = gh api repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN_ID | ConvertFrom-Json
+          if ($run.head_sha -ne $env:TESTED_SHA) { throw "run head $($run.head_sha) != $env:TESTED_SHA" }
+          gh run download $env:SOURCE_RUN_ID --repo $env:GITHUB_REPOSITORY -n arckeep-windows -D artifact/windows
+          gh run download $env:SOURCE_RUN_ID --repo $env:GITHUB_REPOSITORY -n arckeep-win-unpacked -D artifact/unpacked
+          Get-ChildItem artifact -Recurse -Filter *.zip | ForEach-Object {
+            Expand-Archive $_.FullName -DestinationPath (Join-Path $_.DirectoryName $_.BaseName) -Force
+          }
+          New-Item -ItemType Directory -Force evidence | Out-Null
+          Get-ChildItem artifact -Recurse | Select-Object FullName,Length |
+            Format-Table -AutoSize | Out-String -Width 400 | Set-Content evidence/00-artifact-tree.txt
+          Get-FileHash (Get-ChildItem artifact -Recurse -Include *.exe) |
+            Format-Table | Out-String -Width 400 | Set-Content evidence/00-exe-sha256.txt
+
+      - name: Install Playwright (no browser download; Electron is already packaged)
+        shell: pwsh
+        working-directory: verify
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: |
+          npm init -y
+          npm i playwright@1
+
+      - name: Run verification
+        shell: pwsh
+        run: pwsh -File verify/run-all.ps1 -ArtifactDir artifact -EvidenceDir evidence
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-issue-1-evidence-fef78d5
+          path: evidence/
+          retention-days: 30
