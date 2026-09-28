@@ -19,7 +19,8 @@ export function defaultOverviewConfig(): OverviewConfig {
     reviewWaitDays: DEFAULT_REVIEW_WAIT_DAYS,
     staleRepoDays: DEFAULT_STALE_REPO_DAYS,
     autoPushWindowDays: DEFAULT_AUTO_PUSH_WINDOW_DAYS,
-    maxScopeRepos: DEFAULT_OVERVIEW_MAX_REPOS
+    maxScopeRepos: DEFAULT_OVERVIEW_MAX_REPOS,
+    showArchived: false
   }
 }
 
@@ -45,6 +46,7 @@ export function parseOverviewConfig(raw: unknown): OverviewConfig {
     reviewWaitDays: dayCount(raw.reviewWaitDays, defaults.reviewWaitDays, 'review 等待天数', 1, 3650),
     staleRepoDays: dayCount(raw.staleRepoDays, defaults.staleRepoDays, '陈旧天数', 1, 3650),
     autoPushWindowDays: dayCount(raw.autoPushWindowDays, defaults.autoPushWindowDays, '自动模式推送窗口', 0, 3650),
-    maxScopeRepos: dayCount(raw.maxScopeRepos, defaults.maxScopeRepos, '仓库数量上限', 1, 2000)
+    maxScopeRepos: dayCount(raw.maxScopeRepos, defaults.maxScopeRepos, '仓库数量上限', 1, 2000),
+    showArchived: raw.showArchived === true
   }
 }

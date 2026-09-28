@@ -209,6 +209,12 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: Scr
     await new Promise(resolve => setTimeout(resolve, 50))
   }
   if (!seen) throw new Error(`screenshot scene ${scene} did not show ${expected}`)
+  if (scene === 'overview-archived') {
+    await window.webContents.executeJavaScript(`
+      const details = document.querySelector('details.archived-group')
+      if (details) details.open = true
+    `)
+  }
   if (scene === 'overview' || scene === 'overview-narrow') {
     await window.webContents.executeJavaScript(`
       const details = document.querySelector('details.stale-group')

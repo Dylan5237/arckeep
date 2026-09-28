@@ -29,10 +29,12 @@ export function isEmptyRepo(facts: Pick<OverviewRepoFacts, 'isEmpty' | 'sizeKb' 
 
 /** Auto mode keeps recent pushes, empty repos, and repos already old enough to be 陈旧. */
 export function inAutoScope(
-  repo: { isEmpty: boolean, pushedAt: string | null },
+  repo: { isEmpty: boolean, pushedAt: string | null, archived?: boolean },
   config: OverviewConfig,
-  now: Date
+  now: Date,
+  includeArchived = false
 ): boolean {
+  if (repo.archived) return includeArchived
   if (repo.isEmpty) return true
   if (!repo.pushedAt) return false
   const age = waitingDays(repo.pushedAt, now)
@@ -85,9 +87,13 @@ export function classifyRepo(facts: OverviewRepoFacts, config: OverviewConfig, n
     openPrCount: facts.openPrCount,
     ciState: facts.error ? 'unknown' : facts.ciState,
     warnings: [],
+    archived: false,
     error: facts.error
   }
   if (facts.error) return base
+  if (facts.archived) {
+    return { ...base, archived: true, warnings: [] }
+  }
 
   const empty = isEmptyRepo(facts)
   const stale = !empty && Boolean(facts.pushedAt) && waitingDays(facts.pushedAt as string, now) >= config.staleRepoDays
@@ -174,9 +180,27 @@ function byName(left: OverviewRow, right: OverviewRow): number {
   return left.name.localeCompare(right.name)
 }
 
+export function overviewCounts(rows: readonly OverviewRow[]): { repos: number, attention: number } {
+  let repos = 0
+  let attention = 0
+  for (const row of rows) {
+    if (row.archived) continue
+    repos += 1
+    if (row.warnings.length > 0 || row.error) attention += 1
+  }
+  return { repos, attention }
+}
+
+export function selectOverviewRows(rows: readonly OverviewRow[], includeArchived: boolean): OverviewRow[] {
+  if (includeArchived) return [...rows]
+  return rows.filter(row => !row.archived)
+}
+
 export function sortOverviewRows(rows: readonly OverviewRow[]): OverviewRow[] {
-  const active = rows.filter(row => !isStaleGroup(row))
-  const stale = rows.filter(row => isStaleGroup(row))
+  const archived = rows.filter(row => row.archived).sort(byName)
+  const rest = rows.filter(row => !row.archived)
+  const active = rest.filter(row => !isStaleGroup(row))
+  const stale = rest.filter(row => isStaleGroup(row))
   active.sort((left, right) => {
     const rank = severity(left) - severity(right)
     if (rank !== 0) return rank
@@ -189,7 +213,7 @@ export function sortOverviewRows(rows: readonly OverviewRow[]): OverviewRow[] {
     if (time !== 0) return time
     return byName(left, right)
   })
-  return [...active, ...stale]
+  return [...active, ...stale, ...archived]
 }
 
 export function classifyOverview(

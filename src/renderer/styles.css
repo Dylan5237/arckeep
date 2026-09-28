@@ -506,12 +506,15 @@ button.chip {
 .chip-ci-failure { background: #F3D9D2; color: #7A2E22; }
 .chip-ci-pending { background: #D9E4F2; color: #1E3A5F; }
 .chip-ci-none { background: var(--arckeep-soft-stone); color: var(--arckeep-muted-graphite); }
+.chip-archived { background: var(--arckeep-soft-stone); color: var(--arckeep-muted-graphite); }
 
-.stale-group {
+.stale-group,
+.archived-group {
   margin-top: 12px;
 }
 
-.stale-group summary {
+.stale-group summary,
+.archived-group summary {
   cursor: pointer;
   margin: 0;
   padding: 4px 8px;

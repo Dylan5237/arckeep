@@ -31,6 +31,7 @@ function repo(input: {
   pulls?: OverviewPullRequest[]
   openPrCount?: number
   error?: string
+  archived?: boolean
 }): OverviewRepoFacts {
   const full = `${input.owner}/${input.name}`
   const empty = input.empty === true
@@ -47,6 +48,7 @@ function repo(input: {
     ciState: input.ci ?? (empty ? 'none' : 'success'),
     ciFailureUrl: input.ci === 'failure' ? `https://github.com/${full}/actions/runs/100${input.name.length}` : null,
     pullRequests: input.pulls ?? [],
+    archived: input.archived === true,
     error: input.error ?? null
   }
 }
@@ -86,6 +88,25 @@ export function sampleOverviewFacts(): OverviewRepoFacts[] {
 
 export function sampleOverviewRows(): OverviewRow[] {
   return classifyOverview(sampleOverviewFacts(), defaultOverviewConfig(), SAMPLE_NOW)
+}
+
+export function sampleOverviewArchivedRows(): OverviewRow[] {
+  const facts = [
+    repo({ owner: 'harbor', name: 'lumen', days: 1, ci: 'success' }),
+    repo({ owner: 'harbor', name: 'keel', days: 6, ci: 'failure', pulls: [pull('harbor', 'keel', 9, 6)] }),
+    repo({ owner: 'paperlane', name: 'margin', days: 20, ci: 'none' }),
+    repo({
+      owner: 'harbor',
+      name: 'mothball',
+      days: 400,
+      ci: 'failure',
+      archived: true,
+      pulls: [pull('harbor', 'mothball', 2, 40)]
+    }),
+    repo({ owner: 'paperlane', name: 'shell', empty: true, archived: true, ci: 'none' }),
+    repo({ owner: 'northline', name: 'closed', days: 200, archived: true, ci: 'none' })
+  ]
+  return classifyOverview(facts, { ...defaultOverviewConfig(), showArchived: true }, SAMPLE_NOW)
 }
 
 export function sampleOverviewErrorRows(): OverviewRow[] {

@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import { defaultAppDataDir, settingsFilePath, userDataDir } from '../main/paths.js'
 import { loadSettings } from '../main/settings-store.js'
-import { classifyOverview } from '../shared/overview/classify.js'
+import { classifyOverview, selectOverviewRows } from '../shared/overview/classify.js'
 import { defaultOverviewConfig, parseOverviewConfig } from '../shared/overview/rules.js'
 import type { OverviewRepoFacts, OverviewRow } from '../shared/overview/types.js'
 import { resolveWaitingToken } from '../waiting/token.js'
@@ -30,6 +30,7 @@ export function toOverviewJson(rows: readonly OverviewRow[]): OverviewRow[] {
     lastCommitAt: row.lastCommitAt,
     openPrCount: row.openPrCount,
     ciState: row.ciState,
+    archived: row.archived,
     warnings: row.warnings.map(warning => ({
       kind: warning.kind,
       label: warning.label,
@@ -41,23 +42,24 @@ export function toOverviewJson(rows: readonly OverviewRow[]): OverviewRow[] {
   }))
 }
 
-function fixtureRows(raw: unknown): OverviewRow[] {
+function fixtureRows(raw: unknown, includeArchived: boolean): OverviewRow[] {
   const record = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
   const now = typeof record.now === 'string' ? new Date(record.now) : new Date()
   const config = record.config === undefined ? defaultOverviewConfig() : parseOverviewConfig(record.config)
   const facts = Array.isArray(record.facts) ? record.facts as OverviewRepoFacts[] : []
-  return classifyOverview(facts, config, now)
+  return selectOverviewRows(classifyOverview(facts, config, now), includeArchived)
 }
 
 export async function runOverviewCli(argv: readonly string[], io: CliIo): Promise<number> {
   if (argv.includes('--help')) {
-    io.stderr('用法：npm run overview -- --json [--fixture 文件]')
+    io.stderr('用法：npm run overview -- --json [--include-archived] [--fixture 文件]')
     return 0
   }
+  const includeArchived = argv.includes('--include-archived')
   const fixturePath = readFlag(argv, '--fixture')
   if (fixturePath) {
     const absolute = path.resolve(fixturePath)
-    const rows = fixtureRows(JSON.parse(readFileSync(absolute, 'utf8')) as unknown)
+    const rows = fixtureRows(JSON.parse(readFileSync(absolute, 'utf8')) as unknown, includeArchived)
     io.stdout(`${JSON.stringify(toOverviewJson(rows), null, 2)}\n`)
     return 0
   }
@@ -78,7 +80,8 @@ export async function runOverviewCli(argv: readonly string[], io: CliIo): Promis
     config: settings.overview,
     watchedRepos: settings.watchedRepos,
     now: new Date(),
-    fetchImpl: io.fetchImpl
+    fetchImpl: io.fetchImpl,
+    includeArchived
   })
   if (result.auth === 'invalid') io.stderr('GitHub 认证无效或已过期。')
   for (const error of result.errors) io.stderr(`${error.source}: ${error.message}`)

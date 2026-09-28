@@ -44,6 +44,8 @@ export function renderOverviewSettings(state: AppState, rerender: () => Promise<
   const staleRepoDays = numberField('陈旧天数', config.staleRepoDays)
   const autoPushWindowDays = numberField('自动模式推送窗口', config.autoPushWindowDays)
   const maxScopeRepos = numberField('仓库数量上限', config.maxScopeRepos)
+  const showArchived = el('input', { type: 'checkbox' })
+  showArchived.checked = config.showArchived
   const save = el('button', { type: 'button', class: 'primary' }, ['保存项目总览'])
   save.addEventListener('click', () => {
     const next: OverviewConfig = {
@@ -51,7 +53,8 @@ export function renderOverviewSettings(state: AppState, rerender: () => Promise<
       reviewWaitDays: Number(reviewWaitDays.value),
       staleRepoDays: Number(staleRepoDays.value),
       autoPushWindowDays: Number(autoPushWindowDays.value),
-      maxScopeRepos: Number(maxScopeRepos.value)
+      maxScopeRepos: Number(maxScopeRepos.value),
+      showArchived: showArchived.checked
     }
     void window.arckeep.setOverview(next).then(async result => {
       if (!result.ok) {
@@ -77,6 +80,8 @@ export function renderOverviewSettings(state: AppState, rerender: () => Promise<
     el('h3', {}, ['自动模式推送窗口']),
     el('p', { class: 'hint' }, ['关注列表为空时，只自动纳入这么多天内有推送的仓库，外加空仓和已经陈旧的仓库。']),
     autoPushWindowDays,
+    el('label', { class: 'check' }, [showArchived, '显示已归档的仓库']),
+    el('p', { class: 'hint' }, ['默认不列出 GitHub 上已归档的仓库，关注列表里的也一样，并且不标停滞、卡住、空仓或陈旧。打开后它们出现在折叠的「已归档」分组里，只有一颗灰色标签。']),
     el('h3', {}, ['仓库数量上限']),
     el('p', { class: 'hint' }, ['达到上限时这一页会提示，不会悄悄丢掉其余仓库。']),
     maxScopeRepos,

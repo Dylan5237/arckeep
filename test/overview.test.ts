@@ -6,7 +6,7 @@ import { OverviewService } from '../src/main/overview-service.js'
 import { overviewCachePath, settingsFilePath } from '../src/main/paths.js'
 import { SettingsService } from '../src/main/settings-service.js'
 import type { SecretBox } from '../src/main/token-store.js'
-import { classifyOverview, inAutoScope, isEmptyRepo, isReviewStuck } from '../src/shared/overview/classify.js'
+import { classifyOverview, inAutoScope, isEmptyRepo, isReviewStuck, overviewCounts, selectOverviewRows } from '../src/shared/overview/classify.js'
 import { defaultOverviewConfig, parseOverviewConfig } from '../src/shared/overview/rules.js'
 import type { OverviewConfig, OverviewPullRequest, OverviewRepoFacts, OverviewRow } from '../src/shared/overview/types.js'
 import { runOverviewCli } from '../src/overview/cli.js'
@@ -36,6 +36,7 @@ function facts(patch: Partial<OverviewRepoFacts> = {}): OverviewRepoFacts {
     ciState: 'success',
     ciFailureUrl: null,
     pullRequests: [],
+    archived: false,
     error: null,
     ...patch
   }
@@ -178,6 +179,35 @@ describe('overview warnings', () => {
     expect(named.map(row => kinds(row))).toEqual([['停滞'], ['停滞']])
   })
 
+  it('never warns an archived repository and omits it unless inclusion is requested', () => {
+    const archived = facts({
+      name: 'example/old',
+      url: 'https://github.com/example/old',
+      archived: true,
+      isEmpty: true,
+      sizeKb: 0,
+      hasDefaultBranchCommit: false,
+      pushedAt: ago(400),
+      lastCommitAt: ago(400),
+      ciState: 'failure',
+      ciFailureUrl: 'https://github.com/example/old/actions/runs/1',
+      openPrCount: 1,
+      pullRequests: [pull({ url: 'https://github.com/example/old/pull/2', createdAt: ago(30) })]
+    })
+    const live = facts({
+      name: 'example/live',
+      url: 'https://github.com/example/live',
+      pushedAt: ago(100),
+      lastCommitAt: ago(100)
+    })
+    const rows = classifyOverview([archived, live], config(), NOW)
+    expect(rows.map(row => row.name)).toEqual(['example/live', 'example/old'])
+    expect(rows[1]).toMatchObject({ archived: true, warnings: [] })
+    expect(selectOverviewRows(rows, false).map(row => row.name)).toEqual(['example/live'])
+    expect(overviewCounts(rows)).toEqual({ repos: 1, attention: 1 })
+    expect(overviewCounts(selectOverviewRows(rows, true)).repos).toBe(1)
+  })
+
   it('sorts active warnings ahead of quiet repos and keeps 陈旧 after them, oldest first', () => {
     const rows = classifyOverview([
       facts({ name: 'example/clean', lastCommitAt: ago(1), pushedAt: ago(1) }),
@@ -221,6 +251,10 @@ describe('overview warnings', () => {
     expect(inAutoScope({ isEmpty: false, pushedAt: ago(90) }, rules, NOW)).toBe(true)
     expect(inAutoScope({ isEmpty: true, pushedAt: null }, rules, NOW)).toBe(true)
     expect(inAutoScope({ isEmpty: false, pushedAt: null }, rules, NOW)).toBe(false)
+    expect(inAutoScope({ isEmpty: false, pushedAt: ago(1), archived: true }, rules, NOW)).toBe(false)
+    expect(inAutoScope({ isEmpty: true, pushedAt: null, archived: true }, rules, NOW, true)).toBe(true)
+    expect(defaultOverviewConfig().showArchived).toBe(false)
+    expect(parseOverviewConfig({ showArchived: true }).showArchived).toBe(true)
     const defaults = defaultOverviewConfig()
     expect(JSON.stringify(defaults)).not.toContain('Dylan5237/')
     const source = [
@@ -234,6 +268,55 @@ describe('overview warnings', () => {
 })
 
 describe('overview loading', () => {
+  it('skips an archived watch-list repository until inclusion is requested', async () => {
+    const node = (archived: boolean) => ({
+      nameWithOwner: archived ? 'example/old' : 'example/live',
+      url: `https://github.com/example/${archived ? 'old' : 'live'}`,
+      isEmpty: false,
+      isArchived: archived,
+      diskUsage: 8,
+      pushedAt: ago(archived ? 400 : 2),
+      defaultBranchRef: {
+        target: {
+          oid: 'abc',
+          committedDate: ago(archived ? 400 : 2),
+          statusCheckRollup: { state: archived ? 'FAILURE' : 'SUCCESS' }
+        }
+      },
+      pullRequests: archived
+        ? { totalCount: 1, nodes: [{ number: 2, title: 'old', url: 'https://github.com/example/old/pull/2', isDraft: false, createdAt: ago(40), reviewDecision: 'REVIEW_REQUIRED', reviews: { totalCount: 0 } }] }
+        : { totalCount: 0, nodes: [] }
+    })
+    const fetchImpl = async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { variables: Record<string, string> }
+      const names = Object.entries(body.variables).filter(([key]) => key.startsWith('n')).map(([, value]) => value)
+      const data: Record<string, unknown> = {}
+      names.forEach((name, index) => { data[`r${index}`] = node(name === 'old') })
+      return jsonResponse({ data })
+    }
+    const hidden = await loadOverview({
+      token: 'test-token',
+      config: config({ showArchived: false }),
+      watchedRepos: ['example/live', 'example/old'],
+      now: NOW,
+      fetchImpl
+    })
+    expect(hidden.rows.map(row => row.name)).toEqual(['example/live'])
+    const shown = await loadOverview({
+      token: 'test-token',
+      config: config({ showArchived: true }),
+      watchedRepos: ['example/live', 'example/old'],
+      now: NOW,
+      includeArchived: true,
+      fetchImpl
+    })
+    expect(shown.rows.map(row => [row.name, row.archived, row.warnings.length])).toEqual([
+      ['example/live', false, 0],
+      ['example/old', true, 0]
+    ])
+    expect(overviewCounts(shown.rows)).toEqual({ repos: 1, attention: 0 })
+  })
+
   it('keeps a missing repository on its own row', async () => {
     const payload = {
       data: {
@@ -370,6 +453,76 @@ describe('overview loading', () => {
     expect(seen.sort()).toEqual(['ancient', 'blank', 'recent'])
   })
 
+  it('keeps archived repositories out of auto mode unless inclusion is requested', async () => {
+    const seen: string[] = []
+    const fetchImpl = async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { query: string, variables: Record<string, string> }
+      if (body.query.includes('repositories(')) {
+        return jsonResponse({
+          data: {
+            viewer: {
+              repositories: {
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: [
+                  { nameWithOwner: 'example/recent', isEmpty: false, pushedAt: ago(2), isArchived: false },
+                  { nameWithOwner: 'example/vault', isEmpty: false, pushedAt: ago(1), isArchived: true },
+                  { nameWithOwner: 'example/moth', isEmpty: true, pushedAt: ago(200), isArchived: true }
+                ]
+              }
+            }
+          }
+        })
+      }
+      if (body.query.includes('watching(')) {
+        return jsonResponse({
+          data: { viewer: { watching: { pageInfo: { hasNextPage: false }, nodes: [] } } }
+        })
+      }
+      const names = Object.entries(body.variables).filter(([key]) => key.startsWith('n')).map(([, value]) => value)
+      for (const name of names) seen.push(name)
+      const data: Record<string, unknown> = {}
+      names.forEach((name, index) => {
+        data[`r${index}`] = {
+          nameWithOwner: `example/${name}`,
+          url: `https://github.com/example/${name}`,
+          isEmpty: name === 'moth',
+          isArchived: name !== 'recent',
+          diskUsage: name === 'moth' ? 0 : 8,
+          pushedAt: ago(name === 'moth' ? 200 : 1),
+          defaultBranchRef: name === 'moth'
+            ? null
+            : { target: { oid: 'abc', committedDate: ago(1), statusCheckRollup: { state: 'FAILURE' } } },
+          pullRequests: { totalCount: 0, nodes: [] }
+        }
+      })
+      return jsonResponse({ data })
+    }
+    const hidden = await loadOverview({
+      token: 'test-token',
+      config: config({ autoPushWindowDays: 30, staleRepoDays: 90 }),
+      watchedRepos: [],
+      now: NOW,
+      fetchImpl
+    })
+    expect(hidden.rows.map(row => row.name)).toEqual(['example/recent'])
+    expect(seen).toEqual(['recent'])
+    seen.length = 0
+    const shown = await loadOverview({
+      token: 'test-token',
+      config: config({ showArchived: true, autoPushWindowDays: 30, staleRepoDays: 90 }),
+      watchedRepos: [],
+      now: NOW,
+      includeArchived: true,
+      fetchImpl
+    })
+    expect(shown.rows.map(row => [row.name, row.archived, row.warnings.length])).toEqual([
+      ['example/recent', false, 1],
+      ['example/moth', true, 0],
+      ['example/vault', true, 0]
+    ])
+    expect(overviewCounts(shown.rows)).toEqual({ repos: 1, attention: 1 })
+  })
+
   it('keeps the previous list when GitHub rate limits, and does not call GitHub without a token', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'arckeep-overview-cache-'))
     const file = settingsFilePath(dir)
@@ -441,6 +594,7 @@ describe('overview cli', () => {
         openPrCount: expect.any(Number),
         ciState: expect.any(String)
       }))
+      expect(row.archived).toBe(false)
       expect(Array.isArray(row.warnings)).toBe(true)
       for (const warning of row.warnings) {
         expect(warning.targets.every(target => target.url.startsWith('https://github.com/'))).toBe(true)
@@ -459,6 +613,30 @@ describe('overview cli', () => {
       targets: [{ url: 'https://github.com/example/stuck/pull/8' }]
     })
     expect(stuck?.lastCommitAt).toBe('2026-09-27T00:00:00.000Z')
+  })
+
+  it('leaves archived repositories out unless --include-archived', async () => {
+    const run = async (argv: string[]) => {
+      let output = ''
+      const code = await runOverviewCli(argv, {
+        stdout: text => { output += text },
+        stderr: () => {},
+        env: {},
+        fetchImpl: async () => { throw new Error('network') }
+      })
+      expect(code).toBe(0)
+      return JSON.parse(output) as OverviewRow[]
+    }
+    const hidden = await run(['--json', '--fixture', path.join('test', 'fixtures', 'overview-cli.json')])
+    expect(hidden.map(row => row.name)).toEqual(['example/stalled', 'example/stuck'])
+    const shown = await run(['--json', '--include-archived', '--fixture', path.join('test', 'fixtures', 'overview-cli.json')])
+    const archived = shown.find(row => row.name === 'example/archived')
+    expect(archived).toMatchObject({
+      archived: true,
+      warnings: [],
+      ciState: 'failure'
+    })
+    expect(shown.filter(row => !row.archived).map(row => row.name)).toEqual(['example/stalled', 'example/stuck'])
   })
 })
 

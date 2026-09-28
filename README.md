@@ -26,7 +26,7 @@ npm start
 npm run overview -- --json
 ```
 
-`npm run overview -- --json` 只读查询项目总览，认证用 `gh auth token` 或环境变量 `GITHUB_TOKEN`。`--fixture` 不访问网络。
+`npm run overview -- --json` 只读查询项目总览，认证用 `gh auth token` 或环境变量 `GITHUB_TOKEN`。默认不含已归档仓库；`--include-archived` 把它们加回来，并带 `archived: true`。`--fixture` 不访问网络。
 
 设置写在 `app.getPath('userData')`。应用启动时把该目录指到 `%APPDATA%\Arckeep\`（目录名是 `Arckeep`，不是 package 名的小写）。GitHub token 经 Electron `safeStorage` 加密后写入 `settings.json`，不写日志、不以明文落盘。本机 `gh auth token` 可用时优先使用 gh CLI，不把这份 token 再存一份。
 

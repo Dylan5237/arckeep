@@ -1,4 +1,4 @@
-import { isStaleGroup } from '../shared/overview/classify'
+import { isStaleGroup, overviewCounts } from '../shared/overview/classify'
 import { localAbsolute, localClock, relativeLabel } from '../shared/waiting/local-time'
 import type { CiState, OverviewRow, OverviewSnapshot, OverviewWarning } from '../shared/overview/types'
 
@@ -52,12 +52,14 @@ function paint(host: HTMLElement, snapshot: OverviewSnapshot, handlers: {
   settings: () => void
   open: (url: string) => void
 }): void {
-  const active = snapshot.rows.filter(row => !isStaleGroup(row))
-  const stale = snapshot.rows.filter(row => isStaleGroup(row))
-  const warned = snapshot.rows.filter(row => row.warnings.length > 0 || row.error).length
-  const summary = snapshot.rows.length === 0
+  const archived = snapshot.rows.filter(row => row.archived)
+  const visible = snapshot.rows.filter(row => !row.archived)
+  const active = visible.filter(row => !isStaleGroup(row))
+  const stale = visible.filter(row => isStaleGroup(row))
+  const counts = overviewCounts(snapshot.rows)
+  const summary = counts.repos === 0 && archived.length === 0
     ? '打开这一页就会刷新。关注列表留空时走自动模式。'
-    : `${snapshot.rows.length} 个仓库 · ${warned} 个需要看一眼`
+    : `${counts.repos} 个仓库 · ${counts.attention} 个需要看一眼`
   const refreshed = snapshot.refreshedAt
     ? relativeLabel(snapshot.refreshedAt, new Date())
     : '尚未刷新'
@@ -102,15 +104,23 @@ function paint(host: HTMLElement, snapshot: OverviewSnapshot, handlers: {
   }
   if (snapshot.refreshing && snapshot.rows.length === 0) {
     page.append(el('p', { class: 'waiting-loading', role: 'status' }, ['正在刷新…']))
-  } else if (!snapshot.refreshing && snapshot.rows.length === 0 && snapshot.auth === 'ok') {
+  } else if (!snapshot.refreshing && counts.repos === 0 && archived.length === 0 && snapshot.auth === 'ok') {
     page.append(el('p', { class: 'waiting-empty' }, ['没有可显示的仓库']))
-  } else if (snapshot.rows.length > 0) {
+  } else if (counts.repos > 0 || archived.length > 0) {
     const list = el('div', { class: 'overview-list' })
     for (const row of active) list.append(renderRow(row, handlers.open))
     page.append(list)
     if (stale.length > 0) page.append(renderStale(stale, handlers.open))
+    if (archived.length > 0) page.append(renderArchived(archived, handlers.open))
   }
   host.replaceChildren(page)
+}
+
+function renderArchived(rows: readonly OverviewRow[], open: (url: string) => void): HTMLElement {
+  const details = el('details', { class: 'archived-group' })
+  details.append(el('summary', {}, [`已归档 · ${rows.length}`]))
+  for (const row of rows) details.append(renderRow(row, open))
+  return details
 }
 
 function renderStale(rows: readonly OverviewRow[], open: (url: string) => void): HTMLElement {
@@ -132,10 +142,14 @@ function renderRow(row: OverviewRow, open: (url: string) => void): HTMLElement {
   ])
   title.addEventListener('click', () => open(row.url))
   const chips = el('span', { class: 'reason-chips' })
-  for (const item of row.warnings) chips.append(warningChip(item, open))
-  const stuck = row.warnings.some(item => item.kind === '卡住')
-  if (!row.error && !stuck && (row.ciState === 'success' || row.ciState === 'pending' || row.ciState === 'none')) {
-    chips.append(el('span', { class: `chip chip-ci chip-ci-${row.ciState}` }, [CI_LABEL[row.ciState]]))
+  if (row.archived) {
+    chips.append(el('span', { class: 'chip chip-archived' }, ['已归档']))
+  } else {
+    for (const item of row.warnings) chips.append(warningChip(item, open))
+    const stuck = row.warnings.some(item => item.kind === '卡住')
+    if (!row.error && !stuck && (row.ciState === 'success' || row.ciState === 'pending' || row.ciState === 'none')) {
+      chips.append(el('span', { class: `chip chip-ci chip-ci-${row.ciState}` }, [CI_LABEL[row.ciState]]))
+    }
   }
   const metaText = row.error
     ? row.error

@@ -17,6 +17,8 @@ export interface OverviewConfig {
    */
   autoPushWindowDays: number
   maxScopeRepos: number
+  /** When false, GitHub archived repositories are omitted entirely. */
+  showArchived: boolean
 }
 
 export interface OverviewWarningTarget {
@@ -59,6 +61,8 @@ export interface OverviewRepoFacts {
   /** Link to the failing Actions run when ciState is failure. */
   ciFailureUrl: string | null
   pullRequests: OverviewPullRequest[]
+  /** GitHub isArchived. Archived repos never receive overview warnings. */
+  archived: boolean
   error: string | null
 }
 
@@ -69,6 +73,7 @@ export interface OverviewRow {
   openPrCount: number
   ciState: CiState
   warnings: OverviewWarning[]
+  archived: boolean
   error: string | null
 }
 

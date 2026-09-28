@@ -1,4 +1,4 @@
-import { sampleOverviewErrorRows, sampleOverviewRows } from '../shared/overview/sample.js'
+import { sampleOverviewArchivedRows, sampleOverviewErrorRows, sampleOverviewRows } from '../shared/overview/sample.js'
 import type { OverviewSnapshot } from '../shared/overview/types.js'
 import type { ScreenshotScene } from './screenshot-scene.js'
 
@@ -22,6 +22,7 @@ export function screenshotOverviewSnapshot(scene: ScreenshotScene): OverviewSnap
   if (scene === 'overview-invalid-token') return base({ auth: 'invalid', refreshedAt: null, rows: [] })
   if (scene === 'overview-loading') return base({ refreshing: true, refreshedAt: null, rows: [] })
   if (scene === 'overview-row-error') return base({ rows: sampleOverviewErrorRows() })
+  if (scene === 'overview-archived') return base({ rows: sampleOverviewArchivedRows() })
   return base({})
 }
 

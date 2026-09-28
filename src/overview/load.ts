@@ -1,5 +1,5 @@
 import { githubData, githubErrorMessages, githubGraphql } from '../github/client.js'
-import { classifyOverview, inAutoScope, mapCiState } from '../shared/overview/classify.js'
+import { classifyOverview, inAutoScope, mapCiState, selectOverviewRows } from '../shared/overview/classify.js'
 import type { OverviewConfig, OverviewPullRequest, OverviewRepoFacts, OverviewRow, OverviewSourceError } from '../shared/overview/types.js'
 import { GithubAuthError, GithubRateLimitError, earlierReset } from '../shared/waiting/rate-limit.js'
 
@@ -19,6 +19,7 @@ interface ListedRepo {
   name: string
   isEmpty: boolean
   pushedAt: string | null
+  archived: boolean
 }
 
 function splitRepo(full: string): { owner: string, name: string } | null {
@@ -48,7 +49,8 @@ function readListed(node: unknown): ListedRepo | null {
   return {
     name,
     isEmpty: 'isEmpty' in node && node.isEmpty === true,
-    pushedAt: 'pushedAt' in node && typeof node.pushedAt === 'string' ? node.pushedAt : null
+    pushedAt: 'pushedAt' in node && typeof node.pushedAt === 'string' ? node.pushedAt : null,
+    archived: 'isArchived' in node && node.isArchived === true
   }
 }
 
@@ -71,7 +73,7 @@ async function discoverRepos(
         viewer {
           ${field} {
             pageInfo { hasNextPage endCursor }
-            nodes { nameWithOwner isEmpty pushedAt }
+            nodes { nameWithOwner isEmpty pushedAt isArchived }
           }
         }
       }
@@ -105,6 +107,7 @@ const REPO_FIELDS = `
   nameWithOwner
   url
   isEmpty
+  isArchived
   diskUsage
   pushedAt
   defaultBranchRef {
@@ -166,6 +169,7 @@ function errorFacts(name: string, message: string): OverviewRepoFacts {
     ciState: 'unknown',
     ciFailureUrl: null,
     pullRequests: [],
+    archived: false,
     error: message
   }
 }
@@ -254,6 +258,7 @@ export function parseRepositoryNode(node: unknown, requestedName: string): Overv
     ciState: mapCiState(rollupState),
     ciFailureUrl,
     pullRequests,
+    archived: 'isArchived' in node && node.isArchived === true,
     error: null
   }
 }
@@ -323,8 +328,11 @@ export async function loadOverview(options: {
   watchedRepos: readonly string[]
   now: Date
   fetchImpl?: typeof fetch
+  /** Defaults to the settings toggle. The CLI passes this explicitly. */
+  includeArchived?: boolean
 }): Promise<OverviewLoadResult> {
   const fetchImpl = options.fetchImpl ?? fetch
+  const includeArchived = options.includeArchived ?? options.config.showArchived
   const notices: string[] = []
   const errors: OverviewSourceError[] = []
   let rateLimitResetAt: string | null = null
@@ -358,7 +366,7 @@ export async function loadOverview(options: {
         const key = repo.name.toLowerCase()
         if (seen.has(key)) continue
         seen.add(key)
-        if (!inAutoScope(repo, options.config, options.now)) continue
+        if (!inAutoScope(repo, options.config, options.now, includeArchived)) continue
         names.push(repo.name)
       }
     }
@@ -402,7 +410,7 @@ export async function loadOverview(options: {
     errors.push({ source: '仓库', message: 'GitHub 速率限制，本页保留上次结果' })
   }
   return {
-    rows: classifyOverview(loaded.facts, options.config, options.now),
+    rows: selectOverviewRows(classifyOverview(loaded.facts, options.config, options.now), includeArchived),
     fresh: !loaded.aborted,
     rateLimitResetAt,
     auth: 'ok',
