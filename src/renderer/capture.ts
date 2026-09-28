@@ -1,3 +1,4 @@
+import { captureDraftOnEscape } from '../shared/todos/capture-draft'
 import { parseCaptureShorthand } from '../shared/todos/parse-capture'
 
 const textInput = document.querySelector<HTMLInputElement>('#text')
@@ -25,6 +26,7 @@ const stayOpen = params.get('stay') === '1'
 let knownRepos: string[] = []
 let saving = false
 let reposReady = Promise.resolve()
+let persistChain: Promise<void> = Promise.resolve()
 
 function placeCaret(): void {
   const active = document.activeElement === text
@@ -50,15 +52,22 @@ function currentDraft() {
   return { text: text.value, repo: repo.value, waiting: waiting.checked }
 }
 
-async function persistDraft(): Promise<void> {
-  await window.arckeep.setCaptureDraft(currentDraft())
+function persistDraft(): Promise<void> {
+  const job = persistChain.then(async () => {
+    if (saving) return
+    await window.arckeep.setCaptureDraft(currentDraft())
+  })
+  persistChain = job.then(() => undefined, () => undefined)
+  return job
 }
 
-async function dismiss(): Promise<void> {
+async function dismiss(onEscape = false): Promise<void> {
   if (saving) return
   saving = true
   try {
-    await persistDraft()
+    await persistChain
+    const draft = onEscape ? captureDraftOnEscape(currentDraft()) : currentDraft()
+    await window.arckeep.setCaptureDraft(draft)
     await window.arckeep.closeCapture('dismiss')
   } finally {
     saving = false
@@ -149,7 +158,7 @@ document.addEventListener('selectionchange', () => placeCaret())
 window.addEventListener('keydown', event => {
   if (event.key !== 'Escape') return
   event.preventDefault()
-  void dismiss()
+  void dismiss(true)
 })
 
 if (!stayOpen) {
