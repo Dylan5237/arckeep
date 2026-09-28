@@ -34,6 +34,7 @@ function facts(patch: Partial<OverviewRepoFacts> = {}): OverviewRepoFacts {
     lastCommitAt: ago(1),
     openPrCount: 0,
     ciState: 'success',
+    ciFailureUrl: null,
     pullRequests: [],
     error: null,
     ...patch
@@ -86,8 +87,13 @@ describe('overview warnings', () => {
       pushedAt: ago(14),
       lastCommitAt: ago(14)
     })], rules, NOW)[0]
-    expect(kinds(stalled!)).toEqual(['停滞'])
-    expect(stalled?.warnings[0]?.targets).toEqual([{ url: 'https://github.com/example/quiet' }])
+    expect(stalled?.warnings[0]).toMatchObject({
+      kind: '停滞',
+      label: '停滞 14 天',
+      days: 14,
+      hint: '超过 14 天没有新提交',
+      targets: [{ url: 'https://github.com/example/quiet' }]
+    })
 
     const recent = classifyOverview([facts({ pushedAt: ago(13), lastCommitAt: ago(13) })], rules, NOW)[0]
     expect(kinds(recent!)).toEqual([])
@@ -96,8 +102,44 @@ describe('overview warnings', () => {
       openPrCount: 1,
       pullRequests: [pull({ createdAt: ago(3) })]
     })], rules, NOW)[0]
-    expect(kinds(stuck!)).toEqual(['卡住'])
-    expect(stuck?.warnings[0]?.targets).toEqual([{ url: 'https://github.com/example/demo/pull/4' }])
+    expect(stuck?.warnings[0]).toMatchObject({
+      kind: '卡住',
+      label: '卡住：PR 等 review 3 天',
+      days: 3,
+      hint: '超过 3 天没有 review',
+      targets: [{ url: 'https://github.com/example/demo/pull/4' }]
+    })
+    const several = classifyOverview([facts({
+      openPrCount: 3,
+      pullRequests: [
+        pull({ number: 2, url: 'https://github.com/example/demo/pull/2', createdAt: ago(4) }),
+        pull({ number: 9, url: 'https://github.com/example/demo/pull/9', createdAt: ago(10) }),
+        pull({ number: 3, url: 'https://github.com/example/demo/pull/3', createdAt: ago(6) })
+      ]
+    })], rules, NOW)[0]
+    expect(several?.warnings.filter(item => item.label.startsWith('卡住：PR'))).toEqual([
+      expect.objectContaining({
+        label: '卡住：PR 等 review 10 天，等 2 个',
+        days: 10,
+        targets: [{ url: 'https://github.com/example/demo/pull/9' }]
+      })
+    ])
+    const failedCi = classifyOverview([facts({
+      ciState: 'failure',
+      ciFailureUrl: 'https://github.com/example/demo/actions/runs/42',
+      lastCommitAt: ago(1),
+      pushedAt: ago(1)
+    })], rules, NOW)[0]
+    expect(failedCi?.warnings).toEqual([
+      expect.objectContaining({
+        kind: '卡住',
+        label: '卡住：CI 失败',
+        days: null,
+        hint: '默认分支最近一次检查失败',
+        targets: [{ url: 'https://github.com/example/demo/actions/runs/42' }]
+      })
+    ])
+    expect(classifyOverview([facts({ ciState: 'success' })], rules, NOW)[0]?.warnings).toEqual([])
     expect(isReviewStuck(pull({ createdAt: ago(2) }), rules, NOW)).toBe(false)
     expect(isReviewStuck(pull({ isDraft: true, createdAt: ago(30) }), rules, NOW)).toBe(false)
     expect(isReviewStuck(pull({ reviewDecision: 'APPROVED', approvedReviewCount: 1 }), rules, NOW)).toBe(false)
@@ -149,18 +191,26 @@ describe('overview warnings', () => {
         pullRequests: [pull({ url: 'https://github.com/example/stuck/pull/8', createdAt: ago(9) })]
       }),
       facts({ name: 'example/quiet', lastCommitAt: ago(20), pushedAt: ago(20) }),
-      facts({ name: 'example/failed', lastCommitAt: ago(2), pushedAt: ago(2), ciState: 'failure' }),
+      facts({
+        name: 'example/failed',
+        url: 'https://github.com/example/failed',
+        lastCommitAt: ago(2),
+        pushedAt: ago(2),
+        ciState: 'failure'
+      }),
       facts({ name: 'example/missing', error: '仓库不存在或无权访问', lastCommitAt: null, pushedAt: null, ciState: 'unknown' })
     ], config(), NOW)
     expect(rows.map(row => row.name)).toEqual([
+      'example/failed',
       'example/stuck',
       'example/quiet',
-      'example/failed',
       'example/clean',
       'example/missing',
       'example/older-stale',
       'example/stale'
     ])
+    expect(rows[0]?.warnings[0]?.label).toBe('卡住：CI 失败')
+    expect(rows[0]?.warnings[0]?.targets).toEqual([{ url: 'https://github.com/example/failed/actions' }])
     expect(rows.at(-1)?.warnings.map(warning => warning.kind)).toEqual(['陈旧'])
   })
 
@@ -383,7 +433,7 @@ describe('overview cli', () => {
     })
     expect(code).toBe(0)
     const rows = JSON.parse(output) as OverviewRow[]
-    expect(rows.map(row => row.name)).toEqual(['example/stuck', 'example/stalled'])
+    expect(rows.map(row => row.name)).toEqual(['example/stalled', 'example/stuck'])
     for (const row of rows) {
       expect(row).toEqual(expect.objectContaining({
         name: expect.any(String),
@@ -396,9 +446,19 @@ describe('overview cli', () => {
         expect(warning.targets.every(target => target.url.startsWith('https://github.com/'))).toBe(true)
       }
     }
-    expect(rows[0]?.warnings[0]).toMatchObject({ kind: '卡住', targets: [{ url: 'https://github.com/example/stuck/pull/8' }] })
-    expect(rows[1]?.lastCommitAt).toBe('2026-09-01T00:00:00.000Z')
-    expect(rows[1]?.ciState).toBe('failure')
+    const stalled = rows.find(row => row.name === 'example/stalled')
+    const stuck = rows.find(row => row.name === 'example/stuck')
+    expect(stalled?.warnings.map(warning => warning.label)).toEqual(['卡住：CI 失败', '停滞 27 天'])
+    expect(stalled?.warnings[1]).toMatchObject({ days: 27, targets: [{ url: 'https://github.com/example/stalled' }] })
+    expect(stalled?.ciState).toBe('failure')
+    expect(stuck?.warnings[0]).toMatchObject({
+      kind: '卡住',
+      label: '卡住：PR 等 review 8 天',
+      days: 8,
+      hint: '超过 3 天没有 review',
+      targets: [{ url: 'https://github.com/example/stuck/pull/8' }]
+    })
+    expect(stuck?.lastCommitAt).toBe('2026-09-27T00:00:00.000Z')
   })
 })
 
@@ -416,5 +476,37 @@ describe('repository node', () => {
     expect(parsed.hasDefaultBranchCommit).toBe(false)
     expect(parsed.sizeKb).toBe(0)
     expect(kinds(classifyOverview([parsed], config(), NOW)[0]!)).toContain('空仓')
+  })
+
+  it('points a failing rollup at the Actions run, not a pull request number', () => {
+    const parsed = parseRepositoryNode({
+      nameWithOwner: 'example/demo',
+      url: 'https://github.com/example/demo',
+      isEmpty: false,
+      diskUsage: 12,
+      pushedAt: '2026-09-27T00:00:00.000Z',
+      defaultBranchRef: {
+        target: {
+          oid: 'abc',
+          committedDate: '2026-09-27T00:00:00.000Z',
+          statusCheckRollup: {
+            state: 'FAILURE',
+            contexts: {
+              nodes: [
+                { conclusion: 'SUCCESS', detailsUrl: 'https://github.com/example/demo/actions/runs/1' },
+                { conclusion: 'FAILURE', detailsUrl: 'https://github.com/example/demo/actions/runs/99' }
+              ]
+            }
+          }
+        }
+      },
+      pullRequests: { totalCount: 0, nodes: [] }
+    }, 'example/demo')
+    const row = classifyOverview([parsed], config(), NOW)[0]
+    expect(row?.warnings[0]).toMatchObject({
+      label: '卡住：CI 失败',
+      days: null,
+      targets: [{ url: 'https://github.com/example/demo/actions/runs/99' }]
+    })
   })
 })

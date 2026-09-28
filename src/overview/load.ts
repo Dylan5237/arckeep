@@ -112,7 +112,15 @@ const REPO_FIELDS = `
       oid
       ... on Commit {
         committedDate
-        statusCheckRollup { state }
+        statusCheckRollup {
+          state
+          contexts(first: 10) {
+            nodes {
+              ... on CheckRun { conclusion detailsUrl }
+              ... on StatusContext { state targetUrl }
+            }
+          }
+        }
       }
     }
   }
@@ -156,9 +164,35 @@ function errorFacts(name: string, message: string): OverviewRepoFacts {
     lastCommitAt: null,
     openPrCount: 0,
     ciState: 'unknown',
+    ciFailureUrl: null,
     pullRequests: [],
     error: message
   }
+}
+
+function githubHttps(url: string): string | null {
+  if (url.startsWith('https://github.com/') || url.startsWith('https://www.github.com/')) return url
+  return null
+}
+
+function failingCheckUrl(rollup: unknown, repoUrl: string): string {
+  const fallback = `${repoUrl.replace(/\/$/, '')}/actions`
+  if (!rollup || typeof rollup !== 'object' || !('contexts' in rollup)) return fallback
+  const contexts = rollup.contexts
+  const nodes = contexts && typeof contexts === 'object' && 'nodes' in contexts && Array.isArray(contexts.nodes)
+    ? contexts.nodes
+    : []
+  for (const node of nodes) {
+    if (!node || typeof node !== 'object') continue
+    const conclusion = 'conclusion' in node && typeof node.conclusion === 'string' ? node.conclusion : ''
+    const state = 'state' in node && typeof node.state === 'string' ? node.state : ''
+    const failed = conclusion === 'FAILURE' || conclusion === 'ERROR' || state === 'FAILURE' || state === 'ERROR'
+    if (!failed) continue
+    const details = 'detailsUrl' in node && typeof node.detailsUrl === 'string' ? githubHttps(node.detailsUrl) : null
+    const target = 'targetUrl' in node && typeof node.targetUrl === 'string' ? githubHttps(node.targetUrl) : null
+    if (details || target) return details || target || fallback
+  }
+  return fallback
 }
 
 function readPull(node: unknown): OverviewPullRequest | null {
@@ -201,6 +235,7 @@ export function parseRepositoryNode(node: unknown, requestedName: string): Overv
   const rollupState = rollup && typeof rollup === 'object' && 'state' in rollup && typeof rollup.state === 'string'
     ? rollup.state
     : null
+  const ciFailureUrl = mapCiState(rollupState) === 'failure' ? failingCheckUrl(rollup, url) : null
   const pulls = 'pullRequests' in node && node.pullRequests && typeof node.pullRequests === 'object'
     ? node.pullRequests as { totalCount?: unknown, nodes?: unknown }
     : null
@@ -217,6 +252,7 @@ export function parseRepositoryNode(node: unknown, requestedName: string): Overv
     lastCommitAt: committedDate,
     openPrCount,
     ciState: mapCiState(rollupState),
+    ciFailureUrl,
     pullRequests,
     error: null
   }

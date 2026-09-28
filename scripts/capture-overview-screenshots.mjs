@@ -12,6 +12,7 @@ const forbidden = ['ghp_', 'github_pat_', 'zzfakeexpiredpatvalue', 'zzmockgithub
 
 const scenes = [
   ['overview', 'overview-populated.png'],
+  ['overview-collapsed', 'overview-collapsed.png'],
   ['overview-empty', 'overview-empty.png'],
   ['overview-no-token', 'overview-no-token.png'],
   ['overview-invalid-token', 'overview-unauthorized.png'],

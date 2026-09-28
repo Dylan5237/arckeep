@@ -17,6 +17,7 @@ export const SCREENSHOT_SCENES = [
   'waiting-narrow',
   'waiting-hover',
   'overview',
+  'overview-collapsed',
   'overview-empty',
   'overview-no-token',
   'overview-invalid-token',
@@ -49,7 +50,7 @@ export function screenshotWindowSize(scene: ScreenshotScene): { width: number, h
   if (scene === 'waiting-narrow' || scene === 'overview-narrow') return { width: 800, height: 1680 }
   if (scene === 'waiting-hover') return { width: 1180, height: 900 }
   if (scene === 'narrow') return { width: 800, height: 760 }
-  if (scene === 'waiting' || scene === 'waiting-rate-limit' || scene === 'overview') return { width: 1180, height: 1680 }
+  if (scene === 'waiting' || scene === 'waiting-rate-limit' || scene === 'overview' || scene === 'overview-collapsed') return { width: 1180, height: 1680 }
   if (scene === 'nav') return { width: 1120, height: 760 }
   return { width: 1120, height: 900 }
 }
@@ -75,7 +76,7 @@ export function screenshotReadyText(scene: ScreenshotScene): string {
   if (scene === 'waiting-invalid-token') return 'GitHub 认证无效或已过期'
   if (scene === 'waiting-loading') return '正在刷新'
   if (scene === 'waiting-rate-limit') return '速率限制'
-  if (scene === 'overview' || scene === 'overview-narrow') return 'harbor/lumen'
+  if (scene === 'overview' || scene === 'overview-narrow' || scene === 'overview-collapsed') return 'harbor/lumen'
   if (scene === 'overview-empty') return '没有可显示的仓库'
   if (scene === 'overview-no-token') return '未配置 GitHub 认证'
   if (scene === 'overview-invalid-token') return 'GitHub 认证无效或已过期'

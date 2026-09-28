@@ -25,6 +25,12 @@ export interface OverviewWarningTarget {
 
 export interface OverviewWarning {
   kind: OverviewWarningKind
+  /** Chip text, for example 「停滞 14 天」 or 「卡住：PR 等 review 8 天，等 2 个」. */
+  label: string
+  /** Elapsed days behind the label. Null when the warning is not a day count. */
+  days: number | null
+  /** Tooltip: the configured threshold, not the elapsed time. */
+  hint: string
   targets: OverviewWarningTarget[]
 }
 
@@ -50,6 +56,8 @@ export interface OverviewRepoFacts {
   lastCommitAt: string | null
   openPrCount: number
   ciState: CiState
+  /** Link to the failing Actions run when ciState is failure. */
+  ciFailureUrl: string | null
   pullRequests: OverviewPullRequest[]
   error: string | null
 }

@@ -47,11 +47,6 @@ function externalIcon(): SVGElement {
   return svg
 }
 
-function pullNumber(url: string): string {
-  const match = url.match(/\/pull\/(\d+)/)
-  return match?.[1] ? `#${match[1]}` : ''
-}
-
 function paint(host: HTMLElement, snapshot: OverviewSnapshot, handlers: {
   refresh: () => void
   settings: () => void
@@ -137,8 +132,9 @@ function renderRow(row: OverviewRow, open: (url: string) => void): HTMLElement {
   ])
   title.addEventListener('click', () => open(row.url))
   const chips = el('span', { class: 'reason-chips' })
-  for (const item of row.warnings) chips.append(...warningChips(item, open))
-  if (!row.error && row.ciState !== 'unknown') {
+  for (const item of row.warnings) chips.append(warningChip(item, open))
+  const stuck = row.warnings.some(item => item.kind === '卡住')
+  if (!row.error && !stuck && (row.ciState === 'success' || row.ciState === 'pending' || row.ciState === 'none')) {
     chips.append(el('span', { class: `chip chip-ci chip-ci-${row.ciState}` }, [CI_LABEL[row.ciState]]))
   }
   const metaText = row.error
@@ -155,21 +151,17 @@ function renderRow(row: OverviewRow, open: (url: string) => void): HTMLElement {
   ])
 }
 
-function warningChips(warning: OverviewWarning, open: (url: string) => void): HTMLElement[] {
+function warningChip(warning: OverviewWarning, open: (url: string) => void): HTMLElement {
   const kind = CHIP_CLASS[warning.kind] ?? 'other'
-  if (warning.targets.length === 0) {
-    return [el('span', { class: `chip chip-${kind}` }, [warning.kind])]
-  }
-  return warning.targets.map(target => {
-    const label = warning.kind === '卡住' ? `卡住 ${pullNumber(target.url)}`.trim() : warning.kind
-    const chip = el('button', {
-      type: 'button',
-      class: `chip chip-${kind}`,
-      title: target.url
-    }, [label])
-    chip.addEventListener('click', () => open(target.url))
-    return chip
-  })
+  const target = warning.targets[0]?.url
+  if (!target) return el('span', { class: `chip chip-${kind}`, title: warning.hint }, [warning.label])
+  const chip = el('button', {
+    type: 'button',
+    class: `chip chip-${kind}`,
+    title: warning.hint
+  }, [warning.label])
+  chip.addEventListener('click', () => open(target))
+  return chip
 }
 
 export async function renderOverview(

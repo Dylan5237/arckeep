@@ -51,9 +51,30 @@ function activityAt(facts: OverviewRepoFacts): string | null {
   return facts.lastCommitAt ?? facts.pushedAt
 }
 
-function warning(kind: OverviewWarningKind, urls: string[]): OverviewWarning {
-  const targets = [...new Set(urls.filter(url => url.startsWith('https://github.com/') || url.startsWith('https://www.github.com/')))]
-  return { kind, targets: targets.map(url => ({ url })) }
+function isGithubUrl(url: string): boolean {
+  return url.startsWith('https://github.com/') || url.startsWith('https://www.github.com/')
+}
+
+function warning(input: {
+  kind: OverviewWarningKind
+  label: string
+  days: number | null
+  hint: string
+  urls: string[]
+}): OverviewWarning {
+  const targets = [...new Set(input.urls.filter(isGithubUrl))]
+  return {
+    kind: input.kind,
+    label: input.label,
+    days: input.days,
+    hint: input.hint,
+    targets: targets.map(url => ({ url }))
+  }
+}
+
+function reviewLabel(days: number, extra: number): string {
+  const base = `卡住：PR 等 review ${days} 天`
+  return extra > 0 ? `${base}，等 ${extra} 个` : base
 }
 
 export function classifyRepo(facts: OverviewRepoFacts, config: OverviewConfig, now: Date): OverviewRow {
@@ -70,17 +91,61 @@ export function classifyRepo(facts: OverviewRepoFacts, config: OverviewConfig, n
 
   const empty = isEmptyRepo(facts)
   const stale = !empty && Boolean(facts.pushedAt) && waitingDays(facts.pushedAt as string, now) >= config.staleRepoDays
-  const stalled = !empty && !stale && Boolean(activityAt(facts)) && waitingDays(activityAt(facts) as string, now) >= config.staleDays
+  const activity = activityAt(facts)
+  const stalledDays = activity ? waitingDays(activity, now) : 0
+  const stalled = !empty && !stale && Boolean(activity) && stalledDays >= config.staleDays
   const stuck = facts.pullRequests
     .filter(pr => isReviewStuck(pr, config, now))
-    .sort((left, right) => left.number - right.number)
+    .map(pr => ({ pr, days: waitingDays(pr.createdAt, now) }))
+    .sort((left, right) => right.days - left.days || left.pr.number - right.pr.number)
 
   const warnings: OverviewWarning[] = []
-  if (stuck.length > 0) warnings.push(warning('卡住', stuck.map(pr => pr.url)))
-  if (stalled) warnings.push(warning('停滞', [facts.url]))
-  if (empty) warnings.push(warning('空仓', [facts.url]))
-  if (stale || (empty && facts.pushedAt && waitingDays(facts.pushedAt, now) >= config.staleRepoDays)) {
-    warnings.push(warning('陈旧', [facts.url]))
+  if (facts.ciState === 'failure') {
+    warnings.push(warning({
+      kind: '卡住',
+      label: '卡住：CI 失败',
+      days: null,
+      hint: '默认分支最近一次检查失败',
+      urls: [facts.ciFailureUrl || `${facts.url.replace(/\/$/, '')}/actions`]
+    }))
+  }
+  const longest = stuck[0]
+  if (longest) {
+    warnings.push(warning({
+      kind: '卡住',
+      label: reviewLabel(longest.days, stuck.length - 1),
+      days: longest.days,
+      hint: `超过 ${config.reviewWaitDays} 天没有 review`,
+      urls: [longest.pr.url]
+    }))
+  }
+  if (stalled) {
+    warnings.push(warning({
+      kind: '停滞',
+      label: `停滞 ${stalledDays} 天`,
+      days: stalledDays,
+      hint: `超过 ${config.staleDays} 天没有新提交`,
+      urls: [facts.url]
+    }))
+  }
+  if (empty) {
+    warnings.push(warning({
+      kind: '空仓',
+      label: '空仓',
+      days: null,
+      hint: '仓库没有提交，或体积为 0',
+      urls: [facts.url]
+    }))
+  }
+  const staleByPush = Boolean(facts.pushedAt) && waitingDays(facts.pushedAt as string, now) >= config.staleRepoDays
+  if (stale || (empty && staleByPush)) {
+    warnings.push(warning({
+      kind: '陈旧',
+      label: '陈旧',
+      days: facts.pushedAt ? waitingDays(facts.pushedAt, now) : null,
+      hint: `超过 ${config.staleRepoDays} 天没有推送`,
+      urls: [facts.url]
+    }))
   }
   warnings.sort((left, right) => WARNING_ORDER.indexOf(left.kind) - WARNING_ORDER.indexOf(right.kind))
   return { ...base, warnings }

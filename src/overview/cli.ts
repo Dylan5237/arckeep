@@ -32,6 +32,9 @@ export function toOverviewJson(rows: readonly OverviewRow[]): OverviewRow[] {
     ciState: row.ciState,
     warnings: row.warnings.map(warning => ({
       kind: warning.kind,
+      label: warning.label,
+      days: warning.days,
+      hint: warning.hint,
       targets: warning.targets.map(target => ({ url: target.url }))
     })),
     error: row.error

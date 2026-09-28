@@ -16,7 +16,7 @@ function base(partial: Partial<OverviewSnapshot>): OverviewSnapshot {
 }
 
 export function screenshotOverviewSnapshot(scene: ScreenshotScene): OverviewSnapshot {
-  if (scene === 'overview' || scene === 'overview-narrow') return base({ rows: sampleOverviewRows() })
+  if (scene === 'overview' || scene === 'overview-narrow' || scene === 'overview-collapsed') return base({ rows: sampleOverviewRows() })
   if (scene === 'overview-empty') return base({ rows: [] })
   if (scene === 'overview-no-token') return base({ auth: 'missing', refreshedAt: null, rows: [] })
   if (scene === 'overview-invalid-token') return base({ auth: 'invalid', refreshedAt: null, rows: [] })
