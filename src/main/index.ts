@@ -1,10 +1,10 @@
-import { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, safeStorage } from 'electron'
+import { app, BrowserWindow, Menu, Notification, Tray, globalShortcut, ipcMain, nativeImage, safeStorage } from 'electron'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { IpcChannel } from '../shared/ipc.js'
-import { trayMenuEntries, trayToolTip } from '../shared/hotkey-status.js'
+import { hotkeyUnavailableMessage, shouldNotifyStartupHotkeyFailure, trayMenuEntries, trayToolTip } from '../shared/hotkey-status.js'
 import { mergeRepoOptions } from '../shared/todos/repos.js'
 import { createCaptureWindow, focusCaptureInput, showSavedToast } from './capture-window.js'
 import { createGracefulShutdownHandler } from './graceful-shutdown.js'
@@ -68,6 +68,7 @@ let tray: Tray | null = null
 let isQuitting = false
 let service: SettingsService | null = null
 let todos: TodoStore | null = null
+let hotkeyNoticeSent = false
 
 const devServerOrigin = process.env.ARCKEEP_DEV === '1' ? process.env.VITE_DEV_SERVER_URL ?? null : null
 const rendererDir = path.join(__dirname, '../renderer')
@@ -91,6 +92,25 @@ function showMainWindow(): void {
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
+}
+
+function openHotkeySettings(): void {
+  showMainWindow()
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send(IpcChannel.focusHotkey)
+}
+
+function maybeNotifyStartupHotkeyFailure(windowVisible: boolean): void {
+  const banner = service?.hotkeyUnavailableCombo() ?? null
+  if (!shouldNotifyStartupHotkeyFailure({ banner, windowVisible, alreadySent: hotkeyNoticeSent })) return
+  hotkeyNoticeSent = true
+  if (screenshotPath || !banner) return
+  const notice = new Notification({
+    title: 'Arckeep',
+    body: hotkeyUnavailableMessage(banner)
+  })
+  notice.on('click', () => openHotkeySettings())
+  notice.show()
 }
 
 function quitFromTray(): void {
@@ -280,7 +300,9 @@ function createWindow(): BrowserWindow {
     window.hide()
   })
   window.once('ready-to-show', () => {
-    if (!screenshotPath || screenshotShowsMainWindow(screenshotScene)) window.show()
+    const showWindow = !screenshotPath || screenshotShowsMainWindow(screenshotScene)
+    if (showWindow) window.show()
+    maybeNotifyStartupHotkeyFailure(showWindow)
   })
 
   if (screenshotPath) {

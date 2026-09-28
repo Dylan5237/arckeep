@@ -227,6 +227,11 @@ button.ghost {
   flex: 1 1 14rem;
 }
 
+.hotkey-active {
+  color: var(--arckeep-muted-graphite);
+  white-space: nowrap;
+}
+
 .placeholder {
   max-width: 36rem;
 }

@@ -107,8 +107,8 @@ export async function presentScreenshot(options: {
     `, 'repo filter')
   } else if (scene === 'hotkey-banner') {
     await waitUntil(contents, `
-      document.body.innerText.includes('Ctrl+Alt+Space 已被其他程序占用，快速捕获暂不可用')
-      && document.querySelector('#hotkey-banner-action') !== null
+      document.body.innerText.includes('快速捕获热键 Ctrl+Alt+Space 被其他程序占用，现在按它不会有反应')
+      && document.querySelector('#hotkey-banner-action')?.textContent === '换一个热键'
       && document.querySelector('#hotkey-banner')?.hidden === false
       && document.body.innerText.includes('等我处理')
     `, 'hotkey banner')
@@ -130,13 +130,18 @@ export async function presentScreenshot(options: {
     await waitUntil(contents, `(() => {
       const conflict = document.querySelector('#hotkey-conflict')
       const scroller = document.querySelector('main')
+      const input = document.querySelector('#hotkey-input')
       const rect = conflict && conflict.getBoundingClientRect()
-      return Boolean(conflict && scroller && rect
+      const banner = document.querySelector('#hotkey-banner')
+      return Boolean(conflict && scroller && input instanceof HTMLInputElement && rect && banner
         && scroller.scrollTop === 0
         && rect.top >= 0
         && rect.bottom <= window.innerHeight
+        && input.value === 'Ctrl+Alt+K'
+        && document.querySelector('#hotkey-active')?.textContent === '当前生效：Ctrl+Alt+Space'
         && conflict.innerText.includes('Ctrl+Alt+K 已被其他程序占用')
-        && document.querySelector('#hotkey-banner')?.hidden === true)
+        && banner.hidden === false
+        && banner.innerText.includes('快速捕获热键 Ctrl+Alt+K 被其他程序占用，现在按它不会有反应'))
     })()`, 'inline hotkey conflict')
   } else if (scene === 'todos-delete') {
     await waitUntil(contents, includesText('共 40 条'), '共 40 条')

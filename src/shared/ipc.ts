@@ -16,5 +16,6 @@ export const IpcChannel = {
   setCaptureDraft: 'capture:set-draft',
   todosChanged: 'todos:changed',
   hotkeyStatus: 'app:hotkey-status',
+  focusHotkey: 'app:focus-hotkey',
   testHook: 'app:test-hook'
 } as const

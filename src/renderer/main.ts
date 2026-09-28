@@ -1,5 +1,5 @@
 import brandMark from '../../docs/brand/logo/Arckeep_Master_Horizontal_Reverse.svg'
-import { hotkeyUnavailableMessage } from '../shared/hotkey-status'
+import { activeHotkeyLabel, hotkeyUnavailableMessage } from '../shared/hotkey-status'
 import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
 import { DEFAULT_HOTKEY } from '../shared/types'
@@ -241,15 +241,19 @@ function renderHotkeyCard(state: AppState): HTMLElement {
   const input = el('input', { type: 'text', id: 'hotkey-input', value: state.hotkey, 'aria-label': '全局热键' })
   const save = el('button', { type: 'button', id: 'hotkey-save', class: 'primary' }, ['保存热键'])
   save.addEventListener('click', () => { void applyHotkeyValue(input.value) })
-  card.append(el('div', { class: 'row' }, [input, save]))
+  card.append(el('div', { class: 'row' }, [
+    input,
+    save,
+    el('span', { id: 'hotkey-active', class: 'hotkey-active' }, [activeHotkeyLabel(state.activeHotkey)])
+  ]))
   if (state.hotkeyWarning) {
     const warning = hotkeyWarningRow(state.hotkeyWarning)
     card.append(warning)
     queueMicrotask(() => {
       warning.scrollIntoView({ block: 'nearest' })
-      warning.focus()
     })
-  } else if (pendingHotkeyFocus) {
+  }
+  if (pendingHotkeyFocus) {
     queueMicrotask(() => {
       input.scrollIntoView({ block: 'nearest' })
       input.focus()
@@ -300,7 +304,7 @@ function paintHotkeyBanner(combo: string | null): void {
     return
   }
   hotkeyBanner.hidden = false
-  const jump = el('button', { type: 'button', class: 'primary', id: 'hotkey-banner-action' }, ['设置热键'])
+  const jump = el('button', { type: 'button', class: 'primary', id: 'hotkey-banner-action' }, ['换一个热键'])
   jump.addEventListener('click', () => {
     pendingHotkeyFocus = true
     void show('settings')
@@ -348,6 +352,11 @@ for (const button of navButtons) {
 
 window.arckeep.onHotkeyStatus(combo => {
   paintHotkeyBanner(combo)
+})
+
+window.arckeep.onFocusHotkey(() => {
+  pendingHotkeyFocus = true
+  void show('settings')
 })
 
 const initial = new URLSearchParams(location.search).get('page')

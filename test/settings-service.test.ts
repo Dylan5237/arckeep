@@ -141,8 +141,12 @@ describe('settings persistence', () => {
     const state = await service.getState()
     expect(state.hotkeyWarning).toBe('Ctrl+Alt+Space 已被其他程序占用')
     expect(state.hotkeyUnavailable).toBe('Ctrl+Alt+Space')
+    expect(state.activeHotkey).toBeNull()
     expect(service.hotkeyUnavailableCombo()).toBe('Ctrl+Alt+Space')
     expect(service.setHotkey('Ctrl+Alt+K').ok).toBe(false)
+    const failedSave = await service.getState()
+    expect(failedSave.hotkey).toBe('Ctrl+Alt+K')
+    expect(failedSave.activeHotkey).toBeNull()
     expect(service.hotkeyUnavailableCombo()).toBe('Ctrl+Alt+K')
   })
 
@@ -164,8 +168,9 @@ describe('settings persistence', () => {
     expect(loadSettings(file).hotkey).toBe(DEFAULT_HOTKEY)
     const state = await service.getState()
     expect(state.hotkeyWarning).toBe('Ctrl+Alt+K 已被其他程序占用')
-    expect(state.hotkey).toBe(DEFAULT_HOTKEY)
-    expect(state.hotkeyUnavailable).toBeNull()
+    expect(state.hotkey).toBe('Ctrl+Alt+K')
+    expect(state.activeHotkey).toBe(DEFAULT_HOTKEY)
+    expect(state.hotkeyUnavailable).toBe('Ctrl+Alt+K')
   })
 
   it('clears the startup banner once a later hotkey registers', async () => {

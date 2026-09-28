@@ -14,9 +14,12 @@ export interface PublicGithubAuth {
 
 export interface AppState {
   watchedRepos: string[]
+  /** Value shown in the hotkey field. A failed save keeps what was typed. */
   hotkey: string
+  /** Combo registered with the OS, or null when nothing is live. */
+  activeHotkey: string | null
   hotkeyWarning: string | null
-  /** Combo that failed to register, or null when capture is available. */
+  /** Combo named in the banner. Null hides it. Cleared only by a successful register. */
   hotkeyUnavailable: string | null
   github: PublicGithubAuth
 }
@@ -51,6 +54,7 @@ export interface ArckeepApi {
   setCaptureDraft(draft: CaptureDraft): Promise<CaptureDraft>
   onTodosChanged(listener: () => void): () => void
   onHotkeyStatus(listener: (combo: string | null) => void): () => void
+  onFocusHotkey(listener: () => void): () => void
 }
 
 export function githubSourceLabel(source: GithubSource): string {

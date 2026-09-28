@@ -7,7 +7,7 @@ import {
   type GhLookup
 } from './github-auth.js'
 import { applyHotkey, hotkeyConflictWarning, type HotkeyRegistrar } from './hotkey.js'
-import { unavailableComboAfterApply } from '../shared/hotkey-status.js'
+import { hotkeyRuntimeAfterApply, type HotkeyRuntime } from '../shared/hotkey-status.js'
 import { normalizePat, normalizeWatchedRepos } from './ipc-validators.js'
 import { loadSettings, saveSettings, type PersistedSettings } from './settings-store.js'
 import { assertSerializedWithoutSecret, type SecretBox } from './token-store.js'
@@ -24,24 +24,23 @@ export interface SettingsServiceDeps {
 
 export class SettingsService {
   private settings: PersistedSettings
-  private hotkeyWarning: string | null = null
-  private activeHotkey: string | null = null
-  private unavailableCombo: string | null = null
+  private runtime: HotkeyRuntime
 
   constructor(private readonly deps: SettingsServiceDeps) {
     this.settings = loadSettings(deps.file)
+    this.runtime = {
+      field: this.settings.hotkey,
+      active: null,
+      banner: null,
+      warning: null
+    }
   }
 
   init(): void {
-    const applied = applyHotkey(this.settings.hotkey, this.deps.registrar, this.deps.onHotkey, null)
-    this.unavailableCombo = unavailableComboAfterApply(null, applied, null)
-    if (!applied.ok) {
-      this.activeHotkey = null
-      this.hotkeyWarning = applied.warning
-      return
-    }
-    this.activeHotkey = applied.hotkey
-    this.hotkeyWarning = null
+    const attempted = this.settings.hotkey
+    const applied = applyHotkey(attempted, this.deps.registrar, this.deps.onHotkey, null)
+    this.runtime = hotkeyRuntimeAfterApply(this.runtime, applied, attempted)
+    if (!applied.ok) return
     if (applied.hotkey !== this.settings.hotkey) {
       this.settings.hotkey = applied.hotkey
       this.persist()
@@ -49,22 +48,28 @@ export class SettingsService {
   }
 
   hotkeyUnavailableCombo(): string | null {
-    return this.unavailableCombo
+    return this.runtime.banner
   }
 
   /** Test hook: drop the registered combo so the banner and tray show the failure. */
   simulateRegistrationFailure(): string {
-    if (this.activeHotkey) {
+    if (this.runtime.active) {
       try {
-        this.deps.registrar.unregister(this.activeHotkey)
+        this.deps.registrar.unregister(this.runtime.active)
       } catch {
         // Already gone.
       }
     }
-    this.activeHotkey = null
-    this.unavailableCombo = this.settings.hotkey
-    this.hotkeyWarning = hotkeyConflictWarning(this.settings.hotkey)
-    return this.unavailableCombo
+    this.runtime = hotkeyRuntimeAfterApply(
+      { ...this.runtime, active: null },
+      {
+        ok: false,
+        hotkey: this.settings.hotkey,
+        warning: hotkeyConflictWarning(this.settings.hotkey)
+      },
+      this.settings.hotkey
+    )
+    return this.runtime.banner ?? this.settings.hotkey
   }
 
   getSettings(): PersistedSettings {
@@ -75,9 +80,10 @@ export class SettingsService {
     const github = toPublicGithubAuth(await this.resolveAuth())
     return {
       watchedRepos: [...this.settings.watchedRepos],
-      hotkey: this.settings.hotkey,
-      hotkeyWarning: this.hotkeyWarning,
-      hotkeyUnavailable: this.unavailableCombo,
+      hotkey: this.runtime.field,
+      activeHotkey: this.runtime.active,
+      hotkeyWarning: this.runtime.warning,
+      hotkeyUnavailable: this.runtime.banner,
       github
     }
   }
@@ -94,16 +100,10 @@ export class SettingsService {
   }
 
   setHotkey(input: unknown): IpcResult<{ hotkey: string }> {
-    const previouslyRegistered = this.activeHotkey
-    const applied = applyHotkey(input, this.deps.registrar, this.deps.onHotkey, this.activeHotkey)
-    this.unavailableCombo = unavailableComboAfterApply(this.unavailableCombo, applied, previouslyRegistered)
-    if (!applied.ok) {
-      this.hotkeyWarning = applied.warning
-      if (!previouslyRegistered || applied.hotkey !== previouslyRegistered) this.activeHotkey = null
-      return { ok: false, error: applied.warning ?? '热键注册失败' }
-    }
-    this.activeHotkey = applied.hotkey
-    this.hotkeyWarning = null
+    const attempted = typeof input === 'string' ? input : this.runtime.field
+    const applied = applyHotkey(input, this.deps.registrar, this.deps.onHotkey, this.runtime.active)
+    this.runtime = hotkeyRuntimeAfterApply(this.runtime, applied, attempted)
+    if (!applied.ok) return { ok: false, error: applied.warning ?? '热键注册失败' }
     this.settings.hotkey = applied.hotkey
     this.persist()
     return { ok: true, data: { hotkey: applied.hotkey } }

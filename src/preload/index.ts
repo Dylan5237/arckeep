@@ -27,6 +27,11 @@ const api: ArckeepApi = {
     const wrapped = (_event: IpcRendererEvent, combo: string | null) => listener(combo)
     ipcRenderer.on(IpcChannel.hotkeyStatus, wrapped)
     return () => ipcRenderer.removeListener(IpcChannel.hotkeyStatus, wrapped)
+  },
+  onFocusHotkey(listener) {
+    const wrapped = () => listener()
+    ipcRenderer.on(IpcChannel.focusHotkey, wrapped)
+    return () => ipcRenderer.removeListener(IpcChannel.focusHotkey, wrapped)
   }
 }
 
