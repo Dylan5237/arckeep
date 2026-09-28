@@ -1,4 +1,5 @@
-import { parseRepoNode, parseSearchPayload, type RepoBatchItem } from '../shared/waiting/parse-github.js'
+import { parseIssueTree, parseRepoNode, parseSearchPayload, type RepoBatchItem } from '../shared/waiting/parse-github.js'
+import { tasklistIssueRefs } from '../shared/waiting/sub-issues.js'
 import { keywordToSearchTerms, chunkSearchText } from '../shared/waiting/rules.js'
 import { GithubAuthError, GithubRateLimitError, earlierReset, rateLimitFromResponse } from '../shared/waiting/rate-limit.js'
 import type { GithubRecord, SourceError, WaitingConfig } from '../shared/waiting/types.js'
@@ -19,7 +20,36 @@ const ISSUE_FIELDS = `
   }
 `
 
-const ISSUE_FIELDS_PARENT = `${ISSUE_FIELDS} parent { number }`
+interface IssueSchema {
+  withParent: boolean
+  withSubIssues: boolean
+}
+
+function issueSelection(schema: IssueSchema): string {
+  const parent = schema.withParent ? 'parent { number }' : ''
+  const sub = schema.withSubIssues
+    ? `subIssues(first: 20) { nodes {
+        number title url body state createdAt updatedAt
+        author { login }
+        labels(first: 10) { nodes { name } }
+        comments(last: 4) { nodes { body createdAt } }
+        ${parent}
+      } }`
+    : ''
+  return `${ISSUE_FIELDS} ${parent} ${sub}`
+}
+
+function relaxSchema(message: string, schema: IssueSchema): boolean {
+  if (schema.withSubIssues && /subIssues/i.test(message)) {
+    schema.withSubIssues = false
+    return true
+  }
+  if (schema.withParent && /parent/i.test(message)) {
+    schema.withParent = false
+    return true
+  }
+  return false
+}
 
 const PR_FIELDS = `
   number title url body createdAt updatedAt isDraft
@@ -37,8 +67,8 @@ const PR_FIELDS = `
   }
 `
 
-function searchQuery(withParent: boolean): string {
-  const issueFields = withParent ? ISSUE_FIELDS_PARENT : ISSUE_FIELDS
+function searchQuery(schema: IssueSchema): string {
+  const issueFields = issueSelection(schema)
   return `
     query($q: String!, $after: String) {
       search(query: $q, type: ISSUE, first: 40, after: $after) {
@@ -147,6 +177,26 @@ async function graphql(
     }
   }
   return payload
+}
+
+async function graphqlRelax(
+  token: string,
+  fetchImpl: typeof fetch,
+  queryFor: () => string,
+  variables: Record<string, unknown>,
+  schema: IssueSchema
+): Promise<unknown> {
+  let last: unknown
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await graphql(token, queryFor(), variables, fetchImpl)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (!relaxSchema(message, schema)) throw error
+      last = error
+    }
+  }
+  throw last instanceof Error ? last : new Error('GitHub GraphQL 查询失败')
 }
 
 function dataOf(payload: unknown): Record<string, unknown> {
@@ -312,10 +362,10 @@ async function loadExplicit(token: string, fetchImpl: typeof fetch, repos: reado
   return found
 }
 
-function contentQuery(count: number, withParent: boolean, includePulls: boolean): string {
+function contentQuery(count: number, schema: IssueSchema, includePulls: boolean): string {
   const vars: string[] = []
   const fields: string[] = []
-  const issueFields = withParent ? ISSUE_FIELDS_PARENT : ISSUE_FIELDS
+  const issueFields = issueSelection(schema)
   for (let index = 0; index < count; index += 1) {
     vars.push(`$o${index}: String!`, `$n${index}: String!`, `$ia${index}: String`)
     if (includePulls) vars.push(`$pa${index}: String`)
@@ -350,11 +400,11 @@ async function loadRepoContents(
   token: string,
   fetchImpl: typeof fetch,
   repos: ScopeRepo[],
-  login: string
+  login: string,
+  schema: IssueSchema
 ): Promise<{ issues: GithubRecord[], pullRequests: GithubRecord[] }> {
   const issues: GithubRecord[] = []
   const pullRequests: GithubRecord[] = []
-  let withParent = true
   let pending: CursorRepo[] = repos.map(repo => ({ ...repo, issueCursor: null, pullCursor: null }))
   for (let page = 0; page < 4 && pending.length > 0; page += 1) {
     const nextPending: CursorRepo[] = []
@@ -374,18 +424,13 @@ async function loadRepoContents(
           variables[`ia${index}`] = repo.issueCursor
           if (includePulls) variables[`pa${index}`] = repo.pullCursor
         })
-        let payload: unknown
-        try {
-          payload = await graphql(token, contentQuery(slice.length, withParent, includePulls), variables, fetchImpl)
-        } catch (error) {
-          const message = error instanceof Error ? error.message : ''
-          if (withParent && /parent/i.test(message)) {
-            withParent = false
-            payload = await graphql(token, contentQuery(slice.length, false, includePulls), variables, fetchImpl)
-          } else {
-            throw error
-          }
-        }
+        const payload = await graphqlRelax(
+          token,
+          fetchImpl,
+          () => contentQuery(slice.length, schema, includePulls),
+          variables,
+          schema
+        )
         const data = dataOf(payload)
         slice.forEach((repo, index) => {
           const parsed: RepoBatchItem | null = parseRepoNode(data[`r${index}`], login)
@@ -414,23 +459,18 @@ async function searchAll(
   queryText: string,
   login: string,
   flags: { fromAssignee?: boolean, fromReview?: boolean, fromMention?: boolean, fromAuthor?: boolean },
-  state: { withParent: boolean }
+  state: IssueSchema
 ): Promise<GithubRecord[]> {
   const records: GithubRecord[] = []
   let after: string | null = null
   for (let page = 0; page < 4; page += 1) {
-    let payload: unknown
-    try {
-      payload = await graphql(token, searchQuery(state.withParent), { q: queryText, after }, fetchImpl)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      if (state.withParent && /parent/i.test(message)) {
-        state.withParent = false
-        payload = await graphql(token, searchQuery(false), { q: queryText, after }, fetchImpl)
-      } else {
-        throw error
-      }
-    }
+    const payload = await graphqlRelax(
+      token,
+      fetchImpl,
+      () => searchQuery(state),
+      { q: queryText, after },
+      state
+    )
     const search = dataOf(payload).search
     records.push(...parseSearchPayload({ search }, { login, ...flags }))
     const pageInfo = search && typeof search === 'object' && 'pageInfo' in search
@@ -489,6 +529,76 @@ async function runSource<T>(
   }
 }
 
+async function loadTasklistIssues(
+  token: string,
+  fetchImpl: typeof fetch,
+  records: readonly GithubRecord[],
+  login: string,
+  schema: IssueSchema
+): Promise<GithubRecord[]> {
+  const known = new Set(records.map(record => `${record.repo.toLowerCase()}#${record.number}`))
+  const missing: { owner: string, name: string, number: number, parentNumber: number | null }[] = []
+  const seen = new Set<string>()
+  for (const record of records) {
+    if (record.kind !== 'issue') continue
+    for (const ref of tasklistIssueRefs(record.body, record.repo)) {
+      const key = `${ref.repo.toLowerCase()}#${ref.number}`
+      if (known.has(key) || seen.has(key)) continue
+      const parts = splitRepo(ref.repo)
+      if (!parts) continue
+      seen.add(key)
+      missing.push({
+        ...parts,
+        number: ref.number,
+        parentNumber: ref.repo.toLowerCase() === record.repo.toLowerCase() ? record.number : null
+      })
+      if (missing.length >= 20) break
+    }
+    if (missing.length >= 20) break
+  }
+  const found: GithubRecord[] = []
+  for (let offset = 0; offset < missing.length; offset += 8) {
+    const slice = missing.slice(offset, offset + 8)
+    const variables: Record<string, string | number> = {}
+    slice.forEach((item, index) => {
+      variables[`o${index}`] = item.owner
+      variables[`n${index}`] = item.name
+      variables[`i${index}`] = item.number
+    })
+    const vars = slice.map((_, index) => `$o${index}: String!, $n${index}: String!, $i${index}: Int!`).join(', ')
+    const fields = slice.map((_, index) => `
+      r${index}: repository(owner: $o${index}, name: $n${index}) {
+        nameWithOwner isEmpty pushedAt
+        issue(number: $i${index}) { ${issueSelection(schema)} }
+      }
+    `).join('\n')
+    const payload = await graphqlRelax(
+      token,
+      fetchImpl,
+      () => `query(${vars}) { ${fields} }`,
+      variables,
+      schema
+    )
+    const data = dataOf(payload)
+    slice.forEach((item, index) => {
+      const repoNode = data[`r${index}`]
+      if (!repoNode || typeof repoNode !== 'object' || !('issue' in repoNode)) return
+      const name = 'nameWithOwner' in repoNode && typeof repoNode.nameWithOwner === 'string'
+        ? repoNode.nameWithOwner
+        : `${item.owner}/${item.name}`
+      const issue = (repoNode as { issue?: unknown }).issue
+      if (!issue || typeof issue !== 'object') return
+      found.push(...parseIssueTree({
+        ...issue,
+        __typename: 'Issue',
+        repository: { nameWithOwner: name },
+        parent: item.parentNumber === null ? undefined : { number: item.parentNumber }
+      }, { login, inScopeRepo: true }))
+    })
+  }
+  return found
+}
+
 export async function loadGithubRecords(options: {
   token: string
   config: WaitingConfig
@@ -516,7 +626,7 @@ export async function loadGithubRecords(options: {
     openPrs: false,
     humanIssues: false
   }
-  const searchState = { withParent: true }
+  const searchState: IssueSchema = { withParent: true, withSubIssues: true }
   let login = ''
   try {
     login = await viewerLogin(options.token, fetchImpl)
@@ -589,7 +699,7 @@ export async function loadGithubRecords(options: {
   const contents = await runSource(
     '仓库内容',
     contentsEnabled,
-    () => loadRepoContents(options.token, fetchImpl, contentScope, login),
+    () => loadRepoContents(options.token, fetchImpl, contentScope, login, searchState),
     undefined,
     bucket
   )
@@ -692,6 +802,26 @@ export async function loadGithubRecords(options: {
   )
   if (author) {
     bySource.humanIssues = [...bySource.humanIssues, ...markScope(author.map(record => ({ ...record, fromAuthor: true })))]
+    fresh.humanIssues = true
+  }
+
+  const pooled = [
+    ...bySource.assignee,
+    ...bySource.reviewRequested,
+    ...bySource.mentions,
+    ...bySource.openPrs,
+    ...bySource.humanIssues
+  ]
+  const needsTasklist = pooled.some(record => record.kind === 'issue' && tasklistIssueRefs(record.body, record.repo).length > 0)
+  const linked = await runSource(
+    '子 issue',
+    needsTasklist && !bucket.authInvalid,
+    () => loadTasklistIssues(options.token, fetchImpl, pooled, login, searchState),
+    undefined,
+    bucket
+  )
+  if (linked) {
+    bySource.humanIssues = [...bySource.humanIssues, ...linked]
     fresh.humanIssues = true
   }
 

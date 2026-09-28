@@ -243,12 +243,43 @@ export function parseGithubNode(node: unknown, flags: ParseFlags): GithubRecord 
   return record
 }
 
+function isClosed(node: Record<string, unknown>): boolean {
+  return text(node.state).toUpperCase() === 'CLOSED'
+}
+
+/**
+ * One record for the issue, plus one record per sub-issue. A child keeps its
+ * own number and url; it is never copied onto the parent.
+ */
+export function parseIssueTree(node: unknown, flags: ParseFlags, depth = 2): GithubRecord[] {
+  if (!isRecord(node) || isClosed(node)) return []
+  const typeName = text(node.__typename)
+  if (typeName === 'PullRequest') {
+    const pull = parseGithubNode(node, flags)
+    return pull ? [pull] : []
+  }
+  const record = parseGithubNode({ ...node, __typename: typeName || 'Issue' }, flags)
+  if (!record || depth <= 0) return record ? [record] : []
+  const children = connectionNodes(node.subIssues).flatMap(child => {
+    if (!isRecord(child)) return []
+    const repository = isRecord(child.repository) ? child.repository : node.repository
+    return parseIssueTree({
+      ...child,
+      __typename: 'Issue',
+      repository,
+      parent: isRecord(child.parent) ? child.parent : { number: record.number }
+    }, {
+      login: flags.login,
+      inScopeRepo: flags.inScopeRepo === true
+    }, depth - 1)
+  })
+  return [record, ...children]
+}
+
 export function parseSearchPayload(payload: unknown, flags: ParseFlags): GithubRecord[] {
   if (!isRecord(payload)) return []
   const search = isRecord(payload.search) ? payload.search : payload
-  return connectionNodes(search)
-    .map(node => parseGithubNode(node, flags))
-    .filter((record): record is GithubRecord => record !== null)
+  return connectionNodes(search).flatMap(node => parseIssueTree(node, flags))
 }
 
 export interface RepoBatchItem {
@@ -281,11 +312,10 @@ export function parseRepoNode(node: unknown, login: string): RepoBatchItem | nul
     repoPushedAt: pushedAt
   })
   const issues = connectionNodes(node.issues)
-    .map(issue => parseGithubNode(
+    .flatMap(issue => parseIssueTree(
       isRecord(issue) ? { ...issue, __typename: 'Issue', repository: { nameWithOwner: name, isEmpty, pushedAt } } : issue,
       { login, inScopeRepo: true }
     ))
-    .filter((record): record is GithubRecord => record !== null)
     .map(withRepo)
   const pullRequests = connectionNodes(node.pullRequests)
     .map(pull => parseGithubNode(

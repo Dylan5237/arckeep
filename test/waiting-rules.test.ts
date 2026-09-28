@@ -3,8 +3,10 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { userDataDir, waitingDismissalPath } from '../src/main/paths.js'
+import { assembleWaiting } from '../src/shared/waiting/assemble.js'
 import { classifyRecord } from '../src/shared/waiting/classify.js'
-import { blankRecord } from '../src/shared/waiting/parse-github.js'
+import { blankRecord, parseIssueTree } from '../src/shared/waiting/parse-github.js'
+import { tasklistIssueRefs } from '../src/shared/waiting/sub-issues.js'
 import { defaultWaitingConfig, parseWaitingConfig } from '../src/shared/waiting/rules.js'
 import { evaluateSignals } from '../src/shared/waiting/signals.js'
 import { partitionDismissals, readDismissalState, writeDismissalState } from '../src/shared/waiting/snooze.js'
@@ -414,5 +416,90 @@ describe('hidden repositories', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]?.repo).toBe('example/demo')
     expect(rows[0]?.action).toBe('要你动手')
+  })
+})
+
+describe('sub-issues stay on their own rows', () => {
+  const repo = 'owner/repo'
+  const issueUrl = (number: number) => `https://github.com/owner/repo/issues/${number}`
+
+  function issue(number: number, body: string, patch: Partial<GithubRecord> = {}): GithubRecord {
+    return blankRecord({
+      kind: 'issue',
+      repo,
+      number,
+      title: `item ${number}`,
+      url: issueUrl(number),
+      body,
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-20T00:00:00.000Z',
+      inScopeRepo: true,
+      repoAccess: 'maintain',
+      ...patch
+    })
+  }
+
+  function rowsOf(records: GithubRecord[]) {
+    return assembleWaiting({
+      records,
+      statusDocs: [],
+      branches: [],
+      todos: [],
+      config: config(),
+      now: NOW
+    })
+  }
+
+  it('emits one row for a qualifying parent and each qualifying child', () => {
+    const rows = rowsOf([
+      issue(1, '请确认\n- [ ] #2\n- [ ] #3'),
+      issue(2, '待验收', { parentNumber: 1 }),
+      issue(3, '需要你', { parentNumber: 1 })
+    ])
+    expect(rows).toHaveLength(3)
+    expect(rows.map(row => row.url).sort()).toEqual([issueUrl(1), issueUrl(2), issueUrl(3)].sort())
+  })
+
+  it('dedupes a child found from a sub-issue link and from search by url', () => {
+    const rows = rowsOf([
+      issue(2, '请确认', { parentNumber: 1, url: 'https://github.com/Owner/Repo/issues/2' }),
+      issue(2, '请确认', {
+        fromAssignee: true,
+        assignedAt: '2026-09-12T00:00:00.000Z',
+        url: 'https://github.com/owner/repo/issues/2/'
+      })
+    ])
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.url.toLowerCase().replace(/\/$/, '')).toBe(issueUrl(2))
+    expect(rows[0]?.reasons).toEqual(expect.arrayContaining(['要人动手', '指派']))
+  })
+
+  it('emits no row for a linked child that does not qualify', () => {
+    const rows = rowsOf([
+      issue(1, '请确认\n- [ ] #2'),
+      issue(2, '进度记录', { parentNumber: 1 })
+    ])
+    expect(rows.map(row => row.url)).toEqual([issueUrl(1)])
+  })
+
+  it('parses sub-issues as separate records and ignores a closed child', () => {
+    const records = parseIssueTree({
+      __typename: 'Issue',
+      number: 1,
+      title: 'item 1',
+      url: issueUrl(1),
+      body: '请确认',
+      repository: { nameWithOwner: repo },
+      subIssues: {
+        nodes: [
+          { number: 2, title: 'item 2', url: issueUrl(2), body: '待验收', state: 'OPEN' },
+          { number: 3, title: 'item 3', url: issueUrl(3), body: '待验收', state: 'CLOSED' }
+        ]
+      }
+    }, { login: 'me', inScopeRepo: true })
+    expect(records.map(record => record.number).sort()).toEqual([1, 2])
+    expect(records.find(record => record.number === 2)?.parentNumber).toBe(1)
+    expect(records.find(record => record.number === 2)?.url).toBe(issueUrl(2))
+    expect(tasklistIssueRefs('see #4\n- [ ] #4\n- [x] https://github.com/owner/repo/issues/5', repo).map(ref => ref.number)).toEqual([4, 5])
   })
 })

@@ -1,5 +1,5 @@
 import { draftFromReasons, classifyRecord } from './classify.js'
-import { dedupeDrafts, sortDrafts } from './dedupe.js'
+import { dedupeDrafts, issueUrlKey, sortDrafts } from './dedupe.js'
 import { WAITING_REASONS, type GithubRecord, type LocalBranchHit, type RepoAccess, type StatusDocHit, type TodoWaitingItem, type WaitingConfig, type WaitingDraft, type WaitingJsonRow } from './types.js'
 
 function preferAccess(current: RepoAccess | undefined, next: RepoAccess | undefined): RepoAccess {
@@ -96,7 +96,8 @@ export function toWaitingJson(drafts: readonly WaitingDraft[]): WaitingJsonRow[]
 export function mergeRecords(records: readonly GithubRecord[]): GithubRecord[] {
   const map = new Map<string, GithubRecord>()
   for (const record of records) {
-    const key = `${record.repo}#${record.number}`
+    const url = issueUrlKey(record.url)
+    const key = url ? `url:${url}` : `${record.repo.toLowerCase()}#${record.number}`
     const existing = map.get(key)
     if (!existing) {
       map.set(key, {
