@@ -1,5 +1,5 @@
 import { defaultWaitingConfig } from '../shared/waiting/rules'
-import type { StatusDocRule, WaitingConfig, WaitingSources } from '../shared/waiting/types'
+import type { MentionPolicy, OpenPrScope, StatusDocRule, WaitingConfig, WaitingSources } from '../shared/waiting/types'
 import type { AppState } from '../shared/types'
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -40,7 +40,7 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
   const card = el('section', { class: 'card' }, [
     el('h2', {}, ['等我处理']),
     el('p', { class: 'hint' }, [
-      '关键词和标签决定哪些 open Issue 算「要人动手」。已解决信号出现在当前正文或最新评论里时，这条不再显示。状态文档正则示例：等 ?Dylan|AWAITING ACCEPT|HUMAN_REQUIRED|needs-dylan'
+      '关键词和标签决定哪些 open Issue 算「要人动手」。同一段文字里的动作信号优先于已解决信号；只有整条都结束、后面没有待办时才算已解决。仅关注的仓库不会把全部 open PR 列进来。状态文档正则示例：等 ?Dylan|AWAITING ACCEPT|HUMAN_REQUIRED|needs-dylan'
     ])
   ])
   const sources: WaitingSources = { ...config.sources, todos: false }
@@ -65,6 +65,20 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
   dirs.value = config.localRepoDirs.join('\n')
   const limit = el('input', { type: 'number', min: '1', max: '2000', 'aria-label': '仓库数量上限' })
   limit.value = String(config.maxScopeRepos)
+  const openPrScope = el('select', { 'aria-label': '待你审/合范围' })
+  openPrScope.append(
+    el('option', { value: 'maintain' }, ['只看我能推送的仓库（不含仅关注、不含别人的 fork）']),
+    el('option', { value: 'watching' }, ['也列出我关注的仓库里所有 open PR'])
+  )
+  openPrScope.value = config.openPrScope
+  const mentionPolicy = el('select', { 'aria-label': '提及规则' })
+  mentionPolicy.append(
+    el('option', { value: 'action-or-recent' }, ['提及要有动作，或出现在最近的评论里']),
+    el('option', { value: 'any' }, ['任何提及都算'])
+  )
+  mentionPolicy.value = config.mentionPolicy
+  const mentionDays = el('input', { type: 'number', min: '1', max: '365', 'aria-label': '提及的最近天数' })
+  mentionDays.value = String(config.mentionRecentDays)
   const rulesBox = el('div', { class: 'rule-list' })
   const rules: StatusDocRule[] = config.statusDocRules.map(rule => ({ ...rule }))
   const drawRules = () => {
@@ -104,6 +118,9 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
       statusDocRules: rules.filter(rule => rule.repo || rule.target || rule.pattern),
       localRepoDirs: lines(dirs.value),
       maxScopeRepos: Number(limit.value),
+      openPrScope: openPrScope.value as OpenPrScope,
+      mentionPolicy: mentionPolicy.value as MentionPolicy,
+      mentionRecentDays: Number(mentionDays.value),
       showIgnored: config.showIgnored
     }
     void window.arckeep.setWaiting(next).then(async result => {
@@ -131,8 +148,14 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
     el('h3', {}, ['本地仓目录']),
     dirs,
     el('h3', {}, ['仓库数量上限']),
-    el('p', { class: 'hint' }, ['自动模式下，拥有的和 watching 的仓库都会查。空仓不查 PR。达到上限时这一页会提示，不会悄悄丢掉其余仓库。']),
+    el('p', { class: 'hint' }, ['自动模式下会发现拥有的和 watching 的仓库。待你审/合默认只覆盖你能推送的仓库。空仓不查 PR。达到上限时这一页会提示。']),
     limit,
+    el('h3', {}, ['待你审/合范围']),
+    openPrScope,
+    el('h3', {}, ['提及']),
+    mentionPolicy,
+    el('p', { class: 'hint' }, ['最近这么多天内的评论里 @你，即使没有动作信号也会留下。']),
+    mentionDays,
     el('div', { class: 'actions' }, [save])
   )
   return card

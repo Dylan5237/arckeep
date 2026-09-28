@@ -15,6 +15,14 @@ export type WaitingItemType = 'issue' | 'pr' | 'todo' | 'local-branch' | 'status
 
 export type GithubSourceName = 'assignee' | 'reviewRequested' | 'mentions' | 'openPrs' | 'humanIssues'
 
+/** Blanket「待你审/合」for every open PR, or only repos the user can push to. */
+export type OpenPrScope = 'maintain' | 'watching'
+
+/** Bare @mentions are noise unless the user opts into keeping all of them. */
+export type MentionPolicy = 'action-or-recent' | 'any'
+
+export type RepoAccess = 'maintain' | 'watch' | 'unknown'
+
 export interface WaitingSources {
   assignee: boolean
   reviewRequested: boolean
@@ -41,6 +49,16 @@ export interface WaitingConfig {
   localRepoDirs: string[]
   /** Owned + watched repositories included in the repo-scope batch. */
   maxScopeRepos: number
+  /**
+   * maintain: open non-draft PRs only in repos the user owns or can push to,
+   * excluding forks of someone else's repo. watching: also list every open PR
+   * in repos the user only watches.
+   */
+  openPrScope: OpenPrScope
+  /** any: every @mention. action-or-recent: drop a bare mention in an old body. */
+  mentionPolicy: MentionPolicy
+  /** A mention in a comment newer than this still counts without an action signal. */
+  mentionRecentDays: number
   showIgnored: boolean
 }
 
@@ -68,8 +86,14 @@ export interface GithubRecord {
   fromAssignee: boolean
   fromReview: boolean
   fromMention: boolean
+  fromAuthor: boolean
   fromOpenPr: boolean
   inScopeRepo: boolean
+  repoAccess: RepoAccess
+  authorLogin: string
+  viewerLogin: string
+  isFork: boolean
+  viewerOwnsRepo: boolean
 }
 
 export interface StatusDocHit {
@@ -123,6 +147,8 @@ export interface WaitingDraft {
   title: string
   url: string
   reasons: string[]
+  /** What to do. `reasons` stays the list of how the row was found. */
+  action: string
   waitingDays: number
   daysEstimated: boolean
   updatedAt: string
@@ -136,6 +162,7 @@ export interface WaitingJsonRow {
   title: string
   url: string
   reasons: string[]
+  action?: string
   waitingDays: number
   daysEstimated: boolean
 }
@@ -148,6 +175,7 @@ export interface WaitingRow {
   title: string
   url: string
   reasons: string[]
+  action: string
   waitingDays: number
   daysEstimated: boolean
   updatedAt: string
@@ -171,6 +199,7 @@ export interface WaitingSnapshot {
   notices: string[]
   showIgnored: boolean
   hiddenCount: number
+  hiddenRepos: string[]
   todosAvailable: boolean
 }
 

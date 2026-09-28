@@ -14,6 +14,7 @@ function base(partial: Partial<WaitingSnapshot>): WaitingSnapshot {
     notices: [],
     showIgnored: false,
     hiddenCount: 3,
+    hiddenRepos: [],
     todosAvailable: false,
     ...partial
   }
@@ -23,6 +24,28 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
   if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover') {
     const rows = sampleWaitingRows().sort((left, right) => right.waitingDays - left.waitingDays || left.title.localeCompare(right.title))
     return base({ rows, hiddenCount: 4 })
+  }
+  if (scene === 'waiting-watch') {
+    const rows = sampleWaitingRows()
+      .filter(row => row.repo === 'northwind/ledger')
+      .slice(0, 3)
+      .map((row, index) => index === 2
+        ? { ...row, repo: 'stranger/public', title: '指派给你的那一条', reasons: ['指派'], action: '要你动手', type: 'issue' as const }
+        : row)
+    return base({
+      rows,
+      hiddenCount: 0,
+      notices: ['仅关注的仓库只保留和你有关的条目，不会把别人的 open PR 整仓列出来。']
+    })
+  }
+  if (scene === 'waiting-hidden') {
+    const rows = sampleWaitingRows().slice(0, 2)
+    return base({
+      rows,
+      showIgnored: true,
+      hiddenCount: 6,
+      hiddenRepos: ['stranger/public']
+    })
   }
   if (scene === 'waiting-empty') return base({ hiddenCount: 0, rows: [] })
   if (scene === 'waiting-no-token') return base({ auth: 'missing', refreshedAt: null, hiddenCount: 0 })
@@ -45,6 +68,8 @@ export function createScreenshotWaiting(scene: ScreenshotScene): {
   snooze: (id?: unknown, days?: unknown) => IpcResult<WaitingSnapshot>
   ignore: (id?: unknown) => IpcResult<WaitingSnapshot>
   restore: (id?: unknown) => IpcResult<WaitingSnapshot>
+  hideRepo: (repo?: unknown) => IpcResult<WaitingSnapshot>
+  unhideRepo: (repo?: unknown) => IpcResult<WaitingSnapshot>
   setShowIgnored: (value?: unknown) => IpcResult<WaitingSnapshot>
   advanceDays: (days?: unknown) => IpcResult<WaitingSnapshot>
 } {
@@ -59,6 +84,8 @@ export function createScreenshotWaiting(scene: ScreenshotScene): {
     snooze: () => ok(),
     ignore: () => ok(),
     restore: () => ok(),
+    hideRepo: () => ok(),
+    unhideRepo: () => ok(),
     setShowIgnored: () => ok(),
     advanceDays: () => ({ ok: false, error: '测试钩子未开启' })
   }

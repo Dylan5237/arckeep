@@ -204,6 +204,10 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: str
           ? '已被其他程序占用'
           : scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover'
             ? '验收北区截图'
+            : scene === 'waiting-watch'
+              ? '不会把别人的 open PR'
+              : scene === 'waiting-hidden'
+                ? '已忽略的仓库'
             : scene === 'waiting-empty'
               ? '没有等你处理的事项'
               : scene === 'waiting-no-token'
@@ -289,6 +293,14 @@ function registerIpc(settings: SettingsService): void {
   ipcMain.handle(IpcChannel.restoreWaiting, (event, id: unknown) => {
     guard(event)
     return waiting?.restore(id) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.hideWaitingRepo, (event, repo: unknown) => {
+    guard(event)
+    return waiting?.hideRepo(repo) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.unhideWaitingRepo, (event, repo: unknown) => {
+    guard(event)
+    return waiting?.unhideRepo(repo) ?? { ok: false, error: '等我处理尚未就绪' }
   })
   ipcMain.handle(IpcChannel.setShowIgnored, (event, show: unknown) => {
     guard(event)

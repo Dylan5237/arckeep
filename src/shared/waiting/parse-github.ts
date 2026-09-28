@@ -1,4 +1,4 @@
-import type { GithubRecord } from './types.js'
+import type { GithubRecord, RepoAccess } from './types.js'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -36,8 +36,14 @@ export function blankRecord(partial: Pick<GithubRecord, 'kind' | 'repo' | 'numbe
     fromAssignee: false,
     fromReview: false,
     fromMention: false,
+    fromAuthor: false,
     fromOpenPr: false,
     inScopeRepo: false,
+    repoAccess: 'unknown',
+    authorLogin: '',
+    viewerLogin: '',
+    isFork: false,
+    viewerOwnsRepo: false,
     ...partial
   }
 }
@@ -49,6 +55,26 @@ function repoFields(node: Record<string, unknown>): { repo: string, repoIsEmpty:
     repoIsEmpty: repository.isEmpty === true,
     repoPushedAt: typeof repository.pushedAt === 'string' ? repository.pushedAt : null
   }
+}
+
+const PUSH_PERMISSIONS = new Set(['ADMIN', 'MAINTAIN', 'WRITE'])
+
+export function accessFromRepository(repository: Record<string, unknown>, login: string): {
+  repoAccess: RepoAccess
+  isFork: boolean
+  viewerOwnsRepo: boolean
+} {
+  const ownerLogin = isRecord(repository.owner) ? text(repository.owner.login) : ''
+  const hasOwner = ownerLogin.length > 0
+  const hasPermission = 'viewerPermission' in repository || 'isFork' in repository || hasOwner
+  const viewerOwnsRepo = hasOwner && ownerLogin.toLowerCase() === login.toLowerCase()
+  const isFork = repository.isFork === true
+  if (!hasPermission) return { repoAccess: 'unknown', isFork: false, viewerOwnsRepo: false }
+  const permission = text(repository.viewerPermission).toUpperCase()
+  const canPush = PUSH_PERMISSIONS.has(permission)
+  const foreignFork = isFork && !viewerOwnsRepo
+  const maintain = (viewerOwnsRepo || canPush) && !foreignFork
+  return { repoAccess: maintain ? 'maintain' : 'watch', isFork, viewerOwnsRepo }
 }
 
 function labelsOf(node: Record<string, unknown>): string[] {
@@ -159,6 +185,7 @@ export interface ParseFlags {
   fromReview?: boolean
   fromMention?: boolean
   fromOpenPr?: boolean
+  fromAuthor?: boolean
   inScopeRepo?: boolean
 }
 
@@ -174,6 +201,13 @@ export function parseGithubNode(node: unknown, flags: ParseFlags): GithubRecord 
   const comments = commentsOf(node)
   const createdAt = text(node.createdAt)
   const body = text(node.body)
+  const repository = isRecord(node.repository) ? node.repository : null
+  const access = repository ? accessFromRepository(repository, flags.login) : {
+    repoAccess: 'unknown' as const,
+    isFork: false,
+    viewerOwnsRepo: false
+  }
+  const authorLogin = isRecord(node.author) ? text(node.author.login) : ''
   const record = blankRecord({
     kind: resolvedKind,
     repo: repo.repo,
@@ -197,8 +231,14 @@ export function parseGithubNode(node: unknown, flags: ParseFlags): GithubRecord 
     fromAssignee: flags.fromAssignee === true,
     fromReview: flags.fromReview === true,
     fromMention: flags.fromMention === true,
+    fromAuthor: flags.fromAuthor === true,
     fromOpenPr: flags.fromOpenPr === true,
-    inScopeRepo: flags.inScopeRepo === true
+    inScopeRepo: flags.inScopeRepo === true,
+    repoAccess: access.repoAccess,
+    authorLogin,
+    viewerLogin: flags.login,
+    isFork: access.isFork,
+    viewerOwnsRepo: access.viewerOwnsRepo
   })
   return record
 }

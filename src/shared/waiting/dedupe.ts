@@ -1,3 +1,4 @@
+import { primaryAction } from './action.js'
 import { waitingDays } from './days.js'
 import type { WaitingDraft } from './types.js'
 
@@ -55,6 +56,7 @@ export function dedupeDrafts(drafts: readonly WaitingDraft[], now: Date): Waitin
   }
   for (const draft of merged.values()) {
     applyLongestWait(draft, now)
+    draft.action = primaryAction(draft.type, draft.reasons)
   }
   return order.map(key => merged.get(key)).filter((draft): draft is WaitingDraft => Boolean(draft))
 }

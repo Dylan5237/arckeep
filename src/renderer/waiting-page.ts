@@ -1,6 +1,29 @@
 import { localAbsolute, localClock, relativeLabel } from '../shared/waiting/local-time'
 import type { WaitingRow, WaitingSnapshot } from '../shared/waiting/types'
 
+const PROVENANCE = new Set(['指派', '提及', '请求 review', '状态文档'])
+
+const ACTION_CLASS: Record<string, string> = {
+  '要你动手': 'act-do',
+  '待你审合': 'act-review',
+  '待你推送': 'act-push',
+  '待办': 'act-todo'
+}
+
+let inputMode: 'mouse' | 'keyboard' = 'mouse'
+let repaintActions: (() => void) | null = null
+let inputBound = false
+
+function bindInputMode(): void {
+  if (inputBound) return
+  inputBound = true
+  window.addEventListener('keydown', event => {
+    if (event.key !== 'Tab' && !event.key.startsWith('Arrow')) return
+    inputMode = 'keyboard'
+    repaintActions?.()
+  })
+}
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
@@ -27,17 +50,6 @@ const BAND_LABEL = {
   low: '近 3 天'
 } as const
 
-const CHIP_CLASS: Record<string, string> = {
-  '指派': 'assign',
-  '请求 review': 'review',
-  '提及': 'mention',
-  '待你审/合': 'open-pr',
-  '要人动手': 'human',
-  '状态文档': 'doc',
-  '没推送': 'local',
-  '待办': 'todo'
-}
-
 function externalIcon(): SVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
   svg.setAttribute('viewBox', '0 0 16 16')
@@ -61,6 +73,8 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
   snooze: (id: string, days: 1 | 3 | 7) => void
   ignore: (id: string) => void
   restore: (id: string) => void
+  hideRepo: (repo: string) => void
+  unhideRepo: (repo: string) => void
   toggleIgnored: (show: boolean) => void
   open: (url: string) => void
 }): void {
@@ -118,6 +132,9 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
   if (snapshot.hiddenCount > 0) {
     page.append(el('p', { class: 'hint' }, [`另有 ${snapshot.hiddenCount} 条已延后或已忽略。`]))
   }
+  if (snapshot.showIgnored && snapshot.hiddenRepos.length > 0) {
+    page.append(renderHiddenRepos(snapshot.hiddenRepos, handlers.unhideRepo))
+  }
   if (snapshot.refreshing && snapshot.rows.length === 0) {
     page.append(el('p', { class: 'waiting-loading', role: 'status' }, ['正在刷新…']))
   } else if (!snapshot.refreshing && snapshot.rows.length === 0 && snapshot.auth === 'ok') {
@@ -128,10 +145,76 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
   host.replaceChildren(page)
 }
 
+function renderHiddenRepos(repos: readonly string[], unhideRepo: (repo: string) => void): HTMLElement {
+  const section = el('section', { class: 'hidden-repos' }, [
+    el('h2', {}, ['已忽略的仓库'])
+  ])
+  for (const repo of repos) {
+    const restore = el('button', { type: 'button', class: 'ghost tiny' }, ['恢复'])
+    restore.addEventListener('click', () => unhideRepo(repo))
+    section.append(el('div', { class: 'hidden-repo' }, [
+      el('span', { class: 'waiting-meta' }, [repo]),
+      restore
+    ]))
+  }
+  return section
+}
+
+function wireRowActions(list: HTMLElement): void {
+  bindInputMode()
+  const rows = () => [...list.querySelectorAll<HTMLElement>('.waiting-row')]
+  const paintActive = () => {
+    const all = rows()
+    for (const row of all) {
+      if (inputMode === 'keyboard') row.classList.remove('show-actions')
+      else if (row.dataset.hover !== '1') row.classList.remove('show-actions')
+    }
+    if (inputMode === 'keyboard') {
+      const focused = all.find(row => row.contains(document.activeElement))
+      focused?.classList.add('show-actions')
+      return
+    }
+    all.find(row => row.dataset.hover === '1')?.classList.add('show-actions')
+  }
+  repaintActions = paintActive
+  list.addEventListener('pointerover', event => {
+    if (inputMode !== 'mouse') return
+    const target = event.target
+    if (!(target instanceof Element)) return
+    const row = target.closest('.waiting-row')
+    if (!(row instanceof HTMLElement)) return
+    for (const item of rows()) delete item.dataset.hover
+    row.dataset.hover = '1'
+    paintActive()
+  })
+  list.addEventListener('pointerleave', () => {
+    if (inputMode !== 'mouse') return
+    for (const item of rows()) delete item.dataset.hover
+    paintActive()
+  })
+  list.addEventListener('pointerdown', event => {
+    inputMode = 'mouse'
+    const target = event.target
+    const row = target instanceof Element ? target.closest('.waiting-row') : null
+    for (const item of rows()) delete item.dataset.hover
+    if (row instanceof HTMLElement) row.dataset.hover = '1'
+    paintActive()
+  })
+  list.addEventListener('focusin', () => {
+    if (inputMode === 'keyboard') paintActive()
+  })
+  list.addEventListener('focusout', () => {
+    window.setTimeout(() => {
+      if (inputMode === 'keyboard') paintActive()
+    }, 0)
+  })
+}
+
 function renderGroups(rows: readonly WaitingRow[], handlers: {
   snooze: (id: string, days: 1 | 3 | 7) => void
   ignore: (id: string) => void
   restore: (id: string) => void
+  hideRepo: (repo: string) => void
   open: (url: string) => void
   todos: () => void
 }): HTMLElement {
@@ -150,6 +233,7 @@ function renderGroups(rows: readonly WaitingRow[], handlers: {
     }
     group?.append(renderRow(row, handlers))
   }
+  wireRowActions(list)
   return list
 }
 
@@ -157,6 +241,7 @@ function renderRow(row: WaitingRow, handlers: {
   snooze: (id: string, days: 1 | 3 | 7) => void
   ignore: (id: string) => void
   restore: (id: string) => void
+  hideRepo: (repo: string) => void
   open: (url: string) => void
   todos: () => void
 }): HTMLElement {
@@ -184,11 +269,15 @@ function renderRow(row: WaitingRow, handlers: {
     }
     handlers.open(row.url)
   })
-  const chips = el('span', { class: 'reason-chips' })
-  for (const reason of row.reasons) {
-    const kind = CHIP_CLASS[reason] ?? 'other'
-    chips.append(el('span', { class: `chip chip-${kind}` }, [reason]))
-  }
+  const actionName = row.action || '要你动手'
+  const chip = el('span', {
+    class: `chip chip-${ACTION_CLASS[actionName] ?? 'act-do'}`,
+    title: row.reasons.join(' · ')
+  }, [actionName])
+  const viaNames = row.reasons.filter(reason => PROVENANCE.has(reason))
+  const via = viaNames.length > 0
+    ? el('span', { class: 'waiting-via' }, [viaNames.join(' · ')])
+    : null
   const where = row.number === null ? row.repo : `${row.repo} #${row.number}`
   const meta = el('span', { class: 'waiting-meta' }, [where])
   const actions = el('div', { class: 'row-actions' })
@@ -209,15 +298,14 @@ function renderRow(row: WaitingRow, handlers: {
     ])
     const ignore = el('button', { type: 'button', class: 'ghost tiny' }, ['忽略'])
     ignore.addEventListener('click', () => handlers.ignore(row.id))
+    const hide = el('button', { type: 'button', class: 'ghost tiny' }, ['不看这个仓库'])
+    hide.addEventListener('click', () => handlers.hideRepo(row.repo))
+    menu.append(hide)
     actions.append(snooze, ignore)
   }
-  return el('div', { class: `waiting-row age-${age}${row.ignored ? ' is-ignored' : ''}` }, [
-    days,
-    title,
-    chips,
-    meta,
-    actions
-  ])
+  const body = [days, title, chip, meta, actions]
+  if (via) body.splice(3, 0, via)
+  return el('div', { class: `waiting-row age-${age}${row.ignored ? ' is-ignored' : ''}` }, body)
 }
 
 export async function renderWaiting(
@@ -234,6 +322,7 @@ export async function renderWaiting(
     notices: [],
     showIgnored: false,
     hiddenCount: 0,
+    hiddenRepos: [],
     todosAvailable: false
   }
   const apply = (snapshot: WaitingSnapshot) => {
@@ -244,6 +333,8 @@ export async function renderWaiting(
       snooze: (id, days) => { void act(api => api.snoozeWaiting(id, days)) },
       ignore: id => { void act(api => api.ignoreWaiting(id)) },
       restore: id => { void act(api => api.restoreWaiting(id)) },
+      hideRepo: repo => { void act(api => api.hideWaitingRepo(repo)) },
+      unhideRepo: repo => { void act(api => api.unhideWaitingRepo(repo)) },
       toggleIgnored: show => { void act(api => api.setShowIgnored(show)) },
       open: url => { void window.arckeep.openExternal(url) }
     })

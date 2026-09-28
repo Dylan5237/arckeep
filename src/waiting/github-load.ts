@@ -7,6 +7,7 @@ const API = 'https://api.github.com/graphql'
 
 const ISSUE_FIELDS = `
   number title url body createdAt updatedAt
+  author { login }
   labels(first: 20) { nodes { name } }
   comments(last: 8) { nodes { body createdAt } }
   timelineItems(last: 20, itemTypes: [ASSIGNED_EVENT, LABELED_EVENT]) {
@@ -22,6 +23,7 @@ const ISSUE_FIELDS_PARENT = `${ISSUE_FIELDS} parent { number }`
 
 const PR_FIELDS = `
   number title url body createdAt updatedAt isDraft
+  author { login }
   labels(first: 10) { nodes { name } }
   comments(last: 8) { nodes { body createdAt } }
   commits(last: 1) { nodes { commit { committedDate } } }
@@ -45,11 +47,11 @@ function searchQuery(withParent: boolean): string {
           __typename
           ... on Issue {
             ${issueFields}
-            repository { nameWithOwner isEmpty pushedAt }
+            repository { nameWithOwner isEmpty pushedAt isFork viewerPermission owner { login } }
           }
           ... on PullRequest {
             ${PR_FIELDS}
-            repository { nameWithOwner isEmpty pushedAt }
+            repository { nameWithOwner isEmpty pushedAt isFork viewerPermission owner { login } }
           }
         }
       }
@@ -74,12 +76,19 @@ export interface GithubLoadResult {
   auth: 'ok' | 'invalid'
 }
 
+const REPO_META = 'nameWithOwner isEmpty pushedAt isFork viewerPermission owner { login }'
+
 interface ScopeRepo {
   owner: string
   name: string
   full: string
   isEmpty: boolean
   pushedAt: string | null
+  access: 'maintain' | 'watch'
+  isFork: boolean
+  viewerOwns: boolean
+  queryIssues: boolean
+  queryPulls: boolean
 }
 
 function splitRepo(full: string): { owner: string, name: string } | null {
@@ -170,21 +179,59 @@ function connectionPage(value: unknown): { nodes: unknown[], cursor: string | nu
 
 const REPO_PAGE_SIZE = 40
 
-function readScopeNode(node: unknown): ScopeRepo | null {
+const PUSH_PERMISSIONS = new Set(['ADMIN', 'MAINTAIN', 'WRITE'])
+
+function readScopeNode(
+  node: unknown,
+  viewer: string,
+  origin: 'owned' | 'watching' | 'explicit'
+): ScopeRepo | null {
   if (!node || typeof node !== 'object') return null
   const name = 'nameWithOwner' in node && typeof node.nameWithOwner === 'string' ? node.nameWithOwner : ''
   const parts = splitRepo(name)
   if (!parts) return null
   const isEmpty = 'isEmpty' in node && node.isEmpty === true
   const pushedAt = 'pushedAt' in node && typeof node.pushedAt === 'string' ? node.pushedAt : null
-  return { ...parts, full: name, isEmpty, pushedAt }
+  const ownerLogin = 'owner' in node && node.owner && typeof node.owner === 'object' && 'login' in node.owner
+    && typeof node.owner.login === 'string'
+    ? node.owner.login
+    : ''
+  const isFork = 'isFork' in node && node.isFork === true
+  const permission = 'viewerPermission' in node && typeof node.viewerPermission === 'string'
+    ? node.viewerPermission.toUpperCase()
+    : ''
+  const hasPermission = 'viewerPermission' in node || 'isFork' in node || ownerLogin.length > 0
+  const viewerOwns = ownerLogin
+    ? ownerLogin.toLowerCase() === viewer.toLowerCase()
+    : origin === 'owned'
+  let access: 'maintain' | 'watch' = 'watch'
+  if (origin === 'owned') access = 'maintain'
+  else if (!hasPermission && origin === 'explicit') access = 'watch'
+  else if (!hasPermission) access = 'watch'
+  else {
+    const canPush = PUSH_PERMISSIONS.has(permission)
+    const foreignFork = isFork && !viewerOwns
+    access = (viewerOwns || canPush) && !foreignFork ? 'maintain' : 'watch'
+  }
+  return {
+    ...parts,
+    full: name,
+    isEmpty,
+    pushedAt,
+    access,
+    isFork,
+    viewerOwns: origin === 'owned' ? true : viewerOwns,
+    queryIssues: false,
+    queryPulls: false
+  }
 }
 
 async function discoverRepos(
   token: string,
   fetchImpl: typeof fetch,
   connection: 'repositories' | 'watching',
-  limit: number
+  limit: number,
+  viewer: string
 ): Promise<{ repos: ScopeRepo[], truncated: boolean }> {
   const repos: ScopeRepo[] = []
   let cursor: string | null = null
@@ -199,18 +246,18 @@ async function discoverRepos(
         viewer {
           ${field} {
             pageInfo { hasNextPage endCursor }
-            nodes { nameWithOwner isEmpty pushedAt }
+            nodes { ${REPO_META} }
           }
         }
       }
     `, { cursor }, fetchImpl)
-    const viewer = dataOf(payload).viewer
-    const listed = viewer && typeof viewer === 'object' && connection in viewer
-      ? (viewer as Record<string, unknown>)[connection]
+    const viewerNode = dataOf(payload).viewer
+    const listed = viewerNode && typeof viewerNode === 'object' && connection in viewerNode
+      ? (viewerNode as Record<string, unknown>)[connection]
       : null
     const batch = connectionPage(listed)
     for (const node of batch.nodes) {
-      const repo = readScopeNode(node)
+      const repo = readScopeNode(node, viewer, connection === 'repositories' ? 'owned' : 'watching')
       if (!repo) continue
       if (repos.length >= limit) {
         truncated = true
@@ -234,12 +281,12 @@ function metadataQuery(count: number): string {
   const fields: string[] = []
   for (let index = 0; index < count; index += 1) {
     vars.push(`$o${index}: String!`, `$n${index}: String!`)
-    fields.push(`r${index}: repository(owner: $o${index}, name: $n${index}) { nameWithOwner isEmpty pushedAt }`)
+    fields.push(`r${index}: repository(owner: $o${index}, name: $n${index}) { ${REPO_META} }`)
   }
   return `query(${vars.join(', ')}) { ${fields.join('\n')} }`
 }
 
-async function loadExplicit(token: string, fetchImpl: typeof fetch, repos: readonly string[]): Promise<ScopeRepo[]> {
+async function loadExplicit(token: string, fetchImpl: typeof fetch, repos: readonly string[], viewer: string): Promise<ScopeRepo[]> {
   const found: ScopeRepo[] = []
   for (let offset = 0; offset < repos.length; offset += 20) {
     const slice = repos.slice(offset, offset + 20)
@@ -257,12 +304,9 @@ async function loadExplicit(token: string, fetchImpl: typeof fetch, repos: reado
       const name = 'nameWithOwner' in node && typeof node.nameWithOwner === 'string' ? node.nameWithOwner : full
       const parts = splitRepo(name)
       if (!parts) return
-      found.push({
-        ...parts,
-        full: name,
-        isEmpty: 'isEmpty' in node && node.isEmpty === true,
-        pushedAt: 'pushedAt' in node && typeof node.pushedAt === 'string' ? node.pushedAt : null
-      })
+      const repo = readScopeNode(node, viewer, 'explicit')
+      if (!repo) return
+      found.push({ ...repo, ...parts, full: name })
     })
   }
   return found
@@ -315,12 +359,12 @@ async function loadRepoContents(
   for (let page = 0; page < 4 && pending.length > 0; page += 1) {
     const nextPending: CursorRepo[] = []
     const groups = [
-      pending.filter(repo => repo.isEmpty),
-      pending.filter(repo => !repo.isEmpty)
+      pending.filter(repo => !repo.queryPulls),
+      pending.filter(repo => repo.queryPulls)
     ]
     for (const group of groups) {
       if (group.length === 0) continue
-      const includePulls = group.some(repo => !repo.isEmpty)
+      const includePulls = group.some(repo => repo.queryPulls)
       for (let offset = 0; offset < group.length; offset += 8) {
         const slice = group.slice(offset, offset + 8)
         const variables: Record<string, string | null> = {}
@@ -369,7 +413,7 @@ async function searchAll(
   fetchImpl: typeof fetch,
   queryText: string,
   login: string,
-  flags: { fromAssignee?: boolean, fromReview?: boolean, fromMention?: boolean },
+  flags: { fromAssignee?: boolean, fromReview?: boolean, fromMention?: boolean, fromAuthor?: boolean },
   state: { withParent: boolean }
 ): Promise<GithubRecord[]> {
   const records: GithubRecord[] = []
@@ -495,18 +539,18 @@ export async function loadGithubRecords(options: {
     let truncated = false
     if (options.watchedRepos.length > 0) {
       truncated = options.watchedRepos.length > limit
-      discovered = await loadExplicit(options.token, fetchImpl, options.watchedRepos.slice(0, limit))
+      discovered = await loadExplicit(options.token, fetchImpl, options.watchedRepos.slice(0, limit), login)
     } else {
-      const owned = await discoverRepos(options.token, fetchImpl, 'repositories', limit)
+      const owned = await discoverRepos(options.token, fetchImpl, 'repositories', limit, login)
       const room = Math.max(0, limit - owned.repos.length)
       let watchingRepos: ScopeRepo[] = []
       let watchingTruncated = false
       if (room > 0) {
-        const watching = await discoverRepos(options.token, fetchImpl, 'watching', room)
+        const watching = await discoverRepos(options.token, fetchImpl, 'watching', room, login)
         watchingRepos = watching.repos
         watchingTruncated = watching.truncated
       } else if (!owned.truncated) {
-        const peek = await discoverRepos(options.token, fetchImpl, 'watching', 1)
+        const peek = await discoverRepos(options.token, fetchImpl, 'watching', 1, login)
         watchingTruncated = peek.repos.length > 0
       }
       truncated = owned.truncated || watchingTruncated
@@ -529,9 +573,18 @@ export async function loadGithubRecords(options: {
     if (failure.auth) bucket.authInvalid = true
   }
 
-  const scopeNames = new Set(scope.map(repo => repo.full.toLowerCase()))
-  const wantContents = options.config.sources.openPrs || options.config.sources.humanIssues
-  const contentScope = scope.filter(repo => !repo.isEmpty || options.config.sources.humanIssues)
+  const scopeByName = new Map(scope.map(repo => [repo.full.toLowerCase(), repo]))
+  const planned = scope.flatMap(repo => {
+    const maintain = repo.access === 'maintain'
+    const queryIssues = maintain && options.config.sources.humanIssues
+    const queryPulls = !repo.isEmpty && options.config.sources.openPrs && (
+      maintain || options.config.openPrScope === 'watching'
+    )
+    if (!queryIssues && !queryPulls) return []
+    return [{ ...repo, queryIssues, queryPulls }]
+  })
+  const wantContents = planned.length > 0
+  const contentScope = planned
   const contentsEnabled = wantContents && contentScope.length > 0 && !bucket.authInvalid
   const contents = await runSource(
     '仓库内容',
@@ -547,10 +600,18 @@ export async function loadGithubRecords(options: {
     fresh.humanIssues = true
   }
 
-  const markScope = (records: GithubRecord[]): GithubRecord[] => records.map(record => ({
-    ...record,
-    inScopeRepo: record.inScopeRepo || scopeNames.has(record.repo.toLowerCase())
-  }))
+  const markScope = (records: GithubRecord[]): GithubRecord[] => records.map(record => {
+    const known = scopeByName.get(record.repo.toLowerCase())
+    if (!known) return { ...record, viewerLogin: record.viewerLogin || login }
+    return {
+      ...record,
+      viewerLogin: record.viewerLogin || login,
+      inScopeRepo: true,
+      repoAccess: known.access,
+      isFork: known.isFork,
+      viewerOwnsRepo: known.viewerOwns
+    }
+  })
 
   const assignee = await runSource(
     '指派',
@@ -588,7 +649,8 @@ export async function loadGithubRecords(options: {
     fresh.mentions = true
   }
 
-  const humanQueries = humanSearchQueries(options.config, scope.map(repo => repo.full))
+  const maintainNames = scope.filter(repo => repo.access === 'maintain').map(repo => repo.full)
+  const humanQueries = humanSearchQueries(options.config, maintainNames)
   const humanSearch = await runSource(
     '要人动手',
     options.config.sources.humanIssues && humanQueries.length > 0 && !bucket.authInvalid,
@@ -607,6 +669,37 @@ export async function loadGithubRecords(options: {
     bySource.humanIssues = [...bySource.humanIssues, ...humanSearch]
     fresh.humanIssues = true
   }
+
+  const watchNames = scope.filter(repo => repo.access === 'watch').map(repo => repo.full)
+  const authorEnabled = watchNames.length > 0 && (
+    options.config.sources.openPrs || options.config.sources.humanIssues || options.config.sources.mentions
+  )
+  const author = await runSource(
+    '作者',
+    authorEnabled && !bucket.authInvalid,
+    async () => {
+      const found: GithubRecord[] = []
+      for (let offset = 0; offset < watchNames.length; offset += 8) {
+        const repoClause = watchNames.slice(offset, offset + 8).map(repo => `repo:${repo}`).join(' OR ')
+        const queryText = `author:@me is:open (${repoClause})`
+        const page = await searchAll(options.token, fetchImpl, queryText, login, { fromAuthor: true }, searchState)
+        found.push(...page)
+      }
+      return found
+    },
+    undefined,
+    bucket
+  )
+  if (author) {
+    bySource.humanIssues = [...bySource.humanIssues, ...markScope(author.map(record => ({ ...record, fromAuthor: true })))]
+    fresh.humanIssues = true
+  }
+
+  bySource.assignee = markScope(bySource.assignee)
+  bySource.reviewRequested = markScope(bySource.reviewRequested)
+  bySource.mentions = markScope(bySource.mentions)
+  bySource.openPrs = markScope(bySource.openPrs)
+  bySource.humanIssues = markScope(bySource.humanIssues)
 
   return {
     bySource,

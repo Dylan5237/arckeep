@@ -121,7 +121,7 @@ describe('source classification', () => {
       number: 3,
       title: 'Mention',
       fromMention: true,
-      mentionedAt: '2026-09-11T00:00:00.000Z',
+      mentionedAt: '2026-09-20T00:00:00.000Z',
       inScopeRepo: false
     }), rules, NOW)
     expect(mention?.reasons).toEqual(['提及'])
