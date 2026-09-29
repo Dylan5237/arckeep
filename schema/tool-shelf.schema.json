@@ -34,6 +34,7 @@
         "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,60}$" },
         "title": { "type": "string", "minLength": 1, "maxLength": 80 },
         "description": { "type": "string", "maxLength": 400 },
+        "confirmLabel": { "type": "string", "minLength": 1, "maxLength": 200 },
         "type": { "enum": ["open-url", "open-folder", "run-command", "template"] },
         "params": {
           "type": "array",

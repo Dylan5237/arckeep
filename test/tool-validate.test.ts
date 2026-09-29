@@ -4,7 +4,7 @@ import { toolShelfExampleText } from '../src/main/tool-assets.js'
 import { cmdScriptFromPlan, planShell, powershellScriptFromPlan } from '../src/main/tool-launch.js'
 import { validateToolShelfText } from '../src/main/tool-validate.js'
 import { indexToLocation } from '../src/shared/tools/locate.js'
-import { copyFeedback, errorLine, filterActions, runStatus } from '../src/shared/tools/present.js'
+import { confirmButtonLabel, copyFeedback, errorLine, filterActions, runStatus } from '../src/shared/tools/present.js'
 import { buildPreview } from '../src/shared/tools/preview.js'
 import { powershellLaunchScript } from '../src/shared/tools/quote.js'
 import { collectKnownRepos } from '../src/shared/tools/repos.js'
@@ -25,6 +25,14 @@ describe('tool shelf schema', () => {
     expect(text).not.toMatch(/C:\\Users\\/i)
     expect(text).not.toMatch(/\/home\//)
     expect(text).not.toContain('Dylan5237')
+    expect(text).not.toContain('演练')
+    expect(text).not.toContain('确认前不会运行')
+    for (const action of result.config.actions) {
+      expect(action.title).not.toContain('演练')
+      expect(action.title).not.toContain('确认前不会运行')
+      expect(action.description ?? '').not.toContain('演练')
+      expect(action.description ?? '').not.toContain('确认前不会运行')
+    }
     expect(text).toContain('C:\\\\work\\\\demo')
     expect(text).toContain('apo init --dry-run')
     const apo = result.config.actions[2]
@@ -161,6 +169,17 @@ describe('run outcome, copy, and known repositories', () => {
     const local = buildPreview(open, { repo: 'C:\\work\\notes' }, 'C:\\work\\demo', known)
     expect(local).toMatchObject({ type: 'open-folder', text: 'C:\\work\\notes' })
     expect(() => buildPreview(open, { repo: 'Dylan5237/arckeep' }, 'C:\\work\\demo', known)).toThrow(/已知仓库/)
+  })
+
+  it('names the confirm button after the filled-in effect', () => {
+    const validated = validateToolShelfText(toolShelfExampleText())
+    if (!validated.ok) throw new Error(validated.error)
+    const [openRepo, openFolder, init, note] = validated.config.actions
+    expect(confirmButtonLabel(openRepo, { repo: 'owner/repo' })).toBe('打开 owner/repo')
+    expect(confirmButtonLabel(openFolder, { folder: 'owner/repo' })).toBe('用编辑器打开 owner/repo')
+    expect(confirmButtonLabel(init, { cwd: 'C:\\work\\demo', name: 'demo' })).toBe('在 C:\\work\\demo 初始化 demo')
+    expect(confirmButtonLabel(note, { project: '北区', task: '补齐验收步骤', due: '本周五' })).toBe('复制派工说明')
+    expect(confirmButtonLabel(init, { cwd: 'C:\\work\\demo', name: 'demo' })).not.toBe('确认执行')
   })
 
   it('filters the shelf as the query is typed', () => {

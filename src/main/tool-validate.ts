@@ -94,12 +94,13 @@ function failure(text: string, pointer: string, message: string): ToolConfigFail
 }
 
 function templatesOf(action: ToolAction): Array<{ field: string, value: string, shell?: ShellKind }> {
-  if (action.type === 'open-url') return [{ field: 'url', value: action.url }]
-  if (action.type === 'template') return [{ field: 'text', value: action.text }]
+  const confirm = action.confirmLabel ? [{ field: 'confirmLabel', value: action.confirmLabel }] : []
+  if (action.type === 'open-url') return [{ field: 'url', value: action.url }, ...confirm]
+  if (action.type === 'template') return [{ field: 'text', value: action.text }, ...confirm]
   if (action.type === 'open-folder') {
-    const fields = [{ field: 'path', value: action.path }]
+    const fields: Array<{ field: string, value: string, shell?: ShellKind }> = [{ field: 'path', value: action.path }]
     if (action.editor) fields.push({ field: 'editor', value: action.editor })
-    return fields
+    return [...fields, ...confirm]
   }
   const fields: Array<{ field: string, value: string, shell?: ShellKind }> = [
     { field: 'command', value: action.command, shell: action.shell }

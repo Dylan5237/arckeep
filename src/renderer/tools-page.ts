@@ -1,7 +1,7 @@
 import type { ToolFixture, ToolFixtureInvalid } from '../shared/tools/fixture'
 import { paramKind } from '../shared/tools/params'
 import { createRunGate, formatDuration } from '../shared/tools/preview'
-import { copyFeedback, filterActions, runStatus } from '../shared/tools/present'
+import { confirmButtonLabel, copyFeedback, filterActions, runStatus } from '../shared/tools/present'
 import {
   directoryChoices,
   findKnownRepo,
@@ -294,7 +294,7 @@ function previewBody(preview: ActionPreview): HTMLElement[] {
 function paintPreview(page: HTMLElement, state: PreviewState): void {
   const isTemplate = state.preview.type === 'template'
   const cancel = el('button', { type: 'button', class: 'ghost' }, ['取消'])
-  const confirm = el('button', { type: 'button', class: 'primary' }, [isTemplate ? '复制' : '确认执行'])
+  const confirm = el('button', { type: 'button', class: 'primary' }, [confirmButtonLabel(state.action, state.values)])
   cancel.addEventListener('click', () => {
     state.gate.cancel()
     removeEscape?.()
@@ -538,7 +538,7 @@ function paintFixture(target: HTMLElement, fixture: Exclude<ToolFixture, ToolFix
       mode: 'preview',
       actions: [action],
       action,
-      values: {},
+      values: fixture.values,
       knownRepos: [],
       gate,
       preview: {

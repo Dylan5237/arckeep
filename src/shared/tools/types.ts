@@ -16,6 +16,11 @@ interface ToolActionBase {
   title: string
   description?: string
   params?: ToolParam[]
+  /**
+   * Confirm-button text. Placeholders use the values the user filled in.
+   * This is a label, not a shell command.
+   */
+  confirmLabel?: string
 }
 
 export interface OpenUrlAction extends ToolActionBase {

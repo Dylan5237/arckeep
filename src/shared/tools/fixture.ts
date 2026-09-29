@@ -20,6 +20,7 @@ export interface ToolFixturePreview {
   page: 'tools'
   scene: 'preview'
   action: ToolAction
+  values: Record<string, string>
   previewText: string
   dryRun?: string
   cwd: string

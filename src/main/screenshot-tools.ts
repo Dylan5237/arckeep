@@ -49,6 +49,7 @@ const shelfActions: ToolAction[] = [
     id: 'open-repo',
     title: '打开仓库',
     description: '从已知仓库里选一个打开。',
+    confirmLabel: '打开 {{repo}}',
     type: 'open-url',
     url: 'https://github.com/{{repo}}',
     params: [{ key: 'repo', label: '仓库', required: true, input: 'repo' }]
@@ -57,6 +58,7 @@ const shelfActions: ToolAction[] = [
     id: 'open-folder-editor',
     title: '在编辑器中打开文件夹',
     description: '用编辑器打开一个本地文件夹。',
+    confirmLabel: '用编辑器打开 {{folder}}',
     type: 'open-folder',
     editor: 'code',
     path: '{{folder}}',
@@ -65,7 +67,8 @@ const shelfActions: ToolAction[] = [
   {
     id: 'apo-init',
     title: 'apo 项目初始化',
-    description: '预览用 --dry-run，确认后真正初始化。',
+    description: '初始化一个 apo 项目。',
+    confirmLabel: '在 {{cwd}} 初始化 {{name}}',
     type: 'run-command',
     shell: 'powershell',
     cwd: '{{cwd}}',
@@ -80,6 +83,7 @@ const shelfActions: ToolAction[] = [
     id: 'dispatch-note',
     title: '派工说明',
     description: '生成派工说明并复制到剪贴板。',
+    confirmLabel: '复制派工说明',
     type: 'template',
     text: '派工说明\n项目：{{project}}\n任务：{{task}}',
     params: [
@@ -193,11 +197,13 @@ export function buildToolFixture(scene: string): ToolFixture | null {
   }
   if (scene === 'tools-preview') {
     const action = apoAction()
-    const preview = buildPreview(action, { cwd: 'C:\\work\\demo', name: '北区' }, 'C:\\work\\demo')
+    const values = { cwd: 'C:\\work\\demo', name: 'demo' }
+    const preview = buildPreview(action, values, 'C:\\work\\demo')
     return {
       page: 'tools',
       scene: 'preview',
       action,
+      values,
       previewText: preview.text,
       dryRun: preview.dryRun,
       cwd: 'C:\\work\\demo',
@@ -279,7 +285,7 @@ export function toolScreenshotExpectation(scene: string): string | null {
     case 'tools-params':
       return 'north/atlas'
     case 'tools-preview':
-      return '确认后将执行的命令'
+      return '在 C:\\work\\demo 初始化 demo'
     case 'tools-running':
       return '正在初始化北区'
     case 'tools-success':
