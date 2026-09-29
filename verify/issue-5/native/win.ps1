@@ -9,7 +9,7 @@ Arckeep Issue #5 独立验收 - Windows 原生辅助脚本。
   pwsh -File win.ps1 -Action FindProcess -Name "ping"
 #>
 param(
-  [Parameter(Mandatory = $true)][ValidateSet('Screenshot', 'ReadClipboard', 'ProcessTree', 'FindProcess', 'CompileWriteArgsExe', 'SnapshotPids', 'CheckPidsAlive', 'GetCommandLine')]
+  [Parameter(Mandatory = $true)][ValidateSet('Screenshot', 'ReadClipboard', 'ProcessTree', 'FindProcess', 'CompileWriteArgsExe', 'CompileGhStubExe', 'SnapshotPids', 'CheckPidsAlive', 'GetCommandLine')]
   [string]$Action,
   [string]$Path,
   [string]$Marker,
@@ -120,6 +120,40 @@ class WriteArgs {
     & $csc.FullName "/nologo" "/target:exe" "/out:$OutExe" $srcPath | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "csc.exe failed with exit code $LASTEXITCODE" }
     if (-not (Test-Path -LiteralPath $OutExe)) { throw 'write-args.exe was not produced' }
+    Write-Output (@{ ok = $true; exe = $OutExe } | ConvertTo-Json -Compress)
+  }
+  'CompileGhStubExe' {
+    # 独立验收工具用的假 gh.exe：立刻以非 0 退出码结束、不输出任何内容、不碰网络。
+    # 用途：真机上观察到被测应用每次调用 getState()/refreshWaiting() 都会各自现场 spawn 一次
+    # `gh auth token` 来判断 GitHub 登录状态；如果这台跑手上真的 gh.exe 存在但响应很慢
+    # （或者被同名假设影响），会跟我们测试脚本自己触发的界面导航形成竞态（见 lib.mjs 里
+    # saveToolShelfJson 的详细注释）。这里造一个跟真 gh 完全无关、瞬间返回的假 gh.exe，塞进测试
+    # 进程 PATH 最前面，让「未登录 GitHub」这个状态在所有 session 里都是确定的、毫秒级返回的——
+    # 这本身也更贴近硬性规则第 4 条「不使用真实 token」的精神（避免意外读到跑手上任何已登录状态）。
+    if (-not $OutExe) { throw '-OutExe is required' }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutExe) | Out-Null
+    $csc = Get-ChildItem -Path "$env:WINDIR\Microsoft.NET\Framework64" -Filter csc.exe -Recurse -ErrorAction SilentlyContinue |
+      Sort-Object FullName -Descending | Select-Object -First 1
+    if (-not $csc) {
+      $csc = Get-ChildItem -Path "$env:WINDIR\Microsoft.NET\Framework" -Filter csc.exe -Recurse -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending | Select-Object -First 1
+    }
+    if (-not $csc) { throw 'csc.exe not found; cannot compile the fake gh.exe' }
+    $srcPath = [System.IO.Path]::ChangeExtension($OutExe, '.cs')
+    $source = @'
+using System;
+
+class GhStub {
+  static int Main(string[] args) {
+    // 模拟「未登录」：非 0 退出码、无输出、不碰网络、立刻返回。
+    return 1;
+  }
+}
+'@
+    Set-Content -Path $srcPath -Value $source -Encoding UTF8
+    & $csc.FullName "/nologo" "/target:exe" "/out:$OutExe" $srcPath | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "csc.exe failed with exit code $LASTEXITCODE" }
+    if (-not (Test-Path -LiteralPath $OutExe)) { throw 'gh.exe (stub) was not produced' }
     Write-Output (@{ ok = $true; exe = $OutExe } | ConvertTo-Json -Compress)
   }
 }

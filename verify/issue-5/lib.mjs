@@ -131,6 +131,21 @@ export function compileWriteArgsExe() {
   fs.mkdirSync(path.dirname(WRITE_ARGS_EXE), { recursive: true })
   return runNative(['-Action', 'CompileWriteArgsExe', '-OutExe', WRITE_ARGS_EXE], { timeoutMs: 60000 })
 }
+
+// 真机上观察到：被测应用每个需要判断 GitHub 登录态的 IPC（getState/refreshWaiting 等）都会各自
+// 现场 spawn 一次 `gh auth token`，如果这台跑手上的真 gh.exe 响应慢（哪怕只是偶尔），就会跟我们
+// 测试脚本自己触发的界面导航形成竞态：初始「等我处理」页自己的异步刷新链条如果比我们导航到
+// 「设置」页的那一次 getState() 更晚落地，就会把已经切换过去的设置页整页换回「等我处理」。
+// 造一个瞬间以非 0 退出码返回、不碰网络的假 gh.exe，塞进测试进程 PATH 最前面，让这个状态在所有
+// session 里都是确定的、毫秒级返回——顺带也更贴近硬性规则第 4 条「不使用真实 token」的精神。
+export const GH_STUB_DIR = path.join(__dirname, 'generated', 'gh-stub')
+export const GH_STUB_EXE = path.join(GH_STUB_DIR, 'gh.exe')
+export function ensureGhStub() {
+  if (!fs.existsSync(GH_STUB_EXE)) {
+    runNative(['-Action', 'CompileGhStubExe', '-OutExe', GH_STUB_EXE], { timeoutMs: 60000 })
+  }
+  return GH_STUB_EXE
+}
 export function writeArgsReceivedFile() {
   return path.join(path.dirname(WRITE_ARGS_EXE), 'editor-received.txt')
 }
@@ -180,13 +195,16 @@ export async function waitFor(fn, { timeoutMs = 5000, intervalMs = 50 } = {}) {
 // Electron 启动 / 窗口寻址
 // ---------------------------------------------------------------------------
 export function cleanEnv(extra = {}) {
-  const env = { ...process.env }
+  const env = { ...process.env, ...extra }
   delete env.GH_TOKEN
   delete env.GITHUB_TOKEN
   delete env.GH_ENTERPRISE_TOKEN
   delete env.GITHUB_ENTERPRISE_TOKEN
   env.ARCKEEP_TEST_HOOKS = '1'
-  return { ...env, ...extra }
+  // 无论调用方是否自定义了 PATH（例如 Session F 给 apo-stub 加的 PATH），假 gh.exe 目录始终
+  // 加在最前面，确保「gh 未登录」这个状态又快又稳定，见 ensureGhStub() 处的详细注释。
+  env.PATH = `${GH_STUB_DIR}${path.delimiter}${env.PATH ?? ''}`
+  return env
 }
 
 export const consoleObservations = []
@@ -332,36 +350,49 @@ export async function elementRect(page, selector) {
   }, selector)
 }
 
-/** 打开工具架设置卡片，把整段 JSON 粘进文本框并点保存（真实界面操作：定位到设置、清空、输入、点按钮）。
- * 注意两个真机上观察到的细节：
- * ① 一个全新启动的 Electron 窗口，第一次切到「设置」页往往比后面几次明显慢（冷启动/JIT 预热），
- *    第一次导航给 20s，比常规操作用的 8s 更宽松；
- * ② 保存成功后的「工具架已保存」提示是 renderToolSettings 里点击处理函数自己插入的一个临时 DOM 节点，
- *    紧接着的 `await rerender()` 会整页重新渲染并把它替换掉——这个提示存在的窗口非常短，
- *    在 click() 之后必须立刻用 waitForSelector 去抓，不能先 sleep 再查，否则几乎必然错过。 */
-export async function saveToolShelfJson(page, json) {
-  await page.click('[data-view="settings"]')
+/** 导航到「设置」页并等到 #tool-shelf-json 出现。
+ * 真机上观察到的竞态（已用 gh-stub 修掉根因，这里保留重试作为兜底，见 ensureGhStub() 注释）：
+ * 应用刚启动时的初始视图（等我处理）自己有一段异步刷新链路（refreshHotkeyBanner→getState，
+ * 再到 renderWaiting 自己的 reload），如果它比我们点「设置」触发的那次 renderSettings 更晚
+ * 把结果画到同一个 #content 节点上，就会把已经切换过去的设置页整页换回「等我处理」。
+ * 由于两条链路都是 `void show(...)`（没人 await），单纯等一次是等不到「不会再被换回去」这个
+ * 保证的——所以这里在超时预算内允许重新点一次导航（每次判定用短窗口），命中竞态时重新点击
+ * 触发的 renderSettings 几乎总能在下一轮赢过（此时早先那条初始链路早已跑完）。 */
+export async function gotoSettingsAndWaitEditor(page, { timeoutMs = 20000, sliceMs = 4000 } = {}) {
   const editor = page.locator('#tool-shelf-json')
-  try {
-    // 给足够宽松的超时：第一次切到设置页（冷启动/JIT 预热）在真机上观察到明显比后面几次慢。
-    await editor.waitFor({ state: 'visible', timeout: 20000 })
-  } catch (err) {
-    // 诊断用：这一步在真机上多次超时，先把当时到底卡在哪个画面留下证据，而不是继续瞎猜。
-    try {
-      const diagName = `zz-diag-settings-timeout-${Date.now()}`
-      await page.screenshot({ path: path.join(EVIDENCE_DIR, `${diagName}.png`) }).catch(() => {})
-      const bodyText = await page.evaluate(() => document.body.innerText).catch(() => '<evaluate 失败>')
-      const bodyHtmlHead = await page.evaluate(() => document.body.innerHTML.slice(0, 4000)).catch(() => '<evaluate 失败>')
-      const title = await page.title().catch(() => '<title 失败>')
-      const url = page.url()
-      fs.writeFileSync(path.join(EVIDENCE_DIR, `${diagName}.json`), JSON.stringify({ title, url, bodyText, bodyHtmlHead }, null, 2), 'utf8')
-      logEvidence(`${diagName}.png`, '诊断：等待设置页 JSON 编辑框超时时，实际画面是什么', [])
-      console.error(`[diag] saveToolShelfJson 超时诊断已写入 ${diagName}.png/.json；title="${title}" url="${url}" bodyText(前200字)="${bodyText.slice(0, 200)}"`)
-    } catch (diagErr) {
-      console.error('[diag] 连诊断截图/dump都失败了：', diagErr)
-    }
-    throw err
+  const start = Date.now()
+  let attempts = 0
+  while (Date.now() - start < timeoutMs) {
+    attempts += 1
+    await page.click('[data-view="settings"]')
+    const remaining = timeoutMs - (Date.now() - start)
+    const thisWait = Math.max(300, Math.min(sliceMs, remaining))
+    const ok = await editor.waitFor({ state: 'visible', timeout: thisWait }).then(() => true).catch(() => false)
+    if (ok) return { editor, attempts }
   }
+  // 诊断用：反复重试后仍然没等到，先把当时到底卡在哪个画面留下证据，而不是继续瞎猜。
+  try {
+    const diagName = `zz-diag-settings-timeout-${Date.now()}`
+    await page.screenshot({ path: path.join(EVIDENCE_DIR, `${diagName}.png`) }).catch(() => {})
+    const bodyText = await page.evaluate(() => document.body.innerText).catch(() => '<evaluate 失败>')
+    const bodyHtmlHead = await page.evaluate(() => document.body.innerHTML.slice(0, 4000)).catch(() => '<evaluate 失败>')
+    const title = await page.title().catch(() => '<title 失败>')
+    const url = page.url()
+    fs.writeFileSync(path.join(EVIDENCE_DIR, `${diagName}.json`), JSON.stringify({ title, url, bodyText, bodyHtmlHead, attempts }, null, 2), 'utf8')
+    logEvidence(`${diagName}.png`, '诊断：反复重试仍等不到设置页 JSON 编辑框时，实际画面是什么', [])
+    console.error(`[diag] gotoSettingsAndWaitEditor 超时诊断已写入 ${diagName}.png/.json；attempts=${attempts} title="${title}" url="${url}" bodyText(前200字)="${bodyText.slice(0, 200)}"`)
+  } catch (diagErr) {
+    console.error('[diag] 连诊断截图/dump都失败了：', diagErr)
+  }
+  throw new Error(`等待设置页 #tool-shelf-json 超时（重试 ${attempts} 次，共 ${timeoutMs}ms）`)
+}
+
+/** 打开工具架设置卡片，把整段 JSON 粘进文本框并点保存（真实界面操作：定位到设置、清空、输入、点按钮）。
+ * 保存成功后的「工具架已保存」提示是 renderToolSettings 里点击处理函数自己插入的一个临时 DOM 节点，
+ * 紧接着的 `await rerender()` 会整页重新渲染并把它替换掉——这个提示存在的窗口非常短，
+ * 在 click() 之后必须立刻用 waitForSelector 去抓，不能先 sleep 再查，否则几乎必然错过。 */
+export async function saveToolShelfJson(page, json) {
+  const { editor } = await gotoSettingsAndWaitEditor(page)
   await editor.click()
   await editor.fill('')
   await editor.fill(json)

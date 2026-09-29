@@ -7,7 +7,7 @@ import * as lib from '../lib.mjs'
 const {
   setResult, logEvidence, EVIDENCE_DIR,
   launchApp, mainWindowPage, quitApp, killStrayArckeep,
-  fullShot, shot, sleep, freshAppData, saveToolShelfJson, waitFor, getUserDataDir,
+  fullShot, shot, sleep, freshAppData, saveToolShelfJson, gotoSettingsAndWaitEditor, waitFor, getUserDataDir,
   independentSyntaxLocation, lineOf, writeJson, appendEvidenceJson
 } = lib
 
@@ -72,10 +72,7 @@ const UNKNOWN_TYPE = [
 ].join('\n')
 
 async function attemptInvalidSave(page, name, jsonText, checkIds, extraChecks) {
-  await page.click('[data-view="settings"]')
-  const editor = page.locator('#tool-shelf-json')
-  // 给足够宽松的超时：第一次切到设置页（冷启动/JIT 预热）在真机上观察到明显比后面几次慢。
-  await editor.waitFor({ state: 'visible', timeout: 20000 })
+  const { editor } = await gotoSettingsAndWaitEditor(page)
   await editor.click()
   await editor.fill('')
   await editor.fill(jsonText)
@@ -155,15 +152,12 @@ export async function run() {
         notes: `两类 schema 报错都写明了允许值/期望类型，且编辑器行号槛都准确标在出错行上。`
       })
     }
-    setResult('1', results1Verdict(), {})
+    // Item 1 的最终结论取三种非法 JSON 场景 + 后面合法保存场景的综合结果，实际结论在最后
+    // 「合法保存 + 出现在工具架」验证完成后再统一写（见下方聚合块）。这里不能用 setResult('1', ..., {})
+    // 占位——setResult 是整体替换而不是合并，空 {} 会把上面几段 mergeNotes('1', ...) 攒的文字全部
+    // 清空，导致最后聚合时的字符串匹配全部落空（这个 bug 已经在验收过程中发现并修正）。
   } catch (err) {
     lib.mergeNotes('C7', `未知 type 场景异常：${err.stack || err}`)
-  }
-
-  function results1Verdict() {
-    // Item 1 的最终结论取三种非法 JSON 场景 + 后面合法保存场景的综合结果，这里先占位，
-    // 实际结论在最后「合法保存 + 出现在工具架」验证完成后再统一写。
-    return lib.results['1'].verdict
   }
 
   // ------------------------------------------------------------------
@@ -187,7 +181,7 @@ export async function run() {
     lib.mergeNotes('1', `合法保存场景异常：${err.stack || err}`)
   }
 
-  const invalidOk = ['1'].every(() => true) // 三段非法场景已各自写了 mergeNotes；用下面聚合判断最终结论
+  // 三段非法场景已各自用 mergeNotes('1', ...) 攒好了文字（见上面三个 try 块），这里做最终聚合判断。
   const missingCommaOk = lib.results['1'].notes.includes('行列匹配=true/true')
   const wrongTypeOk = lib.results['1'].notes.includes('行号匹配=true')
   setResult('1', missingCommaOk && wrongTypeOk && legitPass ? 'PASS' : 'FAIL', {

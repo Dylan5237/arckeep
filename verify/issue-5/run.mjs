@@ -23,6 +23,11 @@ async function main() {
     throw new Error(`ARCKEEP_EXE_PATH 未设置或文件不存在：${lib.EXE}`)
   }
 
+  // 提前编译好假 gh.exe（见 lib.mjs ensureGhStub() 注释），让每个 session 启动应用时都能立刻用上，
+  // 避免真 gh.exe（如果这台跑手上有）响应慢跟我们测试脚本自己的导航形成竞态。
+  const ghStubExe = lib.ensureGhStub()
+  console.log(`[run] 假 gh.exe 已就绪：${ghStubExe}`)
+
   for (const [label, loader] of SESSIONS) {
     const startedAt = Date.now()
     console.log(`\n=== [${label}] 开始 ===`)
