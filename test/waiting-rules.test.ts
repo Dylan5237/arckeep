@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest'
 import { userDataDir, waitingDismissalPath } from '../src/main/paths.js'
 import { assembleWaiting } from '../src/shared/waiting/assemble.js'
 import { classifyRecord } from '../src/shared/waiting/classify.js'
+import { repoIsParked } from '../src/shared/waiting/text-scan.js'
+import { effectiveHiddenRepos } from '../src/shared/waiting/snooze.js'
 import { blankRecord, parseIssueTree } from '../src/shared/waiting/parse-github.js'
 import { tasklistIssueRefs } from '../src/shared/waiting/sub-issues.js'
 import { defaultWaitingConfig, parseWaitingConfig } from '../src/shared/waiting/rules.js'
@@ -373,14 +375,12 @@ describe('quiet open pulls in writable repos', () => {
     })
   }
 
-  it('counts a pull when the title, body, or a comment asks for action', () => {
+  it('counts a pull when the body or a comment asks for action, not the title alone', () => {
     const titled = classifyRecord(pull({
       title: '请确认导出列',
       lastPushedAt: new Date(NOW.getTime() - day).toISOString()
     }), config(), NOW)
-    expect(titled?.reasons).toEqual(['待你审/合'])
-    expect(titled?.signal.rule).toBe('请主人或用户动手')
-    expect(titled?.signal.excerpt).toContain('请确认导出列')
+    expect(titled).toBeNull()
 
     const body = classifyRecord(pull({
       body: '需要你看一下失败重试',
@@ -393,7 +393,7 @@ describe('quiet open pulls in writable repos', () => {
       comments: [{ body: '等你验收截图', createdAt: new Date(NOW.getTime() - day).toISOString() }]
     }), config(), NOW)
     expect(commented?.reasons).toEqual(['待你审/合'])
-    expect(commented?.signal.rule).toBe('请主人或用户动手')
+    expect(commented?.signal.rule).toBe('明确请求')
     expect(commented?.signal.excerpt).toContain('等你验收截图')
 
     const negated = classifyRecord(pull({
@@ -424,7 +424,9 @@ describe('quiet open pulls in writable repos', () => {
     expect(classifyRecord(pull({ lastPushedAt: age(2), createdAt: age(2) }), config(), NOW)).toBeNull()
     const exact = classifyRecord(pull({ lastPushedAt: age(3), createdAt: age(3) }), config(), NOW)
     expect(exact?.reasons).toEqual(['待你审/合'])
-    expect(exact?.signal).toEqual({ rule: '3 天无动静', excerpt: '3 天无动静' })
+    expect(exact?.signal.rule).toBe('3 天无动静')
+    expect(exact?.signal.excerpt).toContain('2026-09-25')
+    expect(exact?.signal.excerpt).not.toBe(exact?.signal.rule)
     expect(exact?.waitingDays).toBe(3)
     const older = classifyRecord(pull({ lastPushedAt: age(4), createdAt: age(4) }), config(), NOW)
     expect(older?.signal.rule).toBe('3 天无动静')
@@ -479,7 +481,9 @@ describe('quiet open pulls in writable repos', () => {
     }), config(), NOW)
     expect(review?.reasons).toEqual(['请求 review'])
     expect(review?.signal.rule).toBe('请求 review')
-    expect(review?.signal.excerpt).toBe('请求 review')
+    expect(review?.signal.excerpt).toContain('请求')
+    expect(review?.signal.excerpt).toContain('2026-09-27')
+    expect(review?.signal.excerpt).not.toBe('请求 review')
 
     const assigned = classifyRecord(pull({
       fromAssignee: true,
@@ -489,7 +493,9 @@ describe('quiet open pulls in writable repos', () => {
     }), config(), NOW)
     expect(assigned?.reasons).toEqual(['指派'])
     expect(assigned?.signal.rule).toBe('指派')
-    expect(assigned?.signal.excerpt).toBe('指派')
+    expect(assigned?.signal.excerpt).toContain('指派')
+    expect(assigned?.signal.excerpt).toContain('2026-09-27')
+    expect(assigned?.tier).toBe('weak')
   })
 
   it('honors a different quiet window', () => {
@@ -498,7 +504,9 @@ describe('quiet open pulls in writable repos', () => {
     expect(classifyRecord(pull({ lastPushedAt: age(4), createdAt: age(4) }), rules, NOW)).toBeNull()
     const hit = classifyRecord(pull({ lastPushedAt: age(5), createdAt: age(5) }), rules, NOW)
     expect(hit?.reasons).toEqual(['待你审/合'])
-    expect(hit?.signal).toEqual({ rule: '5 天无动静', excerpt: '5 天无动静' })
+    expect(hit?.signal.rule).toBe('5 天无动静')
+    expect(hit?.signal.excerpt).toContain('5 天')
+    expect(hit?.signal.excerpt).not.toBe('5 天无动静')
     expect(parseWaitingConfig({}).openPrQuietDays).toBe(3)
     expect(parseWaitingConfig({ openPrQuietDays: 5 }).openPrQuietDays).toBe(5)
     expect(() => parseWaitingConfig({ openPrQuietDays: 0 })).toThrow('待你审/合的无动静天数')
@@ -517,7 +525,7 @@ describe('role names, status headers, specs, and step owners', () => {
       comments: [{ body: '请负责人确认能否合入', createdAt: '2026-09-21T00:00:00.000Z' }]
     }), rules, NOW)
     expect(asked?.reasons).toEqual(['要人动手'])
-    expect(asked?.signal.rule).toBe('角色称呼请动手')
+    expect(asked?.signal.rule).toBe('明确请求')
     expect(asked?.signal.excerpt).toContain('请负责人确认')
 
     const named = classifyRecord(record({
@@ -541,7 +549,7 @@ describe('role names, status headers, specs, and step owners', () => {
       kind: 'issue',
       number: 93,
       title: 'Other name',
-      comments: [{ body: '请负责人确认能否合入', createdAt: '2026-09-21T00:00:00.000Z' }]
+      comments: [{ body: '请负责人看一下进度', createdAt: '2026-09-21T00:00:00.000Z' }]
     }), config({ roleNames: ['值班人'] }), NOW)
     expect(renamed).toBeNull()
   })
@@ -599,7 +607,7 @@ describe('role names, status headers, specs, and step owners', () => {
       kind: 'issue',
       number: 99,
       title: 'Blocked',
-      body: '状态：BLOCKED'
+      body: 'BLOCKED'
     }), rules, NOW)
     expect(blocked?.signal.rule).toBe('状态头')
 
@@ -623,7 +631,7 @@ describe('role names, status headers, specs, and step owners', () => {
       kind: 'issue',
       number: 102,
       title: 'Wait',
-      body: '状态：WAITING ON 维护者'
+      body: 'WAITING ON 维护者'
     }), rules, NOW)
     expect(waitingOwner?.signal.excerpt.toUpperCase()).toContain('WAITING ON')
 
@@ -694,10 +702,7 @@ describe('role names, status headers, specs, and step owners', () => {
         '| 补测试 | agent | 未完成 |'
       ].join('\n')
     }), rules, NOW)
-    expect(mine?.reasons).toEqual(['要人动手'])
-    expect(mine?.signal.rule).toBe('负责人指向用户')
-    expect(mine?.signal.excerpt).toContain('主人')
-    expect(mine?.signal.excerpt).not.toContain('agent')
+    expect(mine).toBeNull()
 
     const asked = classifyRecord(record({
       kind: 'issue',
@@ -730,6 +735,7 @@ describe('role names, status headers, specs, and step owners', () => {
       fromOpenPr: true,
       isDraft: false,
       body: '需 @ada ACK 后合入',
+      viewerLogin: 'ada',
       lastPushedAt: new Date(NOW.getTime() - 86_400_000).toISOString(),
       createdAt: new Date(NOW.getTime() - 86_400_000).toISOString()
     }), rules, NOW)
@@ -746,11 +752,12 @@ describe('role names, status headers, specs, and step owners', () => {
       isDraft: false,
       reviewRequestedAt: '2026-09-27T00:00:00.000Z',
       body: '需 @ada ACK 后合入',
+      viewerLogin: 'ada',
       lastPushedAt: '2026-09-27T00:00:00.000Z',
       createdAt: '2026-09-27T00:00:00.000Z'
     }), rules, NOW)
     expect(review?.reasons).toContain('请求 review')
-    expect(review?.signal.excerpt.startsWith('请求 review')).toBe(true)
+    expect(review?.signal.excerpt.startsWith('有人 在 2026-09-27 请求')).toBe(true)
     expect(review?.signal.excerpt).toContain('ACK')
 
     const assigned = classifyRecord(record({
@@ -760,7 +767,9 @@ describe('role names, status headers, specs, and step owners', () => {
       fromAssignee: true,
       assignedAt: '2026-09-20T00:00:00.000Z'
     }), rules, NOW)
-    expect(assigned?.signal.excerpt).toBe('指派')
+    expect(assigned?.signal.excerpt).toContain('2026-09-20')
+    expect(assigned?.signal.excerpt).not.toBe('指派')
+    expect(assigned?.tier).toBe('weak')
   })
 })
 
@@ -934,7 +943,7 @@ describe('recall of requests that are still open', () => {
     for (const body of cases) {
       const row = classifyRecord(record({ kind: 'issue', number: 70, title: 'Still open', body }), rules, NOW)
       expect(row?.reasons, body).toEqual(['要人动手'])
-      expect(row?.signal.rule === '同一段里的否定式' || row?.signal.rule === '请主人或用户动手', body).toBe(true)
+      expect(row?.signal.rule, body).toBe('明确请求')
       expect(row?.signal.excerpt.length).toBeGreaterThan(0)
     }
   })
@@ -947,7 +956,7 @@ describe('recall of requests that are still open', () => {
       body: '请主人确认或拒收这一版。'
     }), rules, NOW)
     expect(row?.reasons).toEqual(['要人动手'])
-    expect(row?.signal.rule).toBe('请主人或用户动手')
+    expect(row?.signal.rule).toBe('明确请求')
     expect(row?.signal.excerpt).toContain('请主人确认或拒收')
   })
 
@@ -960,7 +969,8 @@ describe('recall of requests that are still open', () => {
       comments: [{ body: '我先记下进度', createdAt: '2026-09-21T00:00:00.000Z' }]
     }), rules, NOW)
     expect(table?.reasons).toEqual(['要人动手'])
-    expect(table?.signal.rule).toBe('正文未完成的状态')
+    expect(table?.tier).toBe('weak')
+    expect(table?.signal.rule).toBe('动作关键词')
     expect(table?.signal.excerpt).toContain('待用户确认后 push')
 
     const checked = classifyRecord(record({
@@ -979,7 +989,8 @@ describe('recall of requests that are still open', () => {
       body: '状态：等用户确认截图'
     }), rules, NOW)
     expect(line?.reasons).toEqual(['要人动手'])
-    expect(line?.signal.rule).toBe('正文未完成的状态')
+    expect(line?.signal.rule).toBe('明确请求')
+    expect(line?.tier).toBe('strong')
   })
 
   it('does not drop a stale mention when the body still asks for a person', () => {
@@ -995,7 +1006,8 @@ describe('recall of requests that are still open', () => {
       repoAccess: 'unknown'
     }), rules, NOW)
     expect(row?.reasons).toEqual(['提及'])
-    expect(row?.signal.rule).toBe('过时提及旁仍有等待')
+    expect(row?.tier).toBe('weak')
+    expect(row?.signal.rule).toBe('提及')
     expect(row?.signal.excerpt).toContain('待用户确认后 push')
   })
 })
@@ -1079,5 +1091,212 @@ describe('show ignored rows', () => {
     expect(faded).toHaveLength(shown.hiddenCount)
     expect(faded.map(row => row.title).sort()).toEqual(['One', 'Two'])
     expect(shown.rows).toHaveLength(3)
+  })
+})
+
+describe('synthetic fixtures for each waiting rule', () => {
+  const rules = config()
+  const main = (patch: Partial<GithubRecord> & Pick<GithubRecord, 'kind' | 'number' | 'title'>) => {
+    const row = classifyRecord(record(patch), rules, NOW)
+    expect(row?.tier).toBe('strong')
+    return row
+  }
+
+  it('keeps a review request and ignores a pull nobody asked to review', () => {
+    const kept = main({
+      kind: 'pr',
+      number: 1,
+      title: 'Review',
+      fromReview: true,
+      reviewRequestedAt: '2026-09-20T00:00:00.000Z',
+      reviewRequestedBy: 'mina',
+      viewerLogin: 'ada'
+    })
+    expect(kept?.signal.excerpt).toContain('mina')
+    expect(kept?.signal.excerpt).toContain('2026-09-20')
+    expect(kept?.signal.excerpt).not.toBe('请求 review')
+    const quiet = classifyRecord(record({
+      kind: 'pr',
+      number: 2,
+      title: 'Fresh',
+      fromOpenPr: true,
+      isDraft: false,
+      repoAccess: 'maintain',
+      createdAt: '2026-09-27T00:00:00.000Z',
+      lastPushedAt: '2026-09-27T00:00:00.000Z'
+    }), rules, NOW)
+    expect(quiet).toBeNull()
+  })
+
+  it('requires an explicit request before an assignment joins the main list', () => {
+    const kept = main({
+      kind: 'issue',
+      number: 3,
+      title: 'Assigned',
+      fromAssignee: true,
+      assignedAt: '2026-09-18T00:00:00.000Z',
+      assignedBy: 'mina',
+      comments: [{ body: '请确认能否合入', authorLogin: 'mina', createdAt: '2026-09-21T00:00:00.000Z' }]
+    })
+    expect(kept?.reasons).toContain('指派')
+    expect(kept?.signal.excerpt).toContain('请确认')
+    const bare = classifyRecord(record({
+      kind: 'issue',
+      number: 4,
+      title: 'Only assigned',
+      fromAssignee: true,
+      assignedAt: '2026-09-18T00:00:00.000Z',
+      assignedBy: 'mina'
+    }), rules, NOW)
+    expect(bare?.tier).toBe('weak')
+    expect(bare?.signal.excerpt).toContain('mina')
+    expect(bare?.signal.excerpt).not.toBe('指派')
+  })
+
+  it('reads an explicit request or a status header from the latest comment by someone else', () => {
+    const request = main({
+      kind: 'issue',
+      number: 5,
+      title: 'Ask',
+      viewerLogin: 'ada',
+      comments: [
+        { body: '请确认', authorLogin: 'ada', createdAt: '2026-09-22T00:00:00.000Z' },
+        { body: 'please review the diff', authorLogin: 'mina', createdAt: '2026-09-21T00:00:00.000Z' }
+      ]
+    })
+    expect(request?.signal.excerpt).toContain('please review')
+    const header = main({
+      kind: 'issue',
+      number: 6,
+      title: 'Header',
+      comments: [{ body: 'NEEDS USER ACTION\nPASS: not claimed', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
+    })
+    expect(header?.signal.excerpt).toContain('NEEDS USER ACTION')
+    const negated = classifyRecord(record({
+      kind: 'issue',
+      number: 7,
+      title: 'Negated header',
+      comments: [{ body: 'NEEDS USER ACTION: not needed', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(negated).toBeNull()
+    const lower = classifyRecord(record({
+      kind: 'issue',
+      number: 8,
+      title: 'Lower',
+      comments: [{ body: 'the build remains blocked.', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(lower).toBeNull()
+    const other = classifyRecord(record({
+      kind: 'issue',
+      number: 9,
+      title: 'Someone else',
+      viewerLogin: 'ada',
+      comments: [{ body: '请 @bob 确认', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(other).toBeNull()
+  })
+
+  it('counts ACK only with a request verb and the user in the same sentence', () => {
+    const kept = main({
+      kind: 'issue',
+      number: 10,
+      title: 'Ack',
+      viewerLogin: 'ada',
+      comments: [{ body: '需 @ada ACK 后再合', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
+    })
+    expect(kept?.signal.rule).toBe('需 ACK')
+    expect(kept?.signal.excerpt).toContain('ACK')
+    const alone = classifyRecord(record({
+      kind: 'issue',
+      number: 11,
+      title: 'Bare ack',
+      viewerLogin: 'ada',
+      comments: [{ body: 'ACK', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(alone).toBeNull()
+    const unnamed = classifyRecord(record({
+      kind: 'issue',
+      number: 12,
+      title: 'Please ack',
+      viewerLogin: 'ada',
+      comments: [{ body: '请 ACK', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(unnamed).toBeNull()
+  })
+
+  it('reads inline code in a comment and ignores a fenced block', () => {
+    const inline = main({
+      kind: 'issue',
+      number: 13,
+      title: 'Inline',
+      comments: [{ body: '看一下 `请确认` 这一处', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
+    })
+    expect(inline?.signal.excerpt).toContain('请确认')
+    const fenced = classifyRecord(record({
+      kind: 'issue',
+      number: 14,
+      title: 'Fence',
+      comments: [{ body: '```\n请确认\n```', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(fenced).toBeNull()
+  })
+
+  it('lists a matching label without a comment and ignores an unrelated label', () => {
+    const kept = main({
+      kind: 'issue',
+      number: 15,
+      title: 'Labeled',
+      labels: ['needs-review'],
+      labelEvents: [{ name: 'needs-review', at: '2026-09-11T00:00:00.000Z' }]
+    })
+    expect(kept?.signal.excerpt).toContain('needs-review')
+    expect(kept?.signal.excerpt).toContain('2026-09-11')
+    const missed = classifyRecord(record({
+      kind: 'issue',
+      number: 16,
+      title: 'Other label',
+      labels: ['bug']
+    }), rules, NOW)
+    expect(missed).toBeNull()
+  })
+
+  it('hides a parked repository the same way as an ignored repository', () => {
+    expect(repoIsParked('temporarily parked', [], ['parked', '搁置'])).toBe(true)
+    expect(repoIsParked('active toolkit', ['搁置'], ['parked', '搁置'])).toBe(true)
+    expect(repoIsParked('unparked notes', ['active'], ['parked', '搁置'])).toBe(false)
+    const row = classifyRecord(record({
+      kind: 'issue',
+      number: 17,
+      title: 'Parked ask',
+      body: '请确认',
+      repoDescription: '这个仓库已搁置'
+    }), rules, NOW)
+    expect(row?.tier).toBe('strong')
+    expect(row?.parked).toBe(true)
+    const hidden = effectiveHiddenRepos([], ['example/demo'], [])
+    const parted = partitionDismissals([row].filter((item): item is NonNullable<typeof row> => item !== null), {}, NOW, false, hidden)
+    expect(parted.rows).toEqual([])
+    const revealed = effectiveHiddenRepos([], ['example/demo'], ['example/demo'])
+    const shown = partitionDismissals([row].filter((item): item is NonNullable<typeof row> => item !== null), {}, NOW, false, revealed)
+    expect(shown.rows).toHaveLength(1)
+  })
+
+  it('drops a closed sub-issue and keeps an open one', () => {
+    const records = parseIssueTree({
+      __typename: 'Issue',
+      number: 18,
+      title: 'Parent',
+      url: 'https://github.com/example/demo/issues/18',
+      body: '请确认',
+      state: 'OPEN',
+      repository: { nameWithOwner: 'example/demo' },
+      subIssues: {
+        nodes: [
+          { number: 19, title: 'Open child', url: 'https://github.com/example/demo/issues/19', body: '请确认', state: 'OPEN' },
+          { number: 20, title: 'Closed child', url: 'https://github.com/example/demo/issues/20', body: '请确认', state: 'CLOSED' }
+        ]
+      }
+    }, { login: 'ada', inScopeRepo: true })
+    expect(records.map(item => item.number).sort()).toEqual([18, 19])
   })
 })

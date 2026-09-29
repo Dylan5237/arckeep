@@ -27,13 +27,23 @@ const DEFAULT_KEYWORDS = [
   '等用户',
   '请主人',
   '请拍板',
-  '明示接受或拒收',
-  '\\bACK\\b'
+  '明示接受或拒收'
 ]
 
+const DEFAULT_REQUEST_VERBS = ['请', '需', 'please', 'need', '等']
+
+const DEFAULT_REQUEST_ACTIONS = ['确认', '接受', '拒收', '验收', '决定', 'review', 'approve', 'confirm', 'accept']
+
+const DEFAULT_ACK_TOKENS = ['ACK']
+
+const DEFAULT_PARKED_MARKERS = ['parked', '搁置']
+
 const DEFAULT_LABELS = [
-  'USER_ACTION_REQUIRED',
-  'HUMAN_REQUIRED',
+  'pending',
+  'waiting',
+  'needs-*',
+  'blocked',
+  '等待',
   'needs-human',
   'needs-dylan'
 ]
@@ -53,7 +63,9 @@ const DEFAULT_STATUS_HEADERS = [
   'NEEDS USER ACTION',
   'BLOCKED',
   'WAITING ON',
-  'ACTION REQUIRED'
+  'ACTION REQUIRED',
+  'USER_ACTION_REQUIRED',
+  'HUMAN_REQUIRED'
 ]
 
 const DEFAULT_SPEC_MARKERS = ['需求', '功能', 'spec', 'feature', 'PRD']
@@ -112,6 +124,10 @@ export function defaultWaitingConfig(): WaitingConfig {
     specMarkers: [...DEFAULT_SPEC_MARKERS],
     otherActors: [...DEFAULT_OTHER_ACTORS],
     selfStepPhrases: [...DEFAULT_SELF_STEPS],
+    requestVerbs: [...DEFAULT_REQUEST_VERBS],
+    requestActions: [...DEFAULT_REQUEST_ACTIONS],
+    ackTokens: [...DEFAULT_ACK_TOKENS],
+    parkedMarkers: [...DEFAULT_PARKED_MARKERS],
     showIgnored: false
   }
 }
@@ -251,6 +267,10 @@ export function parseWaitingConfig(input: unknown, options?: { validatePatterns?
     specMarkers: input.specMarkers === undefined ? defaults.specMarkers : stringList(input.specMarkers, 40, '需求类标记'),
     otherActors: input.otherActors === undefined ? defaults.otherActors : stringList(input.otherActors, 40, '非用户负责人'),
     selfStepPhrases: input.selfStepPhrases === undefined ? defaults.selfStepPhrases : stringList(input.selfStepPhrases, 40, '自己未完成的步骤'),
+    requestVerbs: input.requestVerbs === undefined ? defaults.requestVerbs : stringList(input.requestVerbs, 40, '请求动词'),
+    requestActions: input.requestActions === undefined ? defaults.requestActions : stringList(input.requestActions, 40, '请求动作'),
+    ackTokens: input.ackTokens === undefined ? defaults.ackTokens : stringList(input.ackTokens, 20, 'ACK 词'),
+    parkedMarkers: input.parkedMarkers === undefined ? defaults.parkedMarkers : stringList(input.parkedMarkers, 40, '搁置标记'),
     showIgnored: bool(input.showIgnored, false)
   }
   if (options?.validatePatterns) validateWaitingPatterns(config)

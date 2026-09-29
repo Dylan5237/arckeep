@@ -47,6 +47,7 @@ export interface CollectResult {
   rateLimitResetAt: string | null
   auth: 'ok' | 'missing' | 'invalid'
   todosAvailable: boolean
+  parkedRepos: string[]
 }
 
 function keepOrReplace<T>(fresh: boolean, next: T[], previous: T[]): T[] {
@@ -69,6 +70,7 @@ export async function collectWaiting(options: {
   const notices: string[] = []
   let rateLimitResetAt: string | null = null
   let auth: CollectResult['auth'] = options.token ? 'ok' : 'missing'
+  let parkedRepos: string[] = []
   const todos = options.todos ?? pendingTodoProvider
 
   if (options.token) {
@@ -83,6 +85,7 @@ export async function collectWaiting(options: {
       rateLimitResetAt = github.rateLimitResetAt
       errors.push(...github.errors)
       notices.push(...github.notices)
+      parkedRepos = github.parkedRepos
       const keys: (keyof GithubSourceBundle)[] = ['assignee', 'reviewRequested', 'mentions', 'openPrs', 'humanIssues']
       if (github.auth !== 'invalid') {
         for (const key of keys) {
@@ -162,6 +165,7 @@ export async function collectWaiting(options: {
     notices,
     rateLimitResetAt,
     auth,
-    todosAvailable: todos.available
+    todosAvailable: todos.available,
+    parkedRepos
   }
 }

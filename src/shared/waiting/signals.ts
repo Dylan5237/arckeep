@@ -41,19 +41,30 @@ function sentencePrefix(text: string, index: number): string {
   return last >= 0 ? scope.slice(last + 1) : scope
 }
 
+const ATTACHED_NEGATION = /^[\s:：\-—*]*?(?:not\b|no\b|without\b|never\b|n't|没有|不是|并未|并非|未|不|非|无)/iu
+
+function sentenceEnd(text: string, index: number): number {
+  const rest = text.slice(index)
+  const match = /[。！？!?\n]|\.(?=\s|$)/.exec(rest)
+  if (!match || match.index === undefined) return text.length
+  return index + match.index
+}
+
 /**
- * Negation cancels a token only when it says the user is not needed or the
- * step is already done.「不等于 / ≠」clarifies that two things differ; it does
- * not cancel a separate request later in the same comment. It does cancel the
- * single token it is attached to, so「不等于通过」is not a real pass.
+ * Negation is judged inside the keyword's own sentence, both before it and in
+ * the words attached after it. A later sentence cannot cancel this keyword,
+ * and this keyword's negation cannot reach back into an earlier sentence.
+ * 「不等于 / ≠」only cancels the token it is attached to.
  */
-export function isNegatedSignal(text: string, index: number): boolean {
+export function isNegatedSignal(text: string, index: number, end = index): boolean {
   const prefix = sentencePrefix(text, index)
   if (INEQUALITY_TAIL.test(prefix)) return true
   const stripped = prefix.replace(INEQUALITY, ' ')
   if (WORD_NEGATION.test(stripped)) return true
   if (SHORT_NEGATION.test(stripped)) return true
-  return /(?:未|不)[^\n。！？.!?]{0,8}$/u.test(stripped)
+  if (/(?:未|不)[^\n。！？.!?]{0,8}$/u.test(stripped)) return true
+  const after = text.slice(end, sentenceEnd(text, end)).replace(INEQUALITY, ' ')
+  return ATTACHED_NEGATION.test(after)
 }
 
 function descriptiveMention(text: string, index: number): boolean {
@@ -76,7 +87,8 @@ function clip(text: string, index: number, end: number): string {
 }
 
 function tokensAfter(text: string, end: number): string[] {
-  const rest = text.slice(end).replace(/^[\s,，.。:：;；!！?？)）\]】"'“”]+/u, '')
+  const bounded = text.slice(end, sentenceEnd(text, end))
+  const rest = bounded.replace(/^[\s,，.。:：;；!！?？)）\]】"'“”]+/u, '')
   if (!rest) return []
   return rest.split(/[\s,，.。:：;；!！?？]+/u).filter(token => token.length > 0 && !/^[\])】"'“”]+$/u.test(token))
 }
@@ -87,11 +99,11 @@ function tokensAfter(text: string, end: number): string[] {
  * it still asks for action — a short closing statement, not a step that passed.
  */
 function liveActions(text: string, patterns: readonly RegExp[]): Hit[] {
-  return collectHits(text, patterns).filter(hit => !isNegatedSignal(text, hit.index) && !descriptiveMention(text, hit.index))
+  return collectHits(text, patterns).filter(hit => !isNegatedSignal(text, hit.index, hit.end) && !descriptiveMention(text, hit.index))
 }
 
 function liveResolved(text: string, patterns: readonly RegExp[]): Hit[] {
-  return collectHits(text, patterns).filter(hit => !isNegatedSignal(text, hit.index))
+  return collectHits(text, patterns).filter(hit => !isNegatedSignal(text, hit.index, hit.end))
 }
 
 export function evaluateSignals(

@@ -27,6 +27,10 @@ export function blankRecord(partial: Pick<GithubRecord, 'kind' | 'repo' | 'numbe
     isDraft: false,
     labels: [],
     comments: [],
+    repoDescription: '',
+    repoTopics: [],
+    reviewRequestedBy: null,
+    assignedBy: null,
     parentNumber: null,
     assignedAt: null,
     reviewRequestedAt: null,
@@ -88,10 +92,14 @@ function labelsOf(node: Record<string, unknown>): string[] {
   return names
 }
 
-function commentsOf(node: Record<string, unknown>): { body: string, createdAt: string }[] {
+function commentsOf(node: Record<string, unknown>): { body: string, createdAt: string, authorLogin: string }[] {
   const comments = connectionNodes(node.comments)
     .filter(isRecord)
-    .map(comment => ({ body: text(comment.body), createdAt: text(comment.createdAt) }))
+    .map(comment => ({
+      body: text(comment.body),
+      createdAt: text(comment.createdAt),
+      authorLogin: isRecord(comment.author) ? text(comment.author.login) : ''
+    }))
     .filter(comment => comment.createdAt || comment.body)
   comments.sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt))
   return comments
@@ -127,8 +135,9 @@ function timelineNodes(node: Record<string, unknown>): Record<string, unknown>[]
   return connectionNodes(node.timelineItems).filter(isRecord)
 }
 
-export function assignedAtFor(node: Record<string, unknown>, login: string): string | null {
+export function assignedAtFor(node: Record<string, unknown>, login: string): { at: string | null, by: string | null } {
   let at: string | null = null
+  let by: string | null = null
   for (const event of timelineNodes(node)) {
     const typeName = text(event.__typename)
     if (typeName && typeName !== 'AssignedEvent') continue
@@ -137,13 +146,17 @@ export function assignedAtFor(node: Record<string, unknown>, login: string): str
     if (!assignee && login) continue
     const createdAt = text(event.createdAt)
     if (!createdAt) continue
-    if (!at || Date.parse(createdAt) > Date.parse(at)) at = createdAt
+    if (!at || Date.parse(createdAt) > Date.parse(at)) {
+      at = createdAt
+      by = loginOf(event.actor) || null
+    }
   }
-  return at
+  return { at, by }
 }
 
-export function reviewRequestedAtFor(node: Record<string, unknown>, login: string): string | null {
+export function reviewRequestedAtFor(node: Record<string, unknown>, login: string): { at: string | null, by: string | null } {
   let at: string | null = null
+  let by: string | null = null
   for (const event of timelineNodes(node)) {
     const typeName = text(event.__typename)
     if (typeName && typeName !== 'ReviewRequestedEvent') continue
@@ -152,9 +165,23 @@ export function reviewRequestedAtFor(node: Record<string, unknown>, login: strin
     if (!reviewer && login) continue
     const createdAt = text(event.createdAt)
     if (!createdAt) continue
-    if (!at || Date.parse(createdAt) > Date.parse(at)) at = createdAt
+    if (!at || Date.parse(createdAt) > Date.parse(at)) {
+      at = createdAt
+      by = loginOf(event.actor) || null
+    }
   }
-  return at
+  return { at, by }
+}
+
+export function topicsOf(repository: Record<string, unknown> | null): string[] {
+  if (!repository) return []
+  const names: string[] = []
+  for (const node of connectionNodes(repository.repositoryTopics)) {
+    if (!isRecord(node)) continue
+    const topic = isRecord(node.topic) ? text(node.topic.name) : text(node.name)
+    if (topic && !names.includes(topic)) names.push(topic)
+  }
+  return names
 }
 
 export function labelEventsOf(node: Record<string, unknown>): { name: string, at: string }[] {
@@ -219,6 +246,8 @@ export function parseGithubNode(node: unknown, flags: ParseFlags): GithubRecord 
     viewerOwnsRepo: false
   }
   const authorLogin = isRecord(node.author) ? text(node.author.login) : ''
+  const assigned = assignedAtFor(node, flags.login)
+  const review = reviewRequestedAtFor(node, flags.login)
   const record = blankRecord({
     kind: resolvedKind,
     repo: repo.repo,
@@ -233,9 +262,13 @@ export function parseGithubNode(node: unknown, flags: ParseFlags): GithubRecord 
     isDraft: node.isDraft === true,
     labels: labelsOf(node),
     comments,
+    repoDescription: repository ? text(repository.description) : '',
+    repoTopics: topicsOf(repository),
     parentNumber: isRecord(node.parent) ? numberValue(node.parent.number) : null,
-    assignedAt: assignedAtFor(node, flags.login),
-    reviewRequestedAt: reviewRequestedAtFor(node, flags.login),
+    assignedAt: assigned.at,
+    assignedBy: assigned.by,
+    reviewRequestedAt: review.at,
+    reviewRequestedBy: review.by,
     mentionedAt: flags.fromMention ? findMentionTime(body, createdAt, comments, flags.login) : null,
     lastPushedAt: lastPush(node),
     lastReviewAt: lastReviewAtOf(node),
@@ -317,11 +350,15 @@ export function parseRepoNode(node: unknown, login: string): RepoBatchItem | nul
   if (!name) return null
   const isEmpty = node.isEmpty === true
   const pushedAt = typeof node.pushedAt === 'string' ? node.pushedAt : null
+  const description = text(node.description)
+  const topics = topicsOf(node)
   const withRepo = (record: GithubRecord): GithubRecord => ({
     ...record,
     repo: name,
     repoIsEmpty: isEmpty,
-    repoPushedAt: pushedAt
+    repoPushedAt: pushedAt,
+    repoDescription: record.repoDescription || description,
+    repoTopics: record.repoTopics.length > 0 ? record.repoTopics : topics
   })
   const issues = connectionNodes(node.issues)
     .flatMap(issue => parseIssueTree(

@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { partitionDismissals, hideRepo as rememberRepo, ignoreDraft, readDismissalState, restoreDraft, snoozeDraft, unhideRepo as forgetRepo, writeDismissalState } from '../shared/waiting/snooze.js'
+import { effectiveHiddenRepos, partitionDismissals, hideRepo as rememberRepo, ignoreDraft, readDismissalState, restoreDraft, snoozeDraft, unhideRepo as forgetRepo, writeDismissalState } from '../shared/waiting/snooze.js'
 import { createWaitingClock, type WaitingClock } from '../shared/waiting/clock.js'
 import type {
   DismissalMap,
@@ -49,7 +49,7 @@ function loadMemory(file: string): { memory: WaitingMemory, refreshedAt: string 
   }
 }
 
-function loadDismissals(file: string): { items: DismissalMap, hiddenRepos: string[] } {
+function loadDismissals(file: string): { items: DismissalMap, hiddenRepos: string[], revealedParked: string[] } {
   return readDismissalState(readJson(file))
 }
 
@@ -68,8 +68,11 @@ function snapshotOf(input: {
   notices: WaitingSnapshot['notices']
   todosAvailable: boolean
   hiddenRepos: readonly string[]
+  parkedRepos: readonly string[]
+  revealedParked: readonly string[]
 }): { snapshot: WaitingSnapshot, dismissals: DismissalMap } {
-  const visible = partitionDismissals(input.drafts, input.dismissals, input.now, input.showIgnored, input.hiddenRepos)
+  const hiddenRepos = effectiveHiddenRepos(input.hiddenRepos, input.parkedRepos, input.revealedParked)
+  const visible = partitionDismissals(input.drafts, input.dismissals, input.now, input.showIgnored, hiddenRepos)
   return {
     dismissals: visible.map,
     snapshot: {
@@ -82,7 +85,7 @@ function snapshotOf(input: {
       notices: input.notices,
       showIgnored: input.showIgnored,
       hiddenCount: visible.hiddenCount,
-      hiddenRepos: [...input.hiddenRepos],
+      hiddenRepos,
       todosAvailable: input.todosAvailable
     }
   }
@@ -92,6 +95,8 @@ export class WaitingService {
   private memory: WaitingMemory
   private dismissals: DismissalMap
   private hiddenRepos: string[]
+  private revealedParked: string[]
+  private parkedRepos: string[] = []
   private refreshedAt: string | null
   private drafts: WaitingDraft[] = []
   private snapshot: WaitingSnapshot
@@ -116,6 +121,7 @@ export class WaitingService {
     const storedDismissals = loadDismissals(files.dismissals)
     this.dismissals = storedDismissals.items
     this.hiddenRepos = storedDismissals.hiddenRepos
+    this.revealedParked = storedDismissals.revealedParked
     this.clock = deps.clock ?? createWaitingClock()
     this.snapshot = {
       rows: [],
@@ -192,6 +198,12 @@ export class WaitingService {
     })
     this.memory = result.memory
     this.drafts = result.drafts
+    this.parkedRepos = [...result.parkedRepos]
+    for (const draft of result.drafts) {
+      if (draft.parked && !this.parkedRepos.some(repo => repo.toLowerCase() === draft.repo.toLowerCase())) {
+        this.parkedRepos.push(draft.repo)
+      }
+    }
     if (!result.rateLimitResetAt && result.auth === 'ok') this.refreshedAt = this.clock.now().toISOString()
     this.persistCache()
     const painted = snapshotOf({
@@ -206,7 +218,9 @@ export class WaitingService {
       sourceErrors: result.errors,
       notices: result.notices,
       todosAvailable: result.todosAvailable,
-      hiddenRepos: this.hiddenRepos
+      hiddenRepos: this.hiddenRepos,
+      parkedRepos: this.parkedRepos,
+      revealedParked: this.revealedParked
     })
     this.dismissals = painted.dismissals
     this.persistDismissals()
@@ -246,12 +260,16 @@ export class WaitingService {
   hideRepo(repo: unknown): IpcResult<WaitingSnapshot> {
     if (typeof repo !== 'string' || !REPO_NAME.test(repo)) return { ok: false, error: '仓库名无效' }
     this.hiddenRepos = rememberRepo(this.hiddenRepos, repo)
+    this.revealedParked = forgetRepo(this.revealedParked, repo)
     return { ok: true, data: this.repaint() }
   }
 
   unhideRepo(repo: unknown): IpcResult<WaitingSnapshot> {
     if (typeof repo !== 'string' || !REPO_NAME.test(repo)) return { ok: false, error: '仓库名无效' }
     this.hiddenRepos = forgetRepo(this.hiddenRepos, repo)
+    if (this.parkedRepos.some(item => item.toLowerCase() === repo.toLowerCase())) {
+      this.revealedParked = rememberRepo(this.revealedParked, repo)
+    }
     return { ok: true, data: this.repaint() }
   }
 
@@ -287,7 +305,9 @@ export class WaitingService {
       sourceErrors: this.snapshot.sourceErrors,
       notices: this.snapshot.notices,
       todosAvailable: this.snapshot.todosAvailable,
-      hiddenRepos: this.hiddenRepos
+      hiddenRepos: this.hiddenRepos,
+      parkedRepos: this.parkedRepos,
+      revealedParked: this.revealedParked
     })
     this.dismissals = painted.dismissals
     this.persistDismissals()
@@ -306,6 +326,10 @@ export class WaitingService {
   }
 
   private persistDismissals(): void {
-    writeJson(this.files.dismissals, writeDismissalState({ items: this.dismissals, hiddenRepos: this.hiddenRepos }))
+    writeJson(this.files.dismissals, writeDismissalState({
+      items: this.dismissals,
+      hiddenRepos: this.hiddenRepos,
+      revealedParked: this.revealedParked
+    }))
   }
 }
