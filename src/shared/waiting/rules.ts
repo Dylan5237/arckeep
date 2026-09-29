@@ -45,7 +45,7 @@ export function defaultWaitingSources(): WaitingSources {
     assignee: true,
     reviewRequested: true,
     mentions: true,
-    todos: false,
+    todos: true,
     statusDocs: true,
     openPrs: true,
     humanIssues: true,

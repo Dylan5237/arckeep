@@ -1,3 +1,4 @@
+import type { CaptureDraft, TodoItem, TodoUpdate } from './todos/types.js'
 import type { ToolFixture } from './tools/fixture.js'
 import type { ActionPreview, ToolAction, ToolRunEvent } from './tools/types.js'
 import type { WaitingConfig, WaitingSnapshot } from './waiting/types.js'
@@ -7,6 +8,8 @@ export type { ToolFixture } from './tools/fixture.js'
 export type { ActionPreview, ToolAction, ToolRunEvent } from './tools/types.js'
 
 export const DEFAULT_HOTKEY = 'Ctrl+Alt+Space'
+
+export type { CaptureDraft, TodoItem, TodoUpdate, WaitingTodo } from './todos/types.js'
 
 export type GithubSource = 'gh-cli' | 'pat' | 'none'
 
@@ -18,8 +21,13 @@ export interface PublicGithubAuth {
 
 export interface AppState {
   watchedRepos: string[]
+  /** Value shown in the hotkey field. A failed save keeps what was typed. */
   hotkey: string
+  /** Combo registered with the OS, or null when nothing is live. */
+  activeHotkey: string | null
   hotkeyWarning: string | null
+  /** Combo named in the banner. Null hides it. Cleared only by a successful register. */
+  hotkeyUnavailable: string | null
   github: PublicGithubAuth
   waiting: WaitingConfig
   toolShelfJson: string
@@ -44,6 +52,18 @@ export interface ArckeepApi {
   setPat(token: string): Promise<IpcResult<{ patSaved: true }>>
   clearPat(): Promise<IpcResult<{ patSaved: false }>>
   testGithub(pastedToken?: string): Promise<{ ok: true, login: string } | { ok: false, error: string }>
+  listTodos(): Promise<TodoItem[]>
+  createTodo(input: { text: string, repo: string | null, waiting: boolean }): Promise<IpcResult<TodoItem>>
+  updateTodo(input: TodoUpdate): Promise<IpcResult<TodoItem>>
+  setTodoCompleted(id: string, completed: boolean): Promise<IpcResult<TodoItem>>
+  deleteTodo(id: string): Promise<IpcResult<{ id: string }>>
+  todoRepoOptions(): Promise<string[]>
+  closeCapture(mode?: 'dismiss' | 'saved'): Promise<void>
+  getCaptureDraft(): Promise<CaptureDraft>
+  setCaptureDraft(draft: CaptureDraft): Promise<CaptureDraft>
+  onTodosChanged(listener: () => void): () => void
+  onHotkeyStatus(listener: (combo: string | null) => void): () => void
+  onFocusHotkey(listener: () => void): () => void
   getWaiting(): Promise<WaitingSnapshot>
   refreshWaiting(): Promise<WaitingSnapshot>
   snoozeWaiting(id: string, days: 1 | 3 | 7): Promise<IpcResult<WaitingSnapshot>>
