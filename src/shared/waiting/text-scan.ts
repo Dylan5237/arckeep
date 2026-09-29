@@ -211,18 +211,6 @@ export function latestComment(record: GithubRecord): (ScannedText & { own: boole
   return null
 }
 
-export function latestOtherComment(record: GithubRecord): ScannedText | null {
-  const viewer = (record.viewerLogin ?? '').trim().toLowerCase()
-  for (let index = record.comments.length - 1; index >= 0; index -= 1) {
-    const comment = record.comments[index]
-    if (!comment) continue
-    const author = (comment.authorLogin ?? '').trim().toLowerCase()
-    if (viewer && author && author === viewer) continue
-    return { text: stripFences(comment.body).trim(), at: comment.createdAt || null }
-  }
-  return null
-}
-
 export function commentCloses(text: string, config: WaitingConfig): boolean {
   if (!text.trim()) return false
   const keywords = config.humanKeywords.map(pattern => safeRegex(pattern))
@@ -446,27 +434,56 @@ function ownRequest(text: string, at: string | null, config: WaitingConfig, view
   return null
 }
 
+/** The title alone. A configured request verb is enough; the body does not have to repeat it. */
+function titleRequest(title: string, config: WaitingConfig): TextHit | null {
+  const text = title.replace(/\s+/g, ' ').trim()
+  if (!text) return null
+  if (verbAt(text, config.requestVerbs).length === 0) return null
+  return { rule: '明确请求', excerpt: clipSentence(text), at: null }
+}
+
+/**
+ * Newest comment first. A comment that closes the matter blocks older requests.
+ * A placeholder or acknowledgement does not, so an earlier explicit request still counts.
+ * Only the newest comment is marked as the signed-in user's own request.
+ */
+function commentThreadHit(record: GithubRecord, config: WaitingConfig, viewer: string, names: readonly RegExp[]): TextHit | null {
+  const viewerLogin = viewer.trim().toLowerCase()
+  let newest = true
+  let scannedOther = false
+  for (let index = record.comments.length - 1; index >= 0; index -= 1) {
+    const comment = record.comments[index]
+    if (!comment?.body.trim()) continue
+    const text = stripFences(comment.body).trim()
+    if (!text) continue
+    if (commentCloses(text, config)) return null
+    const author = (comment.authorLogin ?? '').trim().toLowerCase()
+    const own = Boolean(viewerLogin && author && author === viewerLogin)
+    const at = comment.createdAt || null
+    if (newest) {
+      newest = false
+      const hit = own ? ownRequest(text, at, config, viewer, names) : scanPlace(text, at, config, viewer, names)
+      if (hit) return hit
+      if (!own) scannedOther = true
+      continue
+    }
+    if (!own && !scannedOther) {
+      scannedOther = true
+      const hit = scanPlace(text, at, config, viewer, names)
+      if (hit) return hit
+      continue
+    }
+    const earlier = ownRequest(text, at, config, viewer, names)
+    if (earlier) return { rule: earlier.rule, excerpt: earlier.excerpt, at }
+  }
+  return null
+}
+
 export function strongText(record: GithubRecord, config: WaitingConfig): TextHit | null {
   const names = userPatterns(record, config)
   const viewer = record.viewerLogin ?? ''
-  const latest = latestComment(record)
-  const latestClosed = Boolean(latest?.text && commentCloses(latest.text, config))
-  if (latest?.text && !latestClosed) {
-    if (latest.own) {
-      const own = ownRequest(latest.text, latest.at, config, viewer, names)
-      if (own) return own
-    } else {
-      const hit = scanPlace(latest.text, latest.at, config, viewer, names)
-      if (hit) return hit
-    }
-    if (latest.own) {
-      const earlier = latestOtherComment(record)
-      if (earlier?.text) {
-        const hit = scanPlace(earlier.text, earlier.at, config, viewer, names)
-        if (hit) return hit
-      }
-    }
-  }
+  const fromComments = commentThreadHit(record, config, viewer, names)
+  if (fromComments) return fromComments
   for (const section of statusSectionTexts(record.body)) {
     const hit = scanPlace(section, record.createdAt || null, config, viewer, names)
     if (hit) return hit
@@ -483,6 +500,8 @@ export function strongText(record: GithubRecord, config: WaitingConfig): TextHit
       if (hit) return hit
     }
   }
+  const fromTitle = titleRequest(record.title, config)
+  if (fromTitle) return { ...fromTitle, at: record.createdAt || null }
   return null
 }
 

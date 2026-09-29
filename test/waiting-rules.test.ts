@@ -170,7 +170,7 @@ describe('watched repositories do not flood', () => {
     const review = classifyRecord(record({
       kind: 'pr',
       number: 10,
-      title: 'Review there',
+      title: 'Diff there',
       repoAccess: 'watch',
       fromReview: true,
       reviewRequestedAt: '2026-09-21T00:00:00.000Z'
@@ -376,12 +376,14 @@ describe('quiet open pulls in writable repos', () => {
     })
   }
 
-  it('counts a pull when the body or a comment asks for action, not the title alone', () => {
+  it('counts a pull when the title, body, or a comment asks for action', () => {
     const titled = classifyRecord(pull({
       title: '请确认导出列',
       lastPushedAt: new Date(NOW.getTime() - day).toISOString()
     }), config(), NOW)
-    expect(titled).toBeNull()
+    expect(titled?.tier).toBe('strong')
+    expect(titled?.signal.rule).toBe('明确请求')
+    expect(titled?.signal.excerpt).toBe('请确认导出列')
 
     const body = classifyRecord(pull({
       body: '需要你看一下失败重试',
@@ -397,12 +399,12 @@ describe('quiet open pulls in writable repos', () => {
     expect(commented?.signal.rule).toBe('明确请求')
     expect(commented?.signal.excerpt).toContain('等你验收截图')
 
-    const negated = classifyRecord(pull({
-      title: '不是请确认',
+    const plain = classifyRecord(pull({
+      title: '导出列',
       body: '没有待验收',
       lastPushedAt: new Date(NOW.getTime() - 2 * day).toISOString()
     }), config(), NOW)
-    expect(negated).toBeNull()
+    expect(plain).toBeNull()
   })
 
   it('keeps a signal even after a new push, and ignores a resolved closing comment', () => {
@@ -478,7 +480,7 @@ describe('quiet open pulls in writable repos', () => {
       reviewRequestedAt: fresh,
       lastPushedAt: fresh,
       createdAt: fresh,
-      title: 'Please look'
+      title: 'Look here'
     }), config(), NOW)
     expect(review?.reasons).toEqual(['请求 review'])
     expect(review?.signal.rule).toBe('请求 review')
@@ -747,7 +749,7 @@ describe('role names, status headers, specs, and step owners', () => {
     const review = classifyRecord(record({
       kind: 'pr',
       number: 113,
-      title: 'Review',
+      title: 'Diff',
       fromReview: true,
       fromOpenPr: true,
       isDraft: false,
@@ -1109,7 +1111,7 @@ describe('synthetic fixtures for each waiting rule', () => {
     const kept = main({
       kind: 'pr',
       number: 1,
-      title: 'Review',
+      title: 'Diff',
       fromReview: true,
       reviewRequestedAt: '2026-09-20T00:00:00.000Z',
       reviewRequestedBy: 'mina',
@@ -1221,7 +1223,7 @@ describe('synthetic fixtures for each waiting rule', () => {
     const unnamed = classifyRecord(record({
       kind: 'issue',
       number: 12,
-      title: 'Please ack',
+      title: 'Ack note',
       viewerLogin: 'ada',
       comments: [{ body: '请 ACK', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
     }), rules, NOW)
@@ -1404,6 +1406,51 @@ describe('synthetic fixtures for each waiting rule', () => {
     expect(ownRequestLabel(other ?? {})).toBeNull()
     expect(other?.signal.excerpt).toBe(sentence)
     expect(other?.signal.own).toBeUndefined()
+  })
+
+  it('admits a title that contains a request verb, and ignores a title that does not', () => {
+    const titled = main({
+      kind: 'issue',
+      number: 34,
+      title: '定夺是否接受这一版',
+      body: '材料还在整理。'
+    })
+    expect(titled?.signal.rule).toBe('明确请求')
+    expect(titled?.signal.excerpt).toBe('定夺是否接受这一版')
+    const plain = classifyRecord(record({
+      kind: 'issue',
+      number: 35,
+      title: '材料还在整理',
+      body: '先放着。'
+    }), rules, NOW)
+    expect(plain).toBeNull()
+  })
+
+  it('keeps an earlier explicit request when a newer comment does not close it', () => {
+    const kept = main({
+      kind: 'issue',
+      number: 36,
+      title: '导出列名',
+      body: '材料还在整理。',
+      comments: [
+        { body: '请确认能否合入', authorLogin: 'mina', createdAt: '2026-09-21T00:00:00.000Z' },
+        { body: '收到，先记下。', authorLogin: 'ada', createdAt: '2026-09-22T00:00:00.000Z' }
+      ]
+    })
+    expect(kept?.signal.rule).toBe('明确请求')
+    expect(kept?.signal.excerpt).toBe('请确认能否合入')
+    expect(kept?.signal.own).toBeUndefined()
+    const closed = classifyRecord(record({
+      kind: 'issue',
+      number: 37,
+      title: '导出列名',
+      body: '材料还在整理。',
+      comments: [
+        { body: '请确认能否合入', authorLogin: 'mina', createdAt: '2026-09-21T00:00:00.000Z' },
+        { body: '已完成', authorLogin: 'ada', createdAt: '2026-09-22T00:00:00.000Z' }
+      ]
+    }), rules, NOW)
+    expect(closed).toBeNull()
   })
 
   it('uses the configured request verbs, including 定夺', () => {

@@ -110,7 +110,7 @@ describe('source classification', () => {
     const review = classifyRecord(record({
       kind: 'pr',
       number: 2,
-      title: 'Review me',
+      title: 'Diff me',
       fromReview: true,
       reviewRequestedAt: '2026-09-21T00:00:00.000Z',
       inScopeRepo: false
