@@ -984,7 +984,8 @@ describe('recall of requests that are still open', () => {
     }), rules, NOW)
     expect(checked?.tier).toBe('strong')
     expect(checked?.signal.rule).toBe('明确请求')
-    expect(checked?.signal.excerpt).toContain('待用户确认后 push')
+    expect(checked?.signal.excerpt).toContain('等用户看完再合并')
+    expect(checked?.signal.excerpt.includes('待用户确认后 push')).toBe(false)
 
     const line = classifyRecord(record({
       kind: 'issue',
@@ -1476,5 +1477,453 @@ describe('synthetic fixtures for each waiting rule', () => {
       comments: [{ body: '材料还在整理。', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
     }), rules, NOW)
     expect(quiet).toBeNull()
+  })
+})
+
+describe('classifier narrowings for pass, quiet pulls, tables, checklists, titles, and excerpts', () => {
+  const rules = config()
+  const day = 86_400_000
+  const age = (days: number) => new Date(NOW.getTime() - days * day).toISOString()
+
+  function pull(patch: Partial<GithubRecord> = {}): GithubRecord {
+    return record({
+      kind: 'pr',
+      number: 240,
+      title: 'Export columns',
+      fromOpenPr: true,
+      inScopeRepo: true,
+      repoAccess: 'maintain',
+      isDraft: false,
+      createdAt: age(10),
+      updatedAt: age(1),
+      lastPushedAt: age(10),
+      ...patch
+    })
+  }
+
+  it('keeps a later or beside ask after PASS, and a USER_ACTION_REQUIRED title', () => {
+    const beside = classifyRecord(record({
+      kind: 'issue',
+      number: 201,
+      title: 'Phase notes',
+      comments: [{
+        body: 'Alpha PASS，只剩请你接受这一版。',
+        authorLogin: 'mina',
+        createdAt: '2026-09-22T00:00:00.000Z'
+      }]
+    }), rules, NOW)
+    expect(beside?.tier).toBe('strong')
+    expect(beside?.signal.rule).toBe('明确请求')
+    expect(beside?.signal.excerpt).toContain('只剩')
+    expect(beside?.signal.excerpt).toContain('接受')
+
+    const screenshot = classifyRecord(record({
+      kind: 'issue',
+      number: 202,
+      title: 'Shot',
+      body: '## 状态\nWidget PASS。\n下一步请提供截图。'
+    }), rules, NOW)
+    expect(screenshot?.tier).toBe('strong')
+    expect(screenshot?.signal.excerpt).toContain('提供截图')
+    expect(screenshot?.signal.excerpt.includes('Widget PASS')).toBe(false)
+
+    const look = classifyRecord(record({
+      kind: 'issue',
+      number: 203,
+      title: 'Look',
+      body: '## 现状\nGamma PASS.\nNext, run it and look at the empty state.'
+    }), rules, NOW)
+    expect(look?.tier).toBe('strong')
+    expect(look?.signal.excerpt.toLowerCase()).toContain('run it and look')
+
+    const titled = classifyRecord(record({
+      kind: 'issue',
+      number: 204,
+      title: 'USER_ACTION_REQUIRED (no Phase PASS)',
+      body: '材料还在整理。'
+    }), rules, NOW)
+    expect(titled?.tier).toBe('strong')
+    expect(titled?.signal.rule).toBe('明确请求')
+    expect(titled?.signal.excerpt).toContain('USER_ACTION_REQUIRED')
+    expect(titled?.signal.excerpt).toContain('no Phase PASS')
+
+    const named = classifyRecord(record({
+      kind: 'issue',
+      number: 205,
+      title: 'Named pass',
+      body: '## 状态\n只剩截图 PASS'
+    }), rules, NOW)
+    expect(named).toBeNull()
+
+    const bare = classifyRecord(record({
+      kind: 'issue',
+      number: 206,
+      title: 'Bare pass',
+      comments: [{ body: 'Alpha PASS', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(bare).toBeNull()
+
+    const deniedTitle = classifyRecord(record({
+      kind: 'issue',
+      number: 207,
+      title: 'no USER_ACTION_REQUIRED',
+      body: '材料还在整理。'
+    }), rules, NOW)
+    expect(deniedTitle).toBeNull()
+
+    const note = classifyRecord(record({
+      kind: 'issue',
+      number: 208,
+      title: 'Note',
+      body: '## 状态\nAlpha PASS。\n下一步把材料归档。'
+    }), rules, NOW)
+    expect(note).toBeNull()
+  })
+
+  it('keeps a non-draft pull after three quiet days even when a comment says PASS', () => {
+    const stayed = classifyRecord(pull({
+      number: 241,
+      lastPushedAt: age(4),
+      createdAt: age(10),
+      comments: [{ body: 'Phase 2 PASS', authorLogin: 'mina', createdAt: age(4) }]
+    }), rules, NOW)
+    expect(stayed?.tier).toBe('strong')
+    expect(stayed?.reasons).toEqual(['待你审/合'])
+    expect(stayed?.signal.rule).toBe('3 天无动静')
+
+    const exact = classifyRecord(pull({
+      number: 242,
+      lastPushedAt: age(3),
+      createdAt: age(3),
+      comments: [{ body: 'PASS', authorLogin: 'mina', createdAt: age(3) }]
+    }), rules, NOW)
+    expect(exact?.tier).toBe('strong')
+    expect(exact?.signal.excerpt).toContain('3 天')
+
+    const draft = classifyRecord(pull({
+      number: 243,
+      isDraft: true,
+      lastPushedAt: age(6),
+      createdAt: age(10),
+      comments: [{ body: 'PASS', authorLogin: 'mina', createdAt: age(6) }]
+    }), rules, NOW)
+    expect(draft).toBeNull()
+
+    const recentComment = classifyRecord(pull({
+      number: 244,
+      lastPushedAt: age(8),
+      createdAt: age(10),
+      comments: [{ body: 'PASS', authorLogin: 'mina', createdAt: age(1) }]
+    }), rules, NOW)
+    expect(recentComment).toBeNull()
+
+    const recentPush = classifyRecord(pull({
+      number: 245,
+      lastPushedAt: age(1),
+      createdAt: age(10),
+      comments: [{ body: 'PASS', authorLogin: 'mina', createdAt: age(6) }]
+    }), rules, NOW)
+    expect(recentPush).toBeNull()
+
+    const accepted = classifyRecord(pull({
+      number: 246,
+      lastPushedAt: age(6),
+      createdAt: age(10),
+      comments: [{ body: '已验收', authorLogin: 'mina', createdAt: age(6) }]
+    }), rules, NOW)
+    expect(accepted).toBeNull()
+
+    const issue = classifyRecord(record({
+      kind: 'issue',
+      number: 247,
+      title: 'Not a pull',
+      comments: [{ body: 'PASS', authorLogin: 'mina', createdAt: age(6) }]
+    }), rules, NOW)
+    expect(issue).toBeNull()
+  })
+
+  it('reads a next-action cell inside a status subsection', () => {
+    const decide = classifyRecord(record({
+      kind: 'issue',
+      number: 251,
+      title: 'Columns',
+      body: [
+        '先记一段没有请求的引言。',
+        '',
+        '## 状态',
+        '| 项 | 下一步 |',
+        '| --- | --- |',
+        '| 导出 | 请裁决默认列宽 |',
+        '| 文档 | 材料还在整理 |'
+      ].join('\n')
+    }), rules, NOW)
+    expect(decide?.tier).toBe('strong')
+    expect(decide?.signal.rule).toBe('明确请求')
+    expect(decide?.signal.excerpt).toContain('请裁决默认列宽')
+
+    const confirm = classifyRecord(record({
+      kind: 'issue',
+      number: 252,
+      title: 'Cutoff',
+      body: [
+        '## 讨论',
+        '还在对方案。',
+        '',
+        '## 现状',
+        '| 项 | Next Action |',
+        '| --- | --- |',
+        '| 截止 | 请确认能否合入 |'
+      ].join('\n')
+    }), rules, NOW)
+    expect(confirm?.tier).toBe('strong')
+    expect(confirm?.signal.excerpt).toContain('请确认能否合入')
+
+    const outside = classifyRecord(record({
+      kind: 'issue',
+      number: 253,
+      title: 'Outside status',
+      body: [
+        '## 讨论',
+        '| 项 | 下一步 |',
+        '| --- | --- |',
+        '| 导出 | 请裁决默认列宽 |'
+      ].join('\n')
+    }), rules, NOW)
+    expect(outside).toBeNull()
+
+    const plain = classifyRecord(record({
+      kind: 'issue',
+      number: 254,
+      title: 'Plain next',
+      body: [
+        '## 状态',
+        '| 项 | 下一步 |',
+        '| --- | --- |',
+        '| 导出 | 材料还在整理 |'
+      ].join('\n')
+    }), rules, NOW)
+    expect(plain).toBeNull()
+  })
+
+  it('treats an unchecked user checklist item as a request and ignores the checked twin', () => {
+    const items = [
+      'provide a screenshot of the empty state',
+      'visual acceptance of the print preview',
+      'run it on their machine before signing off'
+    ]
+    items.forEach((item, index) => {
+      const open = classifyRecord(record({
+        kind: 'issue',
+        number: 260 + index,
+        title: `Open item ${index}`,
+        comments: [{
+          body: `- [ ] ${item}`,
+          authorLogin: 'mina',
+          createdAt: '2026-09-22T00:00:00.000Z'
+        }]
+      }), rules, NOW)
+      expect(open?.tier, item).toBe('strong')
+      expect(open?.signal.rule, item).toBe('明确请求')
+      expect(open?.signal.excerpt, item).toContain(item)
+
+      const done = classifyRecord(record({
+        kind: 'issue',
+        number: 270 + index,
+        title: `Checked item ${index}`,
+        comments: [{
+          body: `- [x] ${item}`,
+          authorLogin: 'mina',
+          createdAt: '2026-09-22T00:00:00.000Z'
+        }]
+      }), rules, NOW)
+      expect(done, item).toBeNull()
+    })
+  })
+
+  it('counts review in a title only together with 请, 待, needs, or please', () => {
+    const admitted = [
+      '请 review 导出列',
+      '待 review 导出列',
+      'needs review on the export',
+      'please review the export',
+      '待拍板是否合入',
+      '待确认列名',
+      '待裁决默认值'
+    ]
+    admitted.forEach((title, index) => {
+      const row = classifyRecord(record({
+        kind: 'issue',
+        number: 280 + index,
+        title,
+        body: '材料还在整理。'
+      }), rules, NOW)
+      expect(row?.tier, title).toBe('strong')
+      expect(row?.signal.rule, title).toBe('明确请求')
+      expect(row?.signal.excerpt, title).toBe(title)
+    })
+
+    const rejected = ['Review', 'Accuracy Review', 'Design Review notes']
+    rejected.forEach((title, index) => {
+      const row = classifyRecord(record({
+        kind: 'issue',
+        number: 290 + index,
+        title,
+        body: '材料还在整理。'
+      }), rules, NOW)
+      expect(row, title).toBeNull()
+    })
+  })
+
+  it('does not use a bare citation or a negative sentence as the excerpt', () => {
+    const cited = classifyRecord(record({
+      kind: 'issue',
+      number: 301,
+      title: 'Follow-up',
+      comments: [{
+        body: '支持 #12\n请确认能否合入',
+        authorLogin: 'mina',
+        createdAt: '2026-09-22T00:00:00.000Z'
+      }]
+    }), rules, NOW)
+    expect(cited?.tier).toBe('strong')
+    expect(cited?.signal.excerpt).toBe('请确认能否合入')
+    expect(cited?.signal.excerpt.includes('支持 #12')).toBe(false)
+
+    const seeOnly = classifyRecord(record({
+      kind: 'issue',
+      number: 302,
+      title: 'Pointer',
+      comments: [{ body: '见 #8', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(seeOnly).toBeNull()
+
+    const supportOnly = classifyRecord(record({
+      kind: 'issue',
+      number: 303,
+      title: 'Pointer two',
+      body: '支持 #4'
+    }), rules, NOW)
+    expect(supportOnly).toBeNull()
+
+    const mixed = classifyRecord(record({
+      kind: 'issue',
+      number: 304,
+      title: 'Pointer with an ask',
+      comments: [{
+        body: '见 #7 之后请确认能否合入',
+        authorLogin: 'mina',
+        createdAt: '2026-09-22T00:00:00.000Z'
+      }]
+    }), rules, NOW)
+    expect(mixed?.tier).toBe('strong')
+    expect(mixed?.signal.excerpt).toContain('请确认能否合入')
+
+    const labeled = classifyRecord(record({
+      kind: 'issue',
+      number: 305,
+      title: 'Labeled pointer',
+      labels: ['waiting-on-answer'],
+      labelEvents: [{ name: 'waiting-on-answer', at: '2026-09-11T00:00:00.000Z' }],
+      body: '支持 #3'
+    }), rules, NOW)
+    expect(labeled?.tier).toBe('strong')
+    expect(labeled?.signal.rule).toBe('标签')
+    expect(labeled?.signal.excerpt).toContain('waiting-on-answer')
+    expect(labeled?.signal.excerpt.includes('支持 #3')).toBe(false)
+
+    const denied = classifyRecord(record({
+      kind: 'issue',
+      number: 306,
+      title: 'Denial then ask',
+      body: '这句并不构成批准。请确认能否合入。'
+    }), rules, NOW)
+    expect(denied?.tier).toBe('strong')
+    expect(denied?.signal.excerpt).toBe('请确认能否合入。')
+    expect(denied?.signal.excerpt.includes('并不构成')).toBe(false)
+
+    const labelDenial = classifyRecord(record({
+      kind: 'issue',
+      number: 307,
+      title: 'Label only',
+      labels: ['needs-human'],
+      labelEvents: [{ name: 'needs-human', at: '2026-09-12T00:00:00.000Z' }],
+      body: 'The label does not constitute approval.'
+    }), rules, NOW)
+    expect(labelDenial?.tier).toBe('strong')
+    expect(labelDenial?.signal.rule).toBe('标签')
+    expect(labelDenial?.signal.excerpt).toContain('needs-human')
+    expect(labelDenial?.signal.excerpt.toLowerCase().includes('does not constitute')).toBe(false)
+
+    const denialOnly = classifyRecord(record({
+      kind: 'issue',
+      number: 308,
+      title: 'Denial only',
+      body: '「请确认」并不构成批准，也不算需要你动手。'
+    }), rules, NOW)
+    expect(denialOnly).toBeNull()
+
+    const countOnly = classifyRecord(record({
+      kind: 'issue',
+      number: 309,
+      title: 'Does not count',
+      comments: [{
+        body: 'That sentence does not count as a request.',
+        authorLogin: 'mina',
+        createdAt: '2026-09-22T00:00:00.000Z'
+      }]
+    }), rules, NOW)
+    expect(countOnly).toBeNull()
+  })
+
+  it('parks a repository only from its description or topics', () => {
+    const described = classifyRecord(record({
+      kind: 'issue',
+      number: 321,
+      title: 'Ask',
+      body: '请确认',
+      repoDescription: 'temporarily parked',
+      repoTopics: []
+    }), rules, NOW)
+    expect(described?.parked).toBe(true)
+    expect(described?.tier).toBe('strong')
+
+    const topic = classifyRecord(record({
+      kind: 'issue',
+      number: 322,
+      title: 'Ask',
+      body: '请确认',
+      repo: 'example/toolkit',
+      repoDescription: 'active notes',
+      repoTopics: ['搁置']
+    }), rules, NOW)
+    expect(topic?.parked).toBe(true)
+
+    const nickname = classifyRecord(record({
+      kind: 'issue',
+      number: 323,
+      title: 'parked in the title',
+      repo: 'example/parked-nickname',
+      body: '请确认',
+      comments: [{ body: '这个先搁置', authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }],
+      repoDescription: '',
+      repoTopics: []
+    }), rules, NOW)
+    expect(nickname?.parked).toBe(false)
+    expect(nickname?.tier).toBe('strong')
+
+    const silent = classifyRecord(record({
+      kind: 'issue',
+      number: 324,
+      title: 'Quiet assignment',
+      fromAssignee: true,
+      assignedAt: '2026-09-18T00:00:00.000Z',
+      assignedBy: 'mina',
+      repoDescription: '',
+      repoTopics: [],
+      comments: []
+    }), rules, NOW)
+    expect(silent?.parked).toBe(false)
+    expect(silent?.tier).toBe('strong')
+    expect(silent?.reasons).toEqual(['指派'])
   })
 })
