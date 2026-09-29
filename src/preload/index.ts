@@ -32,7 +32,18 @@ const api: ArckeepApi = {
     const wrapped = () => listener()
     ipcRenderer.on(IpcChannel.focusHotkey, wrapped)
     return () => ipcRenderer.removeListener(IpcChannel.focusHotkey, wrapped)
-  }
+  },
+  getWaiting: () => ipcRenderer.invoke(IpcChannel.getWaiting),
+  refreshWaiting: () => ipcRenderer.invoke(IpcChannel.refreshWaiting),
+  snoozeWaiting: (id, days) => ipcRenderer.invoke(IpcChannel.snoozeWaiting, id, days),
+  ignoreWaiting: id => ipcRenderer.invoke(IpcChannel.ignoreWaiting, id),
+  restoreWaiting: id => ipcRenderer.invoke(IpcChannel.restoreWaiting, id),
+  hideWaitingRepo: repo => ipcRenderer.invoke(IpcChannel.hideWaitingRepo, repo),
+  unhideWaitingRepo: repo => ipcRenderer.invoke(IpcChannel.unhideWaitingRepo, repo),
+  setShowIgnored: show => ipcRenderer.invoke(IpcChannel.setShowIgnored, show),
+  setWaiting: config => ipcRenderer.invoke(IpcChannel.setWaiting, config),
+  openExternal: url => ipcRenderer.invoke(IpcChannel.openExternal, url),
+  advanceWaitingDays: days => ipcRenderer.invoke(IpcChannel.advanceWaitingDays, days)
 }
 
 contextBridge.exposeInMainWorld('arckeep', api)

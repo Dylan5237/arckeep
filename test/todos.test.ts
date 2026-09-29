@@ -155,8 +155,20 @@ describe('waiting todos', () => {
     store.delete(removed.id)
 
     expect(store.listWaitingTodos()).toEqual([
-      { id: earlier.id, text: '更早的等我', repo: null, createdAt: earlier.createdAt },
-      { id: waiting.id, text: '等我看', repo: 'Dylan5237/arckeep', createdAt: waiting.createdAt }
+      {
+        id: earlier.id,
+        text: '更早的等我',
+        repo: null,
+        createdAt: earlier.createdAt,
+        waitingSince: earlier.createdAt
+      },
+      {
+        id: waiting.id,
+        text: '等我看',
+        repo: 'Dylan5237/arckeep',
+        createdAt: waiting.createdAt,
+        waitingSince: waiting.createdAt
+      }
     ])
 
     const fresh = new TodoStore({ file })

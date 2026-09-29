@@ -22,7 +22,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ['src/main/**/*.ts', 'src/preload/**/*.ts', 'src/shared/**/*.ts', 'test/**/*.ts', 'scripts/**/*.mjs'],
+    files: ['src/main/**/*.ts', 'src/preload/**/*.ts', 'src/shared/**/*.ts', 'src/waiting/**/*.ts', 'test/**/*.ts', 'scripts/**/*.mjs'],
     languageOptions: {
       globals: globals.node
     }

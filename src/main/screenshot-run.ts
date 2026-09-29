@@ -150,6 +150,46 @@ export async function presentScreenshot(options: {
       true
     `)
     await waitUntil(contents, includesText('删除这条待办？'), '删除这条待办？')
+  } else if (scene === 'waiting-hover') {
+    await waitUntil(contents, includesText('验收北区截图'), '验收北区截图')
+    await contents.executeJavaScript(`
+      const row = document.querySelector('.waiting-row')
+      if (!row) throw new Error('waiting row was not rendered')
+      row.classList.add('show-actions')
+      const details = row.querySelector('details')
+      if (details) details.open = true
+      true
+    `)
+  } else if (
+    scene === 'waiting'
+    || scene === 'waiting-narrow'
+    || scene === 'waiting-watch'
+    || scene === 'waiting-hidden'
+    || scene === 'waiting-family'
+    || scene === 'waiting-empty'
+    || scene === 'waiting-no-token'
+    || scene === 'waiting-invalid-token'
+    || scene === 'waiting-loading'
+    || scene === 'waiting-rate-limit'
+  ) {
+    const expected = scene === 'waiting' || scene === 'waiting-narrow'
+      ? '验收北区截图'
+      : scene === 'waiting-watch'
+        ? '不会把别人的 open PR'
+        : scene === 'waiting-hidden'
+          ? '已忽略的仓库'
+          : scene === 'waiting-family'
+            ? '含 2 个子项'
+            : scene === 'waiting-empty'
+              ? '没有等你处理的事项'
+              : scene === 'waiting-no-token'
+                ? '未配置 GitHub 认证'
+                : scene === 'waiting-invalid-token'
+                  ? 'GitHub 认证无效或已过期'
+                  : scene === 'waiting-loading'
+                    ? '正在刷新'
+                    : '速率限制'
+    await waitUntil(contents, includesText(expected), expected)
   } else {
     const expected = scene === 'connected'
       ? MOCK_GITHUB_LOGIN

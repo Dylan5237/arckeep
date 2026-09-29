@@ -39,6 +39,7 @@ function applyCreate(items: Map<string, TodoItem>, record: unknown): boolean {
       text,
       repo,
       waiting,
+      waitingSince: waiting ? createdAt : null,
       createdAt,
       updatedAt: createdAt,
       completed: false
@@ -65,7 +66,15 @@ function applyUpdate(items: Map<string, TodoItem>, event: Record<string, unknown
       changed = true
     }
     if ('waiting' in event.patch) {
-      next.waiting = normalizeWaiting(event.patch.waiting)
+      const waiting = normalizeWaiting(event.patch.waiting)
+      if (waiting !== next.waiting) {
+        next.waitingSince = waiting && isIso(event.updatedAt)
+          ? new Date(event.updatedAt).toISOString()
+          : waiting
+            ? next.updatedAt
+            : null
+      }
+      next.waiting = waiting
       changed = true
     }
     if (!changed) return false

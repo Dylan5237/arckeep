@@ -3,6 +3,8 @@ export interface TodoItem {
   text: string
   repo: string | null
   waiting: boolean
+  /** When「等我」was last turned on. Null while the flag is off. */
+  waitingSince: string | null
   createdAt: string
   updatedAt: string
   completed: boolean
@@ -14,6 +16,8 @@ export interface WaitingTodo {
   text: string
   repo: string | null
   createdAt: string
+  /** Moment「等我」was checked. Unchecking and checking again replaces this. */
+  waitingSince: string
 }
 
 export interface TodoInput {

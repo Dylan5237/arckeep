@@ -17,5 +17,16 @@ export const IpcChannel = {
   todosChanged: 'todos:changed',
   hotkeyStatus: 'app:hotkey-status',
   focusHotkey: 'app:focus-hotkey',
-  testHook: 'app:test-hook'
+  testHook: 'app:test-hook',
+  getWaiting: 'waiting:get',
+  refreshWaiting: 'waiting:refresh',
+  snoozeWaiting: 'waiting:snooze',
+  ignoreWaiting: 'waiting:ignore',
+  restoreWaiting: 'waiting:restore',
+  hideWaitingRepo: 'waiting:hide-repo',
+  unhideWaitingRepo: 'waiting:unhide-repo',
+  setShowIgnored: 'waiting:show-ignored',
+  setWaiting: 'waiting:set-config',
+  openExternal: 'waiting:open-external',
+  advanceWaitingDays: 'waiting:advance-days'
 } as const

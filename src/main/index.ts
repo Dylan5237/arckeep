@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Notification, Tray, globalShortcut, ipcMain, nativeImage, safeStorage } from 'electron'
+import { app, BrowserWindow, Menu, Notification, Tray, globalShortcut, ipcMain, nativeImage, safeStorage, shell } from 'electron'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { IpcChannel } from '../shared/ipc.js'
 import { hotkeyUnavailableMessage, shouldNotifyStartupHotkeyFailure, trayMenuEntries, trayToolTip } from '../shared/hotkey-status.js'
 import { mergeRepoOptions } from '../shared/todos/repos.js'
+import { createTodoWaitingProvider } from '../shared/waiting/todo-source.js'
 import { createCaptureWindow, focusCaptureInput, showSavedToast } from './capture-window.js'
 import { createGracefulShutdownHandler } from './graceful-shutdown.js'
 import {
@@ -15,7 +16,7 @@ import {
   normalizeTodoUpdate,
   requireTrustedSender
 } from './ipc-validators.js'
-import { captureDraftPath, settingsFilePath, testHookTodosPath, todosFilePath, userDataDir } from './paths.js'
+import { captureDraftPath, settingsFilePath, testHookTodosPath, todosFilePath, userDataDir, waitingCachePath, waitingDismissalPath } from './paths.js'
 import {
   createScreenshotSettings,
   parseScreenshotScene,
@@ -25,12 +26,14 @@ import {
   screenshotWindowSize
 } from './screenshot-scene.js'
 import { presentScreenshot } from './screenshot-run.js'
+import { createScreenshotWaiting } from './screenshot-waiting.js'
 import {
   screenshotCaptureFixture,
   screenshotSeedsTodos,
   screenshotTodoLog
 } from './screenshot-todos.js'
 import { SettingsService } from './settings-service.js'
+import { WaitingService } from './waiting-service.js'
 import {
   dispatchTestHook,
   hotkeyFailureRequested,
@@ -44,7 +47,7 @@ import { clearCaptureDraft, loadCaptureDraft, saveCaptureDraft } from './todos/d
 import { TodoStore } from './todos/store.js'
 import { createSafeStorageBox } from './token-store.js'
 import type { HotkeyRegistrar } from './hotkey.js'
-import { createUrlGuard } from './url-trust.js'
+import { createUrlGuard, isTrustedBrowserUrl } from './url-trust.js'
 import { hardenedWebPreferences } from './window-prefs.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -68,6 +71,7 @@ let tray: Tray | null = null
 let isQuitting = false
 let service: SettingsService | null = null
 let todos: TodoStore | null = null
+let waiting: WaitingService | ReturnType<typeof createScreenshotWaiting> | null = null
 let hotkeyNoticeSent = false
 
 const devServerOrigin = process.env.ARCKEEP_DEV === '1' ? process.env.VITE_DEV_SERVER_URL ?? null : null
@@ -452,6 +456,58 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
     if (captureWindow && !captureWindow.isDestroyed()) captureWindow.close()
     if (saved) showSavedConfirmation()
   })
+  ipcMain.handle(IpcChannel.getWaiting, event => {
+    guard(event)
+    return waiting?.current()
+  })
+  ipcMain.handle(IpcChannel.refreshWaiting, event => {
+    guard(event)
+    return waiting?.refresh() ?? Promise.reject(new Error('等我处理尚未就绪'))
+  })
+  ipcMain.handle(IpcChannel.snoozeWaiting, (event, id: unknown, days: unknown) => {
+    guard(event)
+    return waiting?.snooze(id, days) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.ignoreWaiting, (event, id: unknown) => {
+    guard(event)
+    return waiting?.ignore(id) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.restoreWaiting, (event, id: unknown) => {
+    guard(event)
+    return waiting?.restore(id) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.hideWaitingRepo, (event, repo: unknown) => {
+    guard(event)
+    return waiting?.hideRepo(repo) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.unhideWaitingRepo, (event, repo: unknown) => {
+    guard(event)
+    return waiting?.unhideRepo(repo) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.setShowIgnored, (event, show: unknown) => {
+    guard(event)
+    return waiting?.setShowIgnored(show) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.setWaiting, (event, config: unknown) => {
+    guard(event)
+    const saved = settings.setWaiting(config)
+    if (!saved.ok) return saved
+    return settings.getState().then(state => ({ ok: true as const, data: state }))
+  })
+  ipcMain.handle(IpcChannel.openExternal, (event, url: unknown) => {
+    guard(event)
+    if (typeof url !== 'string' || !isTrustedBrowserUrl(url)) {
+      return { ok: false, error: '只能用浏览器打开 GitHub 链接' }
+    }
+    return shell.openExternal(url).then(
+      () => ({ ok: true as const, data: true as const }),
+      () => ({ ok: false as const, error: '无法打开浏览器' })
+    )
+  })
+  ipcMain.handle(IpcChannel.advanceWaitingDays, (event, days: unknown) => {
+    guard(event)
+    return waiting?.advanceDays(days) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
 }
 
 const gotLock = app.requestSingleInstanceLock()
@@ -476,18 +532,28 @@ if (!gotLock) {
       fs.mkdirSync(path.dirname(file), { recursive: true })
       fs.writeFileSync(file, screenshotTodoLog())
     }
-    todos = new TodoStore({ file: todosFilePath(app.getPath('userData')) })
+    const userData = app.getPath('userData')
+    todos = new TodoStore({ file: todosFilePath(userData) })
+    const todoProvider = createTodoWaitingProvider(() => todos?.listWaitingTodos() ?? [])
     if (screenshotPath) {
-      service = createScreenshotSettings(screenshotScene, settingsFilePath(app.getPath('userData')))
+      service = createScreenshotSettings(screenshotScene, settingsFilePath(userData))
+      waiting = createScreenshotWaiting(screenshotScene)
     } else {
       service = new SettingsService({
-        file: settingsFilePath(app.getPath('userData')),
+        file: settingsFilePath(userData),
         secretBox: createSafeStorageBox(safeStorage),
         registrar: captureRegistrar(),
         onHotkey: () => openCaptureWindow(),
         log: message => console.error(message)
       })
       service.init()
+      waiting = new WaitingService(service, {
+        cache: waitingCachePath(userData),
+        dismissals: waitingDismissalPath(userData)
+      }, {
+        todos: todoProvider,
+        log: message => console.error(message)
+      })
     }
     registerIpc(service, todos)
     mainWindow = createWindow()

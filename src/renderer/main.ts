@@ -1,18 +1,17 @@
 import brandMark from '../../docs/brand/logo/Arckeep_Master_Horizontal_Reverse.svg'
+import brandSymbol from '../../docs/brand/logo/Arckeep_Symbol_White.svg'
 import { activeHotkeyLabel, hotkeyUnavailableMessage } from '../shared/hotkey-status'
 import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
 import { DEFAULT_HOTKEY } from '../shared/types'
 import { renderTodos } from './todos-page'
+import { renderWaiting } from './waiting-page'
+import { renderWaitingSettings } from './waiting-settings'
 
 type ViewId = 'inbox' | 'projects' | 'todos' | 'tools' | 'settings'
-type PlaceholderId = Exclude<ViewId, 'settings' | 'todos'>
+type PlaceholderId = Exclude<ViewId, 'settings' | 'todos' | 'inbox'>
 
 const PAGES: Record<PlaceholderId, { title: string, body: string }> = {
-  inbox: {
-    title: '等我处理',
-    body: '需要你拍板或回复的事项会集中在这里。这一页先占位，具体能力在后续 Issue。'
-  },
   projects: {
     title: '项目总览',
     body: '关注的仓库会在这里汇总。列表留空时走自动模式。这一页先占位。'
@@ -25,6 +24,8 @@ const PAGES: Record<PlaceholderId, { title: string, body: string }> = {
 
 const brand = document.querySelector<HTMLImageElement>('#brand-mark')
 if (brand) brand.src = brandMark
+const symbol = document.querySelector<HTMLImageElement>('#brand-symbol')
+if (symbol) symbol.src = brandSymbol
 
 const content = document.querySelector<HTMLElement>('#content')
 const hotkeyBanner = document.querySelector<HTMLElement>('#hotkey-banner')
@@ -69,7 +70,7 @@ function messageBox(parent: HTMLElement, kind: 'info' | 'error', text: string): 
   parent.append(el('div', { class: kind === 'error' ? 'alert error' : 'alert', role: 'alert' }, [text]))
 }
 
-async function renderSettings(): Promise<void> {
+async function renderSettings(options?: { focusToken?: boolean }): Promise<void> {
   if (!content) return
   const page = el('section', { class: 'page' }, [
     el('h1', {}, ['设置']),
@@ -89,9 +90,13 @@ async function renderSettings(): Promise<void> {
   page.append(
     renderHotkeyCard(state),
     renderGithubCard(state),
-    renderReposCard(state)
+    renderReposCard(state),
+    renderWaitingSettings(state, () => renderSettings())
   )
   paintHotkeyBanner(state.hotkeyUnavailable)
+  if (options?.focusToken) {
+    page.querySelector<HTMLInputElement>('#github-pat')?.focus()
+  }
 }
 
 function renderGithubCard(state: AppState): HTMLElement {
@@ -117,6 +122,7 @@ function renderGithubCard(state: AppState): HTMLElement {
   }
 
   const tokenInput = el('input', {
+    id: 'github-pat',
     type: 'password',
     autocomplete: 'off',
     spellcheck: 'false',
@@ -326,15 +332,18 @@ async function refreshHotkeyBanner(): Promise<void> {
 
 let leaveTodos: (() => void) | null = null
 
-async function show(view: ViewId): Promise<void> {
+async function show(view: ViewId, options?: { focusToken?: boolean }): Promise<void> {
   leaveTodos?.()
   leaveTodos = null
   setActive(view)
   if (!content) return
-  if (view === 'settings') await renderSettings()
+  if (view === 'settings') await renderSettings(options)
   else if (view === 'todos') {
     await refreshHotkeyBanner()
     leaveTodos = await renderTodos(content)
+  } else if (view === 'inbox') {
+    await refreshHotkeyBanner()
+    await renderWaiting(content, (next, nextOptions) => { void show(next, nextOptions) })
   } else {
     await refreshHotkeyBanner()
     renderPlaceholder(view)

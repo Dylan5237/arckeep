@@ -19,7 +19,18 @@ export const SCREENSHOT_SCENES = [
   'todos-empty',
   'todos-filter',
   'todos-delete',
-  'todos-narrow'
+  'todos-narrow',
+  'waiting',
+  'waiting-empty',
+  'waiting-no-token',
+  'waiting-invalid-token',
+  'waiting-loading',
+  'waiting-rate-limit',
+  'waiting-narrow',
+  'waiting-hover',
+  'waiting-watch',
+  'waiting-hidden',
+  'waiting-family'
 ] as const
 
 export type ScreenshotScene = (typeof SCREENSHOT_SCENES)[number]
@@ -43,7 +54,11 @@ export function parseScreenshotScene(value: string | undefined): ScreenshotScene
 }
 
 export function screenshotWindowSize(scene: ScreenshotScene): { width: number, height: number } {
+  if (scene === 'waiting-narrow') return { width: 800, height: 1680 }
   if (scene === 'narrow' || scene === 'todos-narrow') return { width: 800, height: 760 }
+  if (scene === 'waiting-hover') return { width: 1180, height: 900 }
+  if (scene === 'waiting-watch' || scene === 'waiting-hidden' || scene === 'waiting-family') return { width: 1180, height: 720 }
+  if (scene === 'waiting' || scene === 'waiting-rate-limit') return { width: 1180, height: 1680 }
   if (scene === 'nav' || scene === 'todos-empty') return { width: 1120, height: 760 }
   if (scene === 'todos' || scene === 'todos-filter' || scene === 'todos-delete') {
     return { width: 1120, height: 1100 }

@@ -19,8 +19,9 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "vitest run",
-    "build": "npm run build:app && electron-builder --win --dir",
-    "dist": "npm run build:app && electron-builder --win",
+    "waiting": "npm run build:ts && node out/waiting/cli.js",
+    "build": "npm run build:app && electron-builder --win --dir --publish never",
+    "dist": "npm run build:app && electron-builder --win --publish never",
     "pack": "node scripts/pack.mjs"
   },
   "devDependencies": {

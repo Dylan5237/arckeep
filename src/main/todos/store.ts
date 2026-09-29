@@ -23,9 +23,10 @@ export interface TodoStoreOptions {
  * the source of truth. Reads fold create/update/complete/uncomplete/delete
  * events. A corrupt line is skipped and the file is never rewritten on load.
  *
- * Issue #2 can adapt `listWaitingTodos()`:
- * `{ id, text, repo, createdAt }` of incomplete 等我 items.
- * Suggested provider mapping: `title = text`, `updatedAt = updatedAt`,
+ * `listWaitingTodos()` returns incomplete「等我」items.
+ * `waitingSince` is the moment the flag was turned on. Editing the text does
+ * not move it; turning the flag off and on again does.
+ * Provider mapping: `title = text`, reason time = `waitingSince`,
  * `url = arckeep://todos?id=<id>`.
  */
 export class TodoStore {
@@ -67,7 +68,8 @@ export class TodoStore {
         id: item.id,
         text: item.text,
         repo: item.repo,
-        createdAt: item.createdAt
+        createdAt: item.createdAt,
+        waitingSince: item.waitingSince ?? item.createdAt
       }))
       .sort((left, right) => {
         if (left.createdAt !== right.createdAt) return left.createdAt < right.createdAt ? -1 : 1

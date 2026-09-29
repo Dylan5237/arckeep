@@ -1,4 +1,7 @@
 import type { CaptureDraft, TodoItem, TodoUpdate } from './todos/types.js'
+import type { WaitingConfig, WaitingSnapshot } from './waiting/types.js'
+
+export type { WaitingConfig, WaitingSnapshot } from './waiting/types.js'
 
 export const DEFAULT_HOTKEY = 'Ctrl+Alt+Space'
 
@@ -22,6 +25,7 @@ export interface AppState {
   /** Combo named in the banner. Null hides it. Cleared only by a successful register. */
   hotkeyUnavailable: string | null
   github: PublicGithubAuth
+  waiting: WaitingConfig
 }
 
 export interface OkResult<T> {
@@ -55,6 +59,17 @@ export interface ArckeepApi {
   onTodosChanged(listener: () => void): () => void
   onHotkeyStatus(listener: (combo: string | null) => void): () => void
   onFocusHotkey(listener: () => void): () => void
+  getWaiting(): Promise<WaitingSnapshot>
+  refreshWaiting(): Promise<WaitingSnapshot>
+  snoozeWaiting(id: string, days: 1 | 3 | 7): Promise<IpcResult<WaitingSnapshot>>
+  ignoreWaiting(id: string): Promise<IpcResult<WaitingSnapshot>>
+  restoreWaiting(id: string): Promise<IpcResult<WaitingSnapshot>>
+  hideWaitingRepo(repo: string): Promise<IpcResult<WaitingSnapshot>>
+  unhideWaitingRepo(repo: string): Promise<IpcResult<WaitingSnapshot>>
+  setShowIgnored(show: boolean): Promise<IpcResult<WaitingSnapshot>>
+  setWaiting(config: WaitingConfig): Promise<IpcResult<AppState>>
+  openExternal(url: string): Promise<IpcResult<true>>
+  advanceWaitingDays(days: number): Promise<IpcResult<WaitingSnapshot>>
 }
 
 export function githubSourceLabel(source: GithubSource): string {
