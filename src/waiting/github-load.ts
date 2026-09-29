@@ -1,10 +1,9 @@
+import { githubData, githubGraphql } from '../github/client.js'
 import { parseIssueTree, parseRepoNode, parseSearchPayload, type RepoBatchItem } from '../shared/waiting/parse-github.js'
 import { tasklistIssueRefs } from '../shared/waiting/sub-issues.js'
 import { keywordToSearchTerms, chunkSearchText } from '../shared/waiting/rules.js'
-import { GithubAuthError, GithubRateLimitError, earlierReset, rateLimitFromResponse } from '../shared/waiting/rate-limit.js'
+import { GithubAuthError, GithubRateLimitError, earlierReset } from '../shared/waiting/rate-limit.js'
 import type { GithubRecord, SourceError, WaitingConfig } from '../shared/waiting/types.js'
-
-const API = 'https://api.github.com/graphql'
 
 const ISSUE_FIELDS = `
   number title url body createdAt updatedAt
@@ -127,58 +126,6 @@ function splitRepo(full: string): { owner: string, name: string } | null {
   return { owner, name }
 }
 
-async function graphql(
-  token: string,
-  query: string,
-  variables: Record<string, unknown>,
-  fetchImpl: typeof fetch
-): Promise<unknown> {
-  let response: Response
-  try {
-    response = await fetchImpl(API, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-        'User-Agent': 'Arckeep',
-        'X-GitHub-Api-Version': '2022-11-28'
-      },
-      body: JSON.stringify({ query, variables })
-    })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '网络错误'
-    throw new Error(`连不上 GitHub：${message}`)
-  }
-  const bodyText = await response.text()
-  if (response.status === 401) throw new GithubAuthError()
-  const resetAt = rateLimitFromResponse(response.status, response.headers, bodyText)
-  if (resetAt) throw new GithubRateLimitError(resetAt)
-  let payload: unknown
-  try {
-    payload = JSON.parse(bodyText) as unknown
-  } catch {
-    throw new Error(`GitHub 响应无法解析（HTTP ${response.status}）`)
-  }
-  if (!response.ok) throw new Error(`GitHub 返回 HTTP ${response.status}`)
-  if (payload && typeof payload === 'object' && payload !== null && 'errors' in payload) {
-    const errors = (payload as { errors?: unknown }).errors
-    const messages = Array.isArray(errors)
-      ? errors.map(error => (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') ? error.message : '')
-      : []
-    const rate = messages.some(message => /rate limit/i.test(message))
-    if (rate) {
-      const headerReset = rateLimitFromResponse(403, response.headers, messages.join('\n'))
-      throw new GithubRateLimitError(headerReset ?? new Date(Date.now() + 60_000).toISOString())
-    }
-    const data = (payload as { data?: unknown }).data
-    if (data === null || data === undefined) {
-      throw new Error(messages.filter(Boolean).join('；') || 'GitHub GraphQL 查询失败')
-    }
-  }
-  return payload
-}
-
 async function graphqlRelax(
   token: string,
   fetchImpl: typeof fetch,
@@ -189,7 +136,7 @@ async function graphqlRelax(
   let last: unknown
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await graphql(token, queryFor(), variables, fetchImpl)
+      return await githubGraphql(token, queryFor(), variables, fetchImpl)
     } catch (error) {
       const message = error instanceof Error ? error.message : ''
       if (!relaxSchema(message, schema)) throw error
@@ -199,16 +146,9 @@ async function graphqlRelax(
   throw last instanceof Error ? last : new Error('GitHub GraphQL 查询失败')
 }
 
-function dataOf(payload: unknown): Record<string, unknown> {
-  if (!payload || typeof payload !== 'object') return {}
-  const data = (payload as { data?: unknown }).data
-  if (!data || typeof data !== 'object') return {}
-  return data as Record<string, unknown>
-}
-
 async function viewerLogin(token: string, fetchImpl: typeof fetch): Promise<string> {
-  const payload = await graphql(token, 'query { viewer { login } }', {}, fetchImpl)
-  const data = dataOf(payload)
+  const payload = await githubGraphql(token, 'query { viewer { login } }', {}, fetchImpl)
+  const data = githubData(payload)
   const viewer = data.viewer
   const login = viewer && typeof viewer === 'object' && 'login' in viewer && typeof viewer.login === 'string'
     ? viewer.login
@@ -291,7 +231,7 @@ async function discoverRepos(
     : `watching(first: ${REPO_PAGE_SIZE}, after: $cursor)`
   const pageCap = Math.max(1, Math.ceil(Math.max(limit, 1) / REPO_PAGE_SIZE) + 1)
   for (let page = 0; page < pageCap && repos.length < limit; page += 1) {
-    const payload = await graphql(token, `
+    const payload = await githubGraphql(token, `
       query($cursor: String) {
         viewer {
           ${field} {
@@ -301,7 +241,7 @@ async function discoverRepos(
         }
       }
     `, { cursor }, fetchImpl)
-    const viewerNode = dataOf(payload).viewer
+    const viewerNode = githubData(payload).viewer
     const listed = viewerNode && typeof viewerNode === 'object' && connection in viewerNode
       ? (viewerNode as Record<string, unknown>)[connection]
       : null
@@ -346,8 +286,8 @@ async function loadExplicit(token: string, fetchImpl: typeof fetch, repos: reado
       variables[`o${index}`] = parts?.owner ?? ''
       variables[`n${index}`] = parts?.name ?? ''
     })
-    const payload = await graphql(token, metadataQuery(slice.length), variables, fetchImpl)
-    const data = dataOf(payload)
+    const payload = await githubGraphql(token, metadataQuery(slice.length), variables, fetchImpl)
+    const data = githubData(payload)
     slice.forEach((full, index) => {
       const node = data[`r${index}`]
       if (!node || typeof node !== 'object') return
@@ -431,7 +371,7 @@ async function loadRepoContents(
           variables,
           schema
         )
-        const data = dataOf(payload)
+        const data = githubData(payload)
         slice.forEach((repo, index) => {
           const parsed: RepoBatchItem | null = parseRepoNode(data[`r${index}`], login)
           if (!parsed) return
@@ -471,7 +411,7 @@ async function searchAll(
       { q: queryText, after },
       state
     )
-    const search = dataOf(payload).search
+    const search = githubData(payload).search
     records.push(...parseSearchPayload({ search }, { login, ...flags }))
     const pageInfo = search && typeof search === 'object' && 'pageInfo' in search
       ? (search as { pageInfo?: { hasNextPage?: boolean, endCursor?: string } }).pageInfo
@@ -579,7 +519,7 @@ async function loadTasklistIssues(
       variables,
       schema
     )
-    const data = dataOf(payload)
+    const data = githubData(payload)
     slice.forEach((item, index) => {
       const repoNode = data[`r${index}`]
       if (!repoNode || typeof repoNode !== 'object' || !('issue' in repoNode)) return

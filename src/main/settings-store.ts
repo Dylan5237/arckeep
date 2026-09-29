@@ -1,5 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { defaultOverviewConfig, parseOverviewConfig } from '../shared/overview/rules.js'
+import type { OverviewConfig } from '../shared/overview/types.js'
 import { defaultWaitingConfig, parseWaitingConfig } from '../shared/waiting/rules.js'
 import type { WaitingConfig } from '../shared/waiting/types.js'
 import { DEFAULT_HOTKEY } from '../shared/types.js'
@@ -13,6 +15,7 @@ export interface PersistedSettings {
   hotkey: string
   patCiphertext: string | null
   waiting: WaitingConfig
+  overview: OverviewConfig
   toolShelfJson: string
 }
 
@@ -23,6 +26,7 @@ export function defaultSettings(): PersistedSettings {
     hotkey: DEFAULT_HOTKEY,
     patCiphertext: null,
     waiting: defaultWaitingConfig(),
+    overview: defaultOverviewConfig(),
     toolShelfJson: toolShelfExampleText()
   }
 }
@@ -55,6 +59,12 @@ export function parseSettings(raw: unknown): PersistedSettings {
   } catch {
     waiting = defaultWaitingConfig()
   }
+  let overview = defaultOverviewConfig()
+  try {
+    overview = parseOverviewConfig(raw.overview)
+  } catch {
+    overview = defaultOverviewConfig()
+  }
   // Version 1 saved「待办」as off because the settings switch was a disabled
   // placeholder. That was not a user choice, so turn the source on once.
   if (raw.version !== 2) {
@@ -63,7 +73,7 @@ export function parseSettings(raw: unknown): PersistedSettings {
   const toolShelfJson = typeof raw.toolShelfJson === 'string' && raw.toolShelfJson.trim()
     ? raw.toolShelfJson
     : defaults.toolShelfJson
-  return { version: 2, watchedRepos, hotkey, patCiphertext, waiting, toolShelfJson }
+  return { version: 2, watchedRepos, hotkey, patCiphertext, waiting, overview, toolShelfJson }
 }
 
 export function loadSettings(file: string): PersistedSettings {
