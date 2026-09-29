@@ -21,6 +21,7 @@ export const SCREENSHOT_SCENES = [
   'todos-filter',
   'todos-delete',
   'todos-narrow',
+  'todos-split',
   'waiting',
   'waiting-empty',
   'waiting-no-token',
@@ -72,8 +73,17 @@ export function parseScreenshotScene(value: string | undefined): ScreenshotScene
 }
 
 export function screenshotWindowSize(scene: ScreenshotScene): { width: number, height: number } {
+  const size = screenshotFrame(scene)
+  if (process.env.ARCKEEP_SCREENSHOT_COMPACT === '1' && size.width > 800) {
+    return { width: 800, height: size.height }
+  }
+  return size
+}
+
+function screenshotFrame(scene: ScreenshotScene): { width: number, height: number } {
   if (scene === 'waiting-narrow' || scene === 'overview-narrow') return { width: 800, height: 1680 }
   if (scene === 'tools-narrow' || scene === 'narrow' || scene === 'todos-narrow') return { width: 800, height: 760 }
+  if (scene === 'todos-split') return { width: 800, height: 1280 }
   if (scene === 'tools') return { width: 1120, height: 760 }
   if (scene === 'tools-running' || scene === 'tools-success' || scene === 'tools-failed' || scene === 'tools-aborted') {
     return { width: 1120, height: 900 }
@@ -118,6 +128,7 @@ export function screenshotOpensTodos(scene: ScreenshotScene): boolean {
     || scene === 'todos-filter'
     || scene === 'todos-delete'
     || scene === 'todos-narrow'
+    || scene === 'todos-split'
 }
 
 export function screenshotShowsMainWindow(scene: ScreenshotScene): boolean {

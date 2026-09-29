@@ -21,6 +21,7 @@ const scenes = [
   ['todos-filter', 'todos-filter.png'],
   ['todos-delete', 'todos-delete.png'],
   ['todos-narrow', 'todos-narrow.png'],
+  ['todos-split', 'todos-split-actions.png'],
   ['waiting', 'waiting-todo.png'],
   ['hotkey-banner', 'hotkey-banner.png'],
   ['hotkey-save-conflict', 'hotkey-save-conflict.png']
@@ -33,6 +34,7 @@ for (const [scene, filename] of scenes) {
     cwd: root,
     env: {
       ...process.env,
+      ARCKEEP_SCREENSHOT_COMPACT: '1',
       ARCKEEP_SCREENSHOT: output,
       ARCKEEP_SCREENSHOT_SCENE: scene
     },

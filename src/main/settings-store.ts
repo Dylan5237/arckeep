@@ -17,6 +17,8 @@ export interface PersistedSettings {
   waiting: WaitingConfig
   overview: OverviewConfig
   toolShelfJson: string
+  /** When true, a normal launch leaves the main window hidden and keeps the tray. */
+  hideMainWindowOnLaunch: boolean
 }
 
 export function defaultSettings(): PersistedSettings {
@@ -27,7 +29,8 @@ export function defaultSettings(): PersistedSettings {
     patCiphertext: null,
     waiting: defaultWaitingConfig(),
     overview: defaultOverviewConfig(),
-    toolShelfJson: toolShelfExampleText()
+    toolShelfJson: toolShelfExampleText(),
+    hideMainWindowOnLaunch: false
   }
 }
 
@@ -73,7 +76,17 @@ export function parseSettings(raw: unknown): PersistedSettings {
   const toolShelfJson = typeof raw.toolShelfJson === 'string' && raw.toolShelfJson.trim()
     ? raw.toolShelfJson
     : defaults.toolShelfJson
-  return { version: 2, watchedRepos, hotkey, patCiphertext, waiting, overview, toolShelfJson }
+  const hideMainWindowOnLaunch = raw.hideMainWindowOnLaunch === true
+  return {
+    version: 2,
+    watchedRepos,
+    hotkey,
+    patCiphertext,
+    waiting,
+    overview,
+    toolShelfJson,
+    hideMainWindowOnLaunch
+  }
 }
 
 export function loadSettings(file: string): PersistedSettings {

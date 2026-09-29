@@ -28,12 +28,14 @@ function moveOsPointer(screenX: number, screenY: number): void {
   }
 }
 
-function movePointer(window: BrowserWindow, x: number, y: number): void {
+function movePointer(window: BrowserWindow, x: number, y: number, moveOs = true): void {
   if (!window.isVisible()) window.show()
   window.focus()
   window.webContents.focus()
-  const bounds = window.getContentBounds()
-  moveOsPointer(bounds.x + x, bounds.y + y)
+  if (moveOs) {
+    const bounds = window.getContentBounds()
+    moveOsPointer(bounds.x + x, bounds.y + y)
+  }
   window.webContents.sendInputEvent({ type: 'mouseMove', x, y })
 }
 
@@ -74,6 +76,42 @@ async function pointAtWaitingRow(window: BrowserWindow, index: number, openIgnor
     }).length
   `)
   if (visible !== 1) throw new Error(`expected one row of actions, saw ${visible}`)
+}
+
+async function assertSmallLogo(contents: WebContents): Promise<void> {
+  const ok = await contents.executeJavaScript(`
+    (() => {
+      const symbol = document.querySelector('.brand-symbol')
+      const word = document.querySelector('.brand-word')
+      if (!(symbol instanceof HTMLElement) || !(word instanceof HTMLElement)) return false
+      const symbolStyle = getComputedStyle(symbol)
+      const wordStyle = getComputedStyle(word)
+      return wordStyle.display === 'none'
+        && symbolStyle.display !== 'none'
+        && parseFloat(symbolStyle.width) > 0
+        && parseFloat(symbolStyle.width) <= 48
+    })()
+  `)
+  if (!ok) throw new Error('sidebar is not showing the small logo')
+}
+
+async function pointAtOpenTodo(window: BrowserWindow, index: number): Promise<void> {
+  const place = async (): Promise<{ x: number, y: number }> => window.webContents.executeJavaScript(`
+    (() => {
+      const row = document.querySelectorAll('.todo-host > .todo-list > .todo-row')[${index}]
+      if (!(row instanceof HTMLElement)) throw new Error('todo row was not rendered')
+      const box = row.getBoundingClientRect()
+      if (box.top < 0 || box.bottom > window.innerHeight) row.scrollIntoView({ block: 'center' })
+      const next = row.getBoundingClientRect()
+      return { x: Math.round(next.x + Math.min(180, next.width / 2)), y: Math.round(next.y + next.height / 2) }
+    })()
+  `)
+  const point = await place()
+  movePointer(window, point.x, point.y)
+  await new Promise(resolve => setTimeout(resolve, 80))
+  const moved = await place()
+  movePointer(window, moved.x, moved.y)
+  await new Promise(resolve => setTimeout(resolve, 80))
 }
 
 export async function presentScreenshot(options: {
@@ -150,8 +188,59 @@ export async function presentScreenshot(options: {
     `, '已完成分组')
     await contents.executeJavaScript(`
       document.querySelector('.todo-row')?.classList.add('is-hover')
+      for (const row of document.querySelectorAll('.todo-row')) row.classList.remove('show-actions')
       true
     `)
+    movePointer(main, 12, 36, false)
+    await new Promise(resolve => setTimeout(resolve, 80))
+    await contents.executeJavaScript(`
+      for (const row of document.querySelectorAll('.todo-row')) row.classList.remove('show-actions')
+      true
+    `)
+    if (scene === 'todos-narrow') await assertSmallLogo(contents)
+  } else if (scene === 'todos-split') {
+    await waitUntil(contents, `
+      document.body.innerText.includes('共 40 条')
+      && document.body.innerText.includes('已完成 · 28')
+      && document.querySelector('[data-action="completed-group"]')?.open === false
+    `, '已完成分组')
+    const focused = await contents.executeJavaScript(`
+      (() => {
+        const rows = [...document.querySelectorAll('.todo-host > .todo-list > .todo-row')]
+        const checkbox = rows[0]?.querySelector('input.todo-check')
+        if (!(checkbox instanceof HTMLInputElement)) return false
+        checkbox.focus()
+        return document.activeElement === checkbox
+      })()
+    `)
+    if (!focused) throw new Error('could not focus the first todo row')
+    await pointAtOpenTodo(main, 4)
+    const exclusive = await contents.executeJavaScript(`
+      (() => {
+        const rows = [...document.querySelectorAll('.todo-host > .todo-list > .todo-row')]
+        const visible = rows.filter(row => {
+          const actions = row.querySelector('.todo-actions')
+          return actions instanceof HTMLElement && getComputedStyle(actions).opacity !== '0'
+        })
+        const shown = visible[0]
+        const edit = shown?.querySelector('[data-action="edit"]')
+        const remove = shown?.querySelector('[data-action="delete"]')
+        if (!(edit instanceof HTMLElement) || !(remove instanceof HTMLElement)) return 'missing buttons'
+        const editStyle = getComputedStyle(edit)
+        const removeStyle = getComputedStyle(remove)
+        const focusedBox = rows[0]?.querySelector('input.todo-check')
+        if (visible.length !== 1) return 'visible ' + visible.length
+        if (shown !== rows[4]) return 'actions on the focused row'
+        if (document.activeElement !== focusedBox) return 'focus moved'
+        if (remove.classList.contains('danger')) return 'delete is danger'
+        if (editStyle.color !== removeStyle.color || editStyle.backgroundColor !== removeStyle.backgroundColor) {
+          return 'delete style ' + removeStyle.color + ' ' + removeStyle.backgroundColor
+        }
+        return 'ok'
+      })()
+    `)
+    if (exclusive !== 'ok') throw new Error(`todo row actions: ${exclusive}`)
+    await assertSmallLogo(contents)
   } else if (scene === 'todos-empty') {
     await waitUntil(contents, includesText('还没有待办'), '还没有待办')
   } else if (scene === 'todos-filter') {
@@ -220,6 +309,12 @@ export async function presentScreenshot(options: {
       && document.querySelector('.modal-backdrop') === null
       && !document.body.innerText.includes('删除这条待办')
     `, '已删除 · 撤销')
+    movePointer(main, 12, 36, false)
+    await new Promise(resolve => setTimeout(resolve, 80))
+    await contents.executeJavaScript(`
+      for (const row of document.querySelectorAll('.todo-row')) row.classList.remove('show-actions')
+      true
+    `)
   } else if (scene.startsWith('overview')) {
     await waitUntil(contents, includesText(screenshotReadyText(scene)), scene)
     if (scene === 'overview-archived') {
