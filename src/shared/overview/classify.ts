@@ -72,18 +72,32 @@ export function stallBasisOf(facts: Pick<OverviewRepoFacts, 'lastCommitAt' | 'la
 }
 
 /**
- * Active when the newer of the default-branch commit and issue/PR activity is
- * within `staleRepoDays` (that exact age still counts as active). Older than
- * that, the row is 陈旧. Missing activity stays active so a new empty repo is visible.
+ * Newest of the default-branch commit, issue/PR activity, repository push, and
+ * repository creation. Missing timestamps are skipped.
+ */
+export function recentActivityAt(facts: {
+  lastCommitAt?: string | null
+  lastIssueActivityAt?: string | null
+  pushedAt?: string | null
+  createdAt?: string | null
+}): string | null {
+  return [facts.lastCommitAt, facts.lastIssueActivityAt, facts.pushedAt, facts.createdAt]
+    .reduce<string | null>((best, value) => laterIso(best, value ?? null), null)
+}
+
+/**
+ * Active when the newest activity timestamp is within `staleRepoDays` (that
+ * exact age still counts as active). Older than that, the row is 陈旧. A repo
+ * with no timestamps at all stays active.
  */
 export function overviewGroup(
-  facts: Pick<OverviewRepoFacts, 'archived' | 'error' | 'lastCommitAt' | 'lastIssueActivityAt'>,
+  facts: Pick<OverviewRepoFacts, 'archived' | 'error' | 'lastCommitAt' | 'lastIssueActivityAt' | 'pushedAt' | 'createdAt'>,
   config: OverviewConfig,
   now: Date
 ): OverviewGroup {
   if (facts.archived) return 'archived'
   if (facts.error) return 'active'
-  const at = stallBasisOf(facts).at
+  const at = recentActivityAt(facts)
   if (!at) return 'active'
   if (waitingDays(at, now) > config.staleRepoDays) return 'stale'
   return 'active'
@@ -148,6 +162,7 @@ export function classifyRepo(
 
   const empty = isEmptyRepo(facts)
   const stale = group === 'stale'
+  const activityAt = recentActivityAt(facts)
   const stalledDays = stallBasis.at ? waitingDays(stallBasis.at, now) : 0
   const stalled = group === 'active' && !empty && Boolean(stallBasis.at) && stalledDays >= config.staleDays
   const stuck = facts.pullRequests
@@ -193,12 +208,12 @@ export function classifyRepo(
       urls: [facts.url]
     }))
   }
-  if (stale && stallBasis.at) {
+  if (stale && activityAt) {
     warnings.push(warning({
       kind: '陈旧',
       label: '陈旧',
-      days: waitingDays(stallBasis.at, now),
-      hint: `提交和 Issue/PR 活动超过 ${config.staleRepoDays} 天`,
+      days: waitingDays(activityAt, now),
+      hint: `最近活动超过 ${config.staleRepoDays} 天`,
       urls: [facts.url]
     }))
   }

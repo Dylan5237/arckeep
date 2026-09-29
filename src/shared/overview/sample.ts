@@ -24,6 +24,7 @@ function repo(input: {
   owner: string
   name: string
   days?: number
+  createdDays?: number
   empty?: boolean
   sizeKb?: number | null
   commit?: boolean
@@ -43,6 +44,9 @@ function repo(input: {
     sizeKb: input.sizeKb === undefined ? (empty ? 0 : 128) : input.sizeKb,
     hasDefaultBranchCommit: hasCommit,
     pushedAt: input.days === undefined ? null : ago(input.days),
+    createdAt: input.createdDays !== undefined
+      ? ago(input.createdDays)
+      : input.days === undefined ? null : ago(input.days),
     lastCommitAt: hasCommit && input.days !== undefined ? ago(input.days) : null,
     lastIssueActivityAt: null,
     openPrCount: input.openPrCount ?? input.pulls?.length ?? 0,
@@ -67,7 +71,7 @@ export function sampleOverviewFacts(): OverviewRepoFacts[] {
     repo({ owner: 'northline', name: 'berth', days: 18, ci: 'pending' }),
     repo({ owner: 'keel', name: 'ledger', days: 22, ci: 'none' }),
     repo({ owner: 'harbor', name: 'blank', empty: true, days: 2, ci: 'none' }),
-    repo({ owner: 'northline', name: 'vacant', empty: true, sizeKb: 0, commit: false, ci: 'none' }),
+    repo({ owner: 'northline', name: 'vacant', empty: true, sizeKb: 0, commit: false, createdDays: 900, ci: 'none' }),
     repo({ owner: 'paperlane', name: 'unborn', days: 4, sizeKb: 40, commit: false, ci: 'none' }),
     repo({ owner: 'harbor', name: 'signal', days: 2, ci: 'failure' }),
     repo({ owner: 'northline', name: 'pilot', days: 1, ci: 'success' }),

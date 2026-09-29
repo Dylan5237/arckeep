@@ -224,6 +224,27 @@ export async function presentScreenshot(options: {
         true
       `)
     }
+    if (scene === 'overview-settings') {
+      await contents.executeJavaScript(`
+        document.querySelector('#overview-settings')?.scrollIntoView({ block: 'start' })
+        true
+      `)
+      await waitUntil(contents, `(() => {
+        const card = document.querySelector('#overview-settings')
+        if (!card) return false
+        const text = card.innerText
+        const rect = card.getBoundingClientRect()
+        return text.includes('默认 7 天')
+          && text.includes('默认 30 天')
+          && text.includes('没有单独的最近推送窗口')
+          && !text.includes('推送窗口天数')
+          && !card.querySelector('[aria-label*="推送"]')
+          && rect.top >= -2
+          && rect.top < 120
+          && rect.bottom > 400
+          && rect.bottom <= window.innerHeight
+      })()`, 'overview settings')
+    }
     if (scene === 'overview-chip-hover') {
       await contents.executeJavaScript(`
         const chip = document.querySelector('a.chip-link')

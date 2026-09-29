@@ -36,7 +36,7 @@ export function renderOverviewSettings(state: AppState, rerender: () => Promise<
   const card = el('section', { class: 'card', id: 'overview-settings' }, [
     el('h2', {}, ['项目总览']),
     el('p', { class: 'hint' }, [
-      '关注列表留空时走自动模式，收录你有写权限的全部仓库：你拥有的、你是协作者的、以及你作为组织成员并且有推送权限的。只 watch、没有写权限的仓库不会出现，已归档的仓库默认也不出现。有提交或 Issue/PR 活动还在陈旧天数以内的进活跃列表，更久的进「陈旧」。每个仓库都会落在这两组之一。天数对所有仓库一视同仁，不写死某个仓库。'
+      '关注列表留空时走自动模式，收录你有写权限的全部仓库：你拥有的、你是协作者的、以及你作为组织成员并且有推送权限的。只 watch、没有写权限的仓库不会出现，已归档的仓库默认也不出现。没有单独的最近推送窗口。最近活动取最后一次提交、最近的 Issue/PR 活动、仓库推送时间和仓库创建时间里最新的一个（缺了哪项就跳过）；还在陈旧天数以内的进活跃列表，更久的进「陈旧」。每个未归档仓库都会落在这两组之一。天数对所有仓库一视同仁，不写死某个仓库。'
     ])
   ])
   const staleDays = numberField('停滞天数', config.staleDays)
@@ -68,7 +68,7 @@ export function renderOverviewSettings(state: AppState, rerender: () => Promise<
   card.append(
     el('h3', {}, ['停滞天数']),
     el('p', { class: 'hint' }, [
-      `默认 ${DEFAULT_STALE_DAYS} 天，只判活跃列表里的仓库。默认分支上的最后一次提交，以及 Issue / PR 的创建、更新和评论，两边都满了这么多天才标成停滞；有一边还在这段时间里就不算。行上的「停滞 X 天」按较新的那一边计算。陈旧分组里的仓库不再标停滞。`
+      `默认 ${DEFAULT_STALE_DAYS} 天，只判活跃列表里的仓库。默认分支上的最后一次提交，以及 Issue / PR 的创建、更新和评论，两边都满了这么多天才标成停滞；有一边还在这段时间里就不算。行上的「停滞 X 天」按较新的那一边计算。陈旧分组里的仓库不再标停滞。刚创建、还没有任何提交或 Issue/PR 活动的空仓不算停滞。`
     ]),
     staleDays,
     el('h3', {}, ['review 等待天数']),
@@ -76,7 +76,7 @@ export function renderOverviewSettings(state: AppState, rerender: () => Promise<
     reviewWaitDays,
     el('h3', {}, ['陈旧天数']),
     el('p', { class: 'hint' }, [
-      `默认 ${DEFAULT_STALE_REPO_DAYS} 天。看默认分支提交和 Issue / PR 活动里较新的那个时间：还在这么多天以内（含刚好这么多天）留在活跃列表，再久就收进可折叠的陈旧分组。页头「需要看一眼」不算陈旧分组里的仓库。`
+      `默认 ${DEFAULT_STALE_REPO_DAYS} 天。最近活动是最后一次提交、最近的 Issue / PR 活动、仓库推送时间和仓库创建时间里最新的一个。还在这么多天以内（含刚好这么多天）留在活跃列表，再久就收进可折叠的陈旧分组。页头「需要看一眼」不算陈旧分组里的仓库。陈旧的空仓不计入，行里仍显示「空仓」。`
     ]),
     staleRepoDays,
     el('label', { class: 'check' }, [showArchived, '显示已归档的仓库']),

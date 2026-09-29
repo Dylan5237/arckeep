@@ -21,7 +21,8 @@ const scenes = [
   ['overview-loading', 'overview-loading.png'],
   ['overview-row-error', 'overview-row-error.png'],
   ['overview-narrow', 'overview-narrow.png'],
-  ['overview-chip-hover', 'overview-chip-hover.png']
+  ['overview-chip-hover', 'overview-chip-hover.png'],
+  ['overview-settings', 'overview-settings.png']
 ]
 
 for (const [scene, filename] of scenes) {
