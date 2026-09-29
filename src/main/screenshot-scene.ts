@@ -87,7 +87,7 @@ export function screenshotWindowSize(scene: ScreenshotScene): { width: number, h
   if (scene === 'waiting-watch' || scene === 'waiting-family') return { width: 1180, height: 720 }
   if (scene === 'overview-archived') return { width: 1180, height: 820 }
   if (scene === 'overview-settings') return { width: 1120, height: 1280 }
-  if (scene === 'waiting-maybe-only') return { width: 1180, height: 720 }
+  if (scene === 'waiting-maybe-only') return { width: 1180, height: 980 }
   if (scene === 'waiting' || scene === 'waiting-rate-limit' || scene === 'waiting-related' || scene === 'waiting-related-open' || scene === 'overview' || scene === 'overview-collapsed') return { width: 1180, height: 1680 }
   if (scene === 'nav' || scene === 'todos-empty') return { width: 1120, height: 760 }
   if (scene === 'todos' || scene === 'todos-filter' || scene === 'todos-delete') {

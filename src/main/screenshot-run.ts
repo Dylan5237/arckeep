@@ -318,7 +318,26 @@ export async function presentScreenshot(options: {
         if (!(details instanceof HTMLDetailsElement)) throw new Error('maybe section missing')
         const summary = details.querySelector('summary')?.textContent ?? ''
         if (!/^可能相关 · \\d+$/.test(summary.trim())) throw new Error('maybe header missing count: ' + summary)
-        details.open = ${scene === 'waiting-related-open' ? 'true' : 'false'}
+        const wantOpen = ${scene === 'waiting-related-open' || scene === 'waiting-maybe-only' ? 'true' : 'false'}
+        if (${scene === 'waiting-maybe-only' ? 'true' : 'false'} && !details.open) {
+          throw new Error('maybe section should start open when the main list is empty')
+        }
+        details.open = wantOpen
+        const weakText = details.innerText
+        if (weakText.includes('两周以上') || weakText.includes('3–13 天') || weakText.includes('近 3 天')) {
+          throw new Error('weak rows must stay one list')
+        }
+        if (${scene === 'waiting-related-open' || scene === 'waiting-maybe-only' ? 'true' : 'false'}) {
+          const chips = [...details.querySelectorAll('.waiting-row .chip')].map(chip => chip.textContent ?? '')
+          if (chips.length === 0) throw new Error('expanded weak rows missing')
+          if (chips.some(label => label.includes('要你动手'))) throw new Error('weak row still uses 要你动手')
+          if (!chips.every(label => label.trim() === '提及')) throw new Error('weak row label: ' + chips.join(','))
+          const excerpts = [...details.querySelectorAll('.waiting-reason')].map(node => node.textContent ?? '')
+          if (excerpts.some(text => text.includes('没有明确请求') || text.includes('正文里提到了'))) {
+            throw new Error('weak excerpt is commentary')
+          }
+          if (!excerpts.some(text => text.includes('@ada'))) throw new Error('weak excerpt is not source text')
+        }
         if (${scene === 'waiting-maybe-only' ? 'true' : 'false'}) {
           const text = document.body.innerText
           if (text.includes('全部处理完了')) throw new Error('all-done copy shown beside weak rows')
@@ -326,7 +345,7 @@ export async function presentScreenshot(options: {
             throw new Error('main list should be empty')
           }
         }
-        details.scrollIntoView({ block: ${scene === 'waiting-maybe-only' ? "'nearest'" : "'start'"} })
+        if (${scene === 'waiting-maybe-only' ? 'false' : 'true'}) details.scrollIntoView({ block: 'start' })
         true
       `)
       await new Promise(resolve => setTimeout(resolve, 80))

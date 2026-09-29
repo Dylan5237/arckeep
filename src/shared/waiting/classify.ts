@@ -261,7 +261,7 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
     const keywords = compileUserRegexList(config.humanKeywords, '人工动作关键词')
     const resolved = compileUserRegexList(config.resolvedSignals, '已解决信号')
     const excerpt = waitingExcerpt(record.body, record.comments, keywords, resolved)
-    signal = signal ?? { rule: '提及', excerpt: excerpt || '提及了你' }
+    signal = signal ?? { rule: '提及', excerpt: excerpt ?? '' }
   }
   const spec = record.kind === 'issue' && isSpecIssue(record.title, record.labels, record.body, config.specMarkers)
   if (tier !== 'strong' && !closed && humanAllowed && !spec) {

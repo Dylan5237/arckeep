@@ -104,7 +104,7 @@ export function partitionDismissals(
       parentNumber: draft.parentNumber,
       parent: draft.parent,
       childCount: 0,
-      signalText: draft.signal.excerpt || draft.signal.rule,
+      signalText: draft.tier === 'weak' ? draft.signal.excerpt.trim() : (draft.signal.excerpt || draft.signal.rule),
       tier: draft.tier
     })
   }

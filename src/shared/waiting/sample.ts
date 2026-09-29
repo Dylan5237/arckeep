@@ -39,6 +39,15 @@ const TITLES = [
   '验收关注仓库留空的自动模式'
 ]
 
+const WEAK_EXCERPTS = [
+  '@ada 截图在附件里。',
+  'cc @ada，夜间模式的截图在下面。',
+  '@ada 导出页的截图我传到评论了。',
+  '截图先放这儿，@ada。',
+  '@ada 这是空状态的截图。',
+  '@ada 对比图在这条评论里。'
+]
+
 const REASON_SETS = [
   ['要人动手'],
   ['待你审/合'],
@@ -68,7 +77,7 @@ export function sampleWaitingRows(): WaitingRow[] {
     const reasons = REASON_SETS[index % REASON_SETS.length] ?? ['要人动手']
     const tier = index % 9 === 0 ? 'weak' as const : 'strong' as const
     const signalText = tier === 'weak'
-      ? '正文里提到了截图，没有明确请求'
+      ? (WEAK_EXCERPTS[Math.floor(index / 9) % WEAK_EXCERPTS.length] ?? '@ada 截图在附件里。')
       : reasons.includes('待你审/合')
         ? '最近活动 2026-09-20，已连续 3 天没有 push、评论或 review'
         : reasons.includes('请求 review')

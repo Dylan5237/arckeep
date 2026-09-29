@@ -10,6 +10,19 @@ const ACTION_CLASS: Record<string, string> = {
   '待办': 'act-todo'
 }
 
+/** Weak rows are not work items. They never wear the main-list action chip. */
+export const WEAK_ROW_LABEL = '提及'
+
+export function rowActionLabel(row: { tier: 'strong' | 'weak', action: string }): string | null {
+  if (row.tier === 'weak') return WEAK_ROW_LABEL
+  return row.action || '要你动手'
+}
+
+/** Open only when the main list has nothing else to show. */
+export function maybeSectionStartsOpen(mainCount: number): boolean {
+  return mainCount === 0
+}
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
@@ -147,7 +160,7 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
     } else if (mainRows.length > 0) {
       page.append(renderGroups(mainRows, handlers))
     }
-    if (maybeRows.length > 0) page.append(renderMaybe(maybeRows, handlers))
+    if (maybeRows.length > 0) page.append(renderMaybe(maybeRows, handlers, maybeSectionStartsOpen(mainRows.length)))
   }
   host.replaceChildren(page)
 }
@@ -174,11 +187,14 @@ function renderMaybe(rows: readonly WaitingRow[], handlers: {
   hideRepo: (repo: string) => void
   open: (url: string) => void
   todos: () => void
-}): HTMLElement {
+}, startsOpen: boolean): HTMLElement {
   const details = el('details', { class: 'maybe-related' })
+  details.open = startsOpen
   details.append(el('summary', {}, [maybeRelatedLabel(rows.length)]))
   details.append(el('p', { class: 'hint' }, ['只有提及，或正文里散落的关键词。不计入上面的待处理件数。']))
-  details.append(renderGroups(rows, handlers))
+  const list = el('div', { class: 'maybe-list' })
+  for (const row of rows) list.append(renderRow(row, handlers))
+  details.append(list)
   return details
 }
 
@@ -240,12 +256,14 @@ function renderRow(row: WaitingRow, handlers: {
     }
     handlers.open(row.url)
   })
-  const actionName = row.action || '要你动手'
-  const chip = el('span', {
-    class: `chip chip-${ACTION_CLASS[actionName] ?? 'act-do'}`,
-    title: row.reasons.join(' · ')
-  }, [actionName])
-  const viaNames = row.reasons.filter(reason => PROVENANCE.has(reason))
+  const actionName = rowActionLabel(row)
+  const chip = actionName
+    ? el('span', {
+      class: row.tier === 'weak' ? 'chip chip-mention' : `chip chip-${ACTION_CLASS[actionName] ?? 'act-do'}`,
+      title: row.tier === 'weak' ? '不计入待处理件数' : row.reasons.join(' · ')
+    }, [actionName])
+    : null
+  const viaNames = row.tier === 'weak' ? [] : row.reasons.filter(reason => PROVENANCE.has(reason))
   const via = viaNames.length > 0
     ? el('span', { class: 'waiting-via' }, [viaNames.join(' · ')])
     : null
@@ -282,10 +300,15 @@ function renderRow(row: WaitingRow, handlers: {
     ])
     actions.append(snooze, ignore)
   }
-  const body = [days, title, chip, meta, actions]
+  const body: Array<Node | string | null> = [days, title, chip, meta, actions]
   if (via) body.splice(3, 0, via)
-  const reason = el('p', { class: 'waiting-reason' }, [row.signalText || row.reasons.join(' · ') || '等待'])
-  return el('div', { class: `waiting-row age-${age}${row.ignored ? ' is-ignored' : ''}` }, [...body, reason])
+  const excerpt = row.signalText.trim()
+  const reason = excerpt
+    ? el('p', { class: 'waiting-reason' }, [excerpt])
+    : row.tier === 'weak'
+      ? null
+      : el('p', { class: 'waiting-reason' }, [row.reasons.join(' · ') || '等待'])
+  return el('div', { class: `waiting-row age-${age}${row.ignored ? ' is-ignored' : ''}` }, [...body, reason].filter((node): node is Node | string => node != null))
 }
 
 export async function renderWaiting(
