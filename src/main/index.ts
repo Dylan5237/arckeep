@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { WINDOW_BACKGROUND } from '../shared/chrome.js'
 import { IpcChannel } from '../shared/ipc.js'
 import { hotkeyUnavailableMessage, shouldNotifyStartupHotkeyFailure, trayMenuEntries, trayToolTip } from '../shared/hotkey-status.js'
 import { shouldShowMainWindowOnReady } from './launch-window.js'
@@ -305,7 +306,7 @@ function createWindow(): BrowserWindow {
     minHeight: 600,
     show: false,
     title: 'Arckeep',
-    backgroundColor: '#F5F2EA',
+    backgroundColor: WINDOW_BACKGROUND,
     autoHideMenuBar: true,
     icon: trayIconPath(),
     webPreferences: hardenedWebPreferences(preloadPath())

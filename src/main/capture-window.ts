@@ -1,4 +1,5 @@
 import { BrowserWindow, screen } from 'electron'
+import { TOAST_WINDOW_BACKGROUND, WINDOW_BACKGROUND } from '../shared/chrome.js'
 import { hardenedWebPreferences } from './window-prefs.js'
 
 export interface CaptureWindowOptions {
@@ -42,7 +43,7 @@ export function createCaptureWindow(options: CaptureWindowOptions): BrowserWindo
     height: 348,
     show: false,
     title: '快速捕获',
-    backgroundColor: '#F5F2EA',
+    backgroundColor: WINDOW_BACKGROUND,
     autoHideMenuBar: true,
     minimizable: false,
     maximizable: false,
@@ -103,7 +104,7 @@ export function showSavedToast(options: {
     resizable: false,
     movable: false,
     show: false,
-    backgroundColor: '#00000000',
+    backgroundColor: TOAST_WINDOW_BACKGROUND,
     webPreferences: hardenedWebPreferences(options.preload)
   })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

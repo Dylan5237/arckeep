@@ -1,5 +1,4 @@
-import brandMark from '../../docs/brand/logo/Arckeep_Master_Horizontal_Reverse.svg'
-import brandSymbol from '../../docs/brand/logo/Arckeep_Symbol_White.svg'
+import brandSymbol from '../../docs/brand/logo/Arckeep_Symbol_Charcoal.svg'
 import { activeHotkeyLabel, hotkeyUnavailableMessage } from '../shared/hotkey-status'
 import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
@@ -14,8 +13,6 @@ import { renderWaitingSettings } from './waiting-settings'
 
 type ViewId = 'inbox' | 'projects' | 'todos' | 'tools' | 'settings'
 
-const brand = document.querySelector<HTMLImageElement>('#brand-mark')
-if (brand) brand.src = brandMark
 const symbol = document.querySelector<HTMLImageElement>('#brand-symbol')
 if (symbol) symbol.src = brandSymbol
 
