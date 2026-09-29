@@ -1,0 +1,212 @@
+name: Verify Issue 3 (项目总览 独立验收)
+
+# Independent acceptance run for Arckeep Issue #3 ("项目总览"). This workflow is
+# maintained on the verify/issue-3 branch only; it never touches product code and is
+# never merged. Manual dispatch only, so it never fires on every push to this branch.
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: 'CI run id to pull the win-unpacked Windows artifact from (defaults to the main-push run for dddb958)'
+        required: false
+        default: '36507787608'
+      fallback_run_id:
+        description: 'Fallback CI run id (PR #13) if the primary run has no usable artifact'
+        required: false
+        default: '36507384325'
+      target_sha:
+        description: 'Commit SHA under test'
+        required: false
+        default: 'dddb9582adba35fc56a5e6f9d50aa4b351fdf24e'
+
+# Hard rule #3: exactly one GitHub auth mechanism is permitted for this whole workflow —
+# the ephemeral, workflow-scoped GITHUB_TOKEN below. No PAT, no other secret is declared
+# or referenced anywhere in this file.
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: verify-issue-3
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: verify (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout verify/issue-3
+        uses: actions/checkout@v5
+        with:
+          ref: verify/issue-3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Record run metadata
+        shell: pwsh
+        run: |
+          "target_sha=${{ github.event.inputs.target_sha }}" | Out-File -FilePath run-meta.txt -Append
+          "artifact_run_id=${{ github.event.inputs.artifact_run_id }}" | Out-File -FilePath run-meta.txt -Append
+          "fallback_run_id=${{ github.event.inputs.fallback_run_id }}" | Out-File -FilePath run-meta.txt -Append
+          "run_url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" | Out-File -FilePath run-meta.txt -Append
+          Get-Content run-meta.txt
+
+      # --- Independent reference data (hard rule: same ephemeral token, gathered BEFORE
+      # driving the UI, so the comparison in the report is not circular). ---
+      - name: Gather independent reference data
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node verify/issue-3/reference.mjs reference.json
+        continue-on-error: true
+
+      - name: Show reference data (debug)
+        shell: pwsh
+        run: |
+          if (Test-Path reference.json) { Get-Content reference.json | Select-Object -First 40 }
+
+      # --- Fetch the Windows exe artifact. Prefer the main-push run; fall back to the
+      # PR #13 run with an explicit tree-equality note in the evidence. ---
+      - name: Download primary artifact (main push run)
+        id: primary
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          gh run download ${{ github.event.inputs.artifact_run_id }} -R ${{ github.repository }} -n arckeep-win-unpacked -D dist-primary 2>gh-download-primary.err
+          $code = $LASTEXITCODE
+          "primary_exit=$code" | Out-File -FilePath run-meta.txt -Append
+          if ($code -ne 0) {
+            Write-Host "gh run download failed (exit $code); raw stderr follows:"
+            Get-Content gh-download-primary.err -ErrorAction SilentlyContinue
+          }
+          "ok=$($code -eq 0)" >> $env:GITHUB_OUTPUT
+
+      - name: Download primary artifact via REST fallback (path-traversal workaround)
+        if: steps.primary.outputs.ok != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $artifacts = gh api "repos/${{ github.repository }}/actions/runs/${{ github.event.inputs.artifact_run_id }}/artifacts" | ConvertFrom-Json
+          $art = $artifacts.artifacts | Where-Object { $_.name -eq 'arckeep-win-unpacked' } | Select-Object -First 1
+          if ($null -eq $art) {
+            Write-Host "No arckeep-win-unpacked artifact found on run ${{ github.event.inputs.artifact_run_id }}."
+            "primary_rest_ok=false" | Out-File -FilePath run-meta.txt -Append
+          } else {
+            New-Item -ItemType Directory -Force -Path dist-primary | Out-Null
+            gh api "repos/${{ github.repository }}/actions/artifacts/$($art.id)/zip" > dist-primary/artifact.zip
+            Expand-Archive -Path dist-primary/artifact.zip -DestinationPath dist-primary -Force
+            "primary_rest_ok=true" | Out-File -FilePath run-meta.txt -Append
+          }
+
+      - name: Fall back to PR #13 CI run if primary has no usable artifact
+        id: fallback
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $zip = Get-ChildItem -Path dist-primary -Recurse -Filter "arckeep-win-unpacked.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
+          $exe = Get-ChildItem -Path dist-primary -Recurse -Filter "Arckeep.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($null -ne $zip -or $null -ne $exe) {
+            "used_fallback=false" | Out-File -FilePath run-meta.txt -Append
+            Write-Host "Primary artifact present; no fallback needed."
+          } else {
+            Write-Host "Primary artifact missing/unusable; falling back to PR #13 run ${{ github.event.inputs.fallback_run_id }}."
+            "used_fallback=true" | Out-File -FilePath run-meta.txt -Append
+            gh run download ${{ github.event.inputs.fallback_run_id }} -R ${{ github.repository }} -n arckeep-win-unpacked -D dist-fallback 2>gh-download-fallback.err
+            $code = $LASTEXITCODE
+            if ($code -ne 0) {
+              Write-Host "Fallback gh run download also failed (exit $code); raw stderr:"
+              Get-Content gh-download-fallback.err -ErrorAction SilentlyContinue
+              $artifacts = gh api "repos/${{ github.repository }}/actions/runs/${{ github.event.inputs.fallback_run_id }}/artifacts" | ConvertFrom-Json
+              $art = $artifacts.artifacts | Where-Object { $_.name -eq 'arckeep-win-unpacked' } | Select-Object -First 1
+              if ($null -ne $art) {
+                New-Item -ItemType Directory -Force -Path dist-fallback | Out-Null
+                gh api "repos/${{ github.repository }}/actions/artifacts/$($art.id)/zip" > dist-fallback/artifact.zip
+                Expand-Archive -Path dist-fallback/artifact.zip -DestinationPath dist-fallback -Force
+              }
+            }
+            # Verify tree equality between the fallback run's head and the target SHA,
+            # per the task's fallback-provenance requirement.
+            $prHeadSha = gh api "repos/${{ github.repository }}/actions/runs/${{ github.event.inputs.fallback_run_id }}" --jq .head_sha
+            "fallback_head_sha=$prHeadSha" | Out-File -FilePath run-meta.txt -Append
+            $treeTarget = git rev-parse "${{ github.event.inputs.target_sha }}^{tree}"
+            $treeFallback = git rev-parse "$prHeadSha^{tree}" 2>$null
+            if ($LASTEXITCODE -ne 0) {
+              git fetch origin $prHeadSha --depth=1 2>$null
+              $treeFallback = git rev-parse "$prHeadSha^{tree}" 2>$null
+            }
+            "tree_target=$treeTarget" | Out-File -FilePath run-meta.txt -Append
+            "tree_fallback=$treeFallback" | Out-File -FilePath run-meta.txt -Append
+            "tree_equal=$($treeTarget -eq $treeFallback)" | Out-File -FilePath run-meta.txt -Append
+          }
+
+      - name: Locate exe, compute SHA256
+        id: exe
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path . -Recurse -Filter "Arckeep.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($null -eq $exe) {
+            "exe_found=false" | Out-File -FilePath run-meta.txt -Append
+            Write-Error "Arckeep.exe was not found in any downloaded artifact (primary or fallback)."
+            exit 1
+          }
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe.FullName).Hash
+          "exe_found=true" | Out-File -FilePath run-meta.txt -Append
+          "exe_path=$($exe.FullName)" | Out-File -FilePath run-meta.txt -Append
+          "exe_sha256=$hash" | Out-File -FilePath run-meta.txt -Append
+          "exe_path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          "exe_sha256=$hash" >> $env:GITHUB_OUTPUT
+          Get-Content run-meta.txt
+
+      # --- Local dependency for the driver only; never touches package.json/lockfile. ---
+      - name: Install Playwright (driver dependency only, not saved to package.json)
+        shell: pwsh
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: |
+          npm install --no-save playwright
+
+      - name: Run acceptance script against the real Arckeep.exe
+        id: acceptance
+        shell: pwsh
+        env:
+          EXE_PATH: ${{ steps.exe.outputs.exe_path }}
+          GITHUB_TOKEN: ${{ github.token }}
+          EVIDENCE_DIR: ${{ github.workspace }}\evidence
+          REFERENCE_JSON: ${{ github.workspace }}\reference.json
+        run: |
+          node verify/issue-3/run.mjs
+        continue-on-error: true
+
+      - name: Copy run metadata into evidence
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path evidence | Out-Null
+          Copy-Item -Path run-meta.txt -Destination evidence/run-meta.txt -ErrorAction SilentlyContinue
+          Copy-Item -Path reference.json -Destination evidence/reference.json -ErrorAction SilentlyContinue
+
+      - name: Upload evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-3-verify-evidence
+          path: evidence/**
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Fail the job if the acceptance script itself crashed
+        if: steps.acceptance.outcome != 'success'
+        shell: pwsh
+        run: |
+          Write-Host "run.mjs exited non-zero; see evidence/results.json and the step log above for the raw error."
+          exit 1
