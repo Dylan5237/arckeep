@@ -284,9 +284,9 @@ button.ghost {
   border-radius: 8px;
 }
 
-.todo-row:hover,
-.todo-row:focus-within,
-.todo-row.is-editing {
+.todo-row.show-actions,
+.todo-row.is-editing,
+.todo-row.is-hover {
   background: rgba(255, 255, 255, 0.72);
 }
 
@@ -341,13 +341,14 @@ button.ghost {
   display: flex;
   gap: 4px;
   opacity: 0;
+  pointer-events: none;
 }
 
-.todo-row:hover .todo-actions,
-.todo-row:focus-within .todo-actions,
+.todo-row.show-actions .todo-actions,
 .todo-row.is-editing .todo-actions,
 .todo-row.is-hover .todo-actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .todo-actions button {
@@ -357,10 +358,6 @@ button.ghost {
   padding: 4px 6px;
   border-radius: 6px;
   cursor: pointer;
-}
-
-.todo-actions button.danger {
-  color: #8a4b32;
 }
 
 .todo-actions button:hover,
@@ -722,16 +719,8 @@ textarea {
   pointer-events: none;
 }
 
-.waiting-groups:hover .waiting-row .row-actions {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.waiting-groups:hover .waiting-row:hover .row-actions,
-.waiting-groups:not(:hover) .waiting-row:focus-within .row-actions,
-.waiting-groups:not(:hover) .waiting-row.show-actions .row-actions,
-.waiting-row.is-ignored .row-actions,
-.waiting-groups:hover .waiting-row.is-ignored .row-actions {
+.waiting-row.show-actions .row-actions,
+.waiting-row.is-ignored .row-actions {
   opacity: 1;
   pointer-events: auto;
 }

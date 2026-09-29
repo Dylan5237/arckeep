@@ -70,6 +70,7 @@ async function renderSettings(options?: { focusToken?: boolean, focusWatch?: boo
 
   page.append(
     renderHotkeyCard(state),
+    renderLaunchCard(state),
     renderGithubCard(state),
     renderReposCard(state),
     renderWaitingSettings(state, () => renderSettings()),
@@ -85,6 +86,28 @@ async function renderSettings(options?: { focusToken?: boolean, focusWatch?: boo
     input?.scrollIntoView({ block: 'center' })
     input?.focus()
   }
+}
+
+function renderLaunchCard(state: AppState): HTMLElement {
+  const card = el('section', { class: 'card' }, [
+    el('h2', {}, ['窗口']),
+    el('p', { class: 'hint' }, ['托盘会留着，双击托盘图标或托盘菜单可以打开窗口。'])
+  ])
+  const input = el('input', { type: 'checkbox' })
+  input.checked = state.hideMainWindowOnLaunch
+  const label = el('label', { class: 'check' }, [input, '启动时隐藏主窗口，只留托盘'])
+  input.addEventListener('change', () => {
+    void window.arckeep.setHideMainWindowOnLaunch(input.checked).then(result => {
+      if (result.ok) return
+      input.checked = state.hideMainWindowOnLaunch
+      messageBox(card, 'error', result.error)
+    }).catch(error => {
+      input.checked = state.hideMainWindowOnLaunch
+      messageBox(card, 'error', error instanceof Error ? error.message : '保存失败')
+    })
+  })
+  card.append(label)
+  return card
 }
 
 function renderGithubCard(state: AppState): HTMLElement {

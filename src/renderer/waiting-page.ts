@@ -1,5 +1,6 @@
 import { localAbsolute, localClock, relativeLabel } from '../shared/waiting/local-time'
 import type { WaitingRow, WaitingSnapshot } from '../shared/waiting/types'
+import { bindExclusiveRowActions } from './exclusive-rows'
 
 const PROVENANCE = new Set(['指派', '提及', '请求 review', '状态文档'])
 
@@ -189,6 +190,7 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
       ))
     }
   }
+  bindExclusiveRowActions(page, '.waiting-row')
   host.replaceChildren(page)
 }
 
@@ -339,7 +341,10 @@ function renderRow(row: WaitingRow, handlers: {
     : row.tier === 'weak'
       ? null
       : el('p', { class: 'waiting-reason' }, [row.reasons.join(' · ') || '等待'])
-  return el('div', { class: `waiting-row age-${age}${row.ignored ? ' is-ignored' : ''}` }, [...body, reason].filter((node): node is Node | string => node != null))
+  return el('div', {
+    class: `waiting-row age-${age}${row.ignored ? ' is-ignored' : ''}`,
+    'data-row-id': row.id
+  }, [...body, reason].filter((node): node is Node | string => node != null))
 }
 
 export async function renderWaiting(

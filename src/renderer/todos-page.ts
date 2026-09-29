@@ -8,6 +8,7 @@ import {
 import { formatRelativeTime } from '../shared/todos/time'
 import { beginDeleteUndo, deleteUndoItem, type DeleteUndo } from '../shared/todos/undo'
 import type { TodoItem } from '../shared/types'
+import { bindExclusiveRowActions } from './exclusive-rows'
 
 type RepoFilter = 'all' | 'none' | string
 
@@ -60,6 +61,7 @@ export async function renderTodos(content: HTMLElement): Promise<() => void> {
     el('p', { class: 'lede' }, ['未完成的在前面，按创建时间排列。全局热键可以随时记一条。'])
   ])
   const host = el('div', { class: 'todo-host' })
+  const rows = bindExclusiveRowActions(host, '.todo-row')
   page.append(host)
   content.replaceChildren(page)
 
@@ -79,6 +81,7 @@ export async function renderTodos(content: HTMLElement): Promise<() => void> {
       host.replaceChildren(el('div', { class: 'alert error', role: 'alert' }, [
         error instanceof Error ? error.message : '无法读取待办'
       ]))
+      rows.refresh()
       return
     }
     host.replaceChildren(renderBoard(items, repos, filter, deleteUndoItem(pendingUndo, Date.now()), {
@@ -122,6 +125,7 @@ export async function renderTodos(content: HTMLElement): Promise<() => void> {
         })
       }
     }))
+    rows.refresh()
   }
 
   unsubscribe = window.arckeep.onTodosChanged(() => {
@@ -132,6 +136,7 @@ export async function renderTodos(content: HTMLElement): Promise<() => void> {
   return () => {
     unsubscribe?.()
     unsubscribe = null
+    rows.release()
   }
 }
 
@@ -275,7 +280,7 @@ function renderRow(
 
   const edit = el('button', { type: 'button', 'data-action': 'edit' }, ['编辑'])
   edit.addEventListener('click', () => actions.onEdit(item.id))
-  const remove = el('button', { type: 'button', class: 'danger', 'data-action': 'delete' }, ['删除'])
+  const remove = el('button', { type: 'button', 'data-action': 'delete' }, ['删除'])
   remove.addEventListener('click', () => {
     void window.arckeep.deleteTodo(item.id).then(result => {
       if (!result.ok) return
@@ -291,7 +296,10 @@ function renderRow(
   ])
 
   const main = editing ? renderEditor(item, repos, actions) : renderRead(item)
-  const row = el('article', { class: editing ? 'todo-row is-editing' : item.completed ? 'todo-row is-done' : 'todo-row' }, [
+  const row = el('article', {
+    class: editing ? 'todo-row is-editing' : item.completed ? 'todo-row is-done' : 'todo-row',
+    'data-row-id': item.id
+  }, [
     checkbox,
     main,
     side
