@@ -87,13 +87,18 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
   }
   if (scene === 'waiting-hidden') {
     const rows = sampleWaitingRows().sort((left, right) => right.waitingDays - left.waitingDays || left.title.localeCompare(right.title))
-    const fadedCount = 4
-    const faded = rows.slice(0, fadedCount).map(row => ({ ...row, ignored: true }))
+    const todo = rows.find(row => row.type === 'todo')
+    const others = rows.filter(row => row !== todo)
+    const faded = [
+      ...(todo ? [{ ...todo, ignored: true, title: '把等我的待办先放下', action: '待办', reasons: ['待办'], waitingDays: 20 }] : []),
+      ...others.slice(0, 3).map(row => ({ ...row, ignored: true }))
+    ]
     return base({
-      rows: [...faded, ...rows.slice(fadedCount, 16)],
+      rows: [...faded, ...others.slice(3, 14)],
       showIgnored: true,
-      hiddenCount: fadedCount,
-      hiddenRepos: ['stranger/public']
+      hiddenCount: faded.length,
+      hiddenRepos: ['stranger/public'],
+      todosAvailable: true
     })
   }
   if (scene === 'waiting-empty') return base({ hiddenCount: 0, rows: [] })

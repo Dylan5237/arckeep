@@ -3,10 +3,13 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { assembleWaiting, toWaitingJson } from '../shared/waiting/assemble.js'
 import { readDismissalState } from '../shared/waiting/snooze.js'
+import { createTodoWaitingProvider } from '../shared/waiting/todo-source.js'
 import { defaultWaitingConfig, parseWaitingConfig } from '../shared/waiting/rules.js'
 import type { GithubRecord, LocalBranchHit, StatusDocHit, TodoWaitingItem, WaitingConfig, WaitingDraft } from '../shared/waiting/types.js'
-import { defaultAppDataDir, settingsFilePath, userDataDir, waitingDismissalPath } from '../main/paths.js'
+import type { GhLookup } from '../main/github-auth.js'
+import { defaultAppDataDir, settingsFilePath, todosFilePath, userDataDir, waitingDismissalPath } from '../main/paths.js'
 import { loadSettings } from '../main/settings-store.js'
+import { TodoStore } from '../main/todos/store.js'
 import { collectWaiting } from './collect.js'
 import { resolveWaitingToken } from './token.js'
 
@@ -16,6 +19,8 @@ interface CliIo {
   env: NodeJS.ProcessEnv
   fetchImpl?: typeof fetch
   readSaved?: () => string | null
+  readGh?: () => Promise<GhLookup>
+  now?: Date
 }
 
 function readFlag(argv: readonly string[], name: string): string | null {
@@ -86,17 +91,21 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   const settings = loadSettings(settingsFilePath(userDataDir(appData)))
   const access = await resolveWaitingToken({
     envToken: io.env.GITHUB_TOKEN ?? null,
-    readSaved: io.readSaved ?? (() => null)
+    readSaved: io.readSaved ?? (() => null),
+    readGh: io.readGh
   })
   if (!access.token && !settings.waiting.sources.localBranches) {
     io.stderr('未配置 GitHub 认证。请先 gh auth login，或设置环境变量 GITHUB_TOKEN。')
   }
+  const userData = userDataDir(appData)
+  const todos = createTodoWaitingProvider(() => new TodoStore({ file: todosFilePath(userData) }).listWaitingTodos())
   const result = await collectWaiting({
     token: access.token,
     config: settings.waiting,
     watchedRepos: settings.watchedRepos,
-    now: new Date(),
-    fetchImpl: io.fetchImpl
+    now: io.now ?? new Date(),
+    fetchImpl: io.fetchImpl,
+    todos
   })
   if (result.auth === 'invalid') io.stderr('GitHub 认证无效或已过期。')
   for (const error of result.errors) io.stderr(`${error.source}: ${error.message}`)

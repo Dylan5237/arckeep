@@ -1,6 +1,7 @@
 import { parseWaitingConfig } from '../shared/waiting/rules.js'
 import type { WaitingConfig } from '../shared/waiting/types.js'
 import type { AppState, IpcResult } from '../shared/types.js'
+import { validateToolShelfText } from './tool-validate.js'
 import {
   readGhAuthToken,
   resolveGithubAuth,
@@ -8,7 +9,8 @@ import {
   toPublicGithubAuth,
   type GhLookup
 } from './github-auth.js'
-import { applyHotkey, type HotkeyRegistrar } from './hotkey.js'
+import { applyHotkey, hotkeyConflictWarning, type HotkeyRegistrar } from './hotkey.js'
+import { hotkeyRuntimeAfterApply, type HotkeyRuntime } from '../shared/hotkey-status.js'
 import { normalizePat, normalizeWatchedRepos } from './ipc-validators.js'
 import { loadSettings, saveSettings, type PersistedSettings } from './settings-store.js'
 import { assertSerializedWithoutSecret, type SecretBox } from './token-store.js'
@@ -25,26 +27,52 @@ export interface SettingsServiceDeps {
 
 export class SettingsService {
   private settings: PersistedSettings
-  private hotkeyWarning: string | null = null
-  private activeHotkey: string | null = null
+  private runtime: HotkeyRuntime
 
   constructor(private readonly deps: SettingsServiceDeps) {
     this.settings = loadSettings(deps.file)
+    this.runtime = {
+      field: this.settings.hotkey,
+      active: null,
+      banner: null,
+      warning: null
+    }
   }
 
   init(): void {
-    const applied = applyHotkey(this.settings.hotkey, this.deps.registrar, this.deps.onHotkey, null)
-    if (!applied.ok) {
-      this.activeHotkey = null
-      this.hotkeyWarning = applied.warning
-      return
-    }
-    this.activeHotkey = applied.hotkey
-    this.hotkeyWarning = null
+    const attempted = this.settings.hotkey
+    const applied = applyHotkey(attempted, this.deps.registrar, this.deps.onHotkey, null)
+    this.runtime = hotkeyRuntimeAfterApply(this.runtime, applied, attempted)
+    if (!applied.ok) return
     if (applied.hotkey !== this.settings.hotkey) {
       this.settings.hotkey = applied.hotkey
       this.persist()
     }
+  }
+
+  hotkeyUnavailableCombo(): string | null {
+    return this.runtime.banner
+  }
+
+  /** Test hook: drop the registered combo so the banner and tray show the failure. */
+  simulateRegistrationFailure(): string {
+    if (this.runtime.active) {
+      try {
+        this.deps.registrar.unregister(this.runtime.active)
+      } catch {
+        // Already gone.
+      }
+    }
+    this.runtime = hotkeyRuntimeAfterApply(
+      { ...this.runtime, active: null },
+      {
+        ok: false,
+        hotkey: this.settings.hotkey,
+        warning: hotkeyConflictWarning(this.settings.hotkey)
+      },
+      this.settings.hotkey
+    )
+    return this.runtime.banner ?? this.settings.hotkey
   }
 
   getSettings(): PersistedSettings {
@@ -55,11 +83,23 @@ export class SettingsService {
     const github = toPublicGithubAuth(await this.resolveAuth())
     return {
       watchedRepos: [...this.settings.watchedRepos],
-      hotkey: this.settings.hotkey,
-      hotkeyWarning: this.hotkeyWarning,
+      hotkey: this.runtime.field,
+      activeHotkey: this.runtime.active,
+      hotkeyWarning: this.runtime.warning,
+      hotkeyUnavailable: this.runtime.banner,
       github,
-      waiting: this.settings.waiting
+      waiting: this.settings.waiting,
+      toolShelfJson: this.settings.toolShelfJson
     }
+  }
+
+  setToolShelfJson(input: unknown): IpcResult<{ toolShelfJson: string }> {
+    if (typeof input !== 'string') return { ok: false, error: '工具架配置必须是 JSON 文本' }
+    const validated = validateToolShelfText(input)
+    if (!validated.ok) return { ok: false, error: validated.error }
+    this.settings.toolShelfJson = input
+    this.persist()
+    return { ok: true, data: { toolShelfJson: input } }
   }
 
   setWaiting(input: unknown): IpcResult<{ waiting: WaitingConfig }> {
@@ -91,13 +131,10 @@ export class SettingsService {
   }
 
   setHotkey(input: unknown): IpcResult<{ hotkey: string }> {
-    const applied = applyHotkey(input, this.deps.registrar, this.deps.onHotkey, this.activeHotkey)
-    if (!applied.ok) {
-      this.hotkeyWarning = applied.warning
-      return { ok: false, error: applied.warning ?? '热键注册失败' }
-    }
-    this.activeHotkey = applied.hotkey
-    this.hotkeyWarning = null
+    const attempted = typeof input === 'string' ? input : this.runtime.field
+    const applied = applyHotkey(input, this.deps.registrar, this.deps.onHotkey, this.runtime.active)
+    this.runtime = hotkeyRuntimeAfterApply(this.runtime, applied, attempted)
+    if (!applied.ok) return { ok: false, error: applied.warning ?? '热键注册失败' }
     this.settings.hotkey = applied.hotkey
     this.persist()
     return { ok: true, data: { hotkey: applied.hotkey } }

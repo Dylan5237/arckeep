@@ -125,8 +125,8 @@ export interface TodoWaitingItem {
 }
 
 /**
- * Todos marked「等我」. Issue #4 owns the real list; until it lands the
- * provider stays unavailable and returns nothing.
+ * Todos marked「等我」. `createdAt` is when the flag was checked, which is
+ * the clock for waiting days. `url` is an `arckeep://todos` link.
  */
 export interface TodoWaitingProvider {
   readonly available: boolean

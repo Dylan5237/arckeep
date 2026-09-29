@@ -1,0 +1,24 @@
+@import "../../docs/brand/arckeep-brand-tokens.css";
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  font-family: "Segoe UI", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+}
+
+body {
+  display: grid;
+  place-items: center;
+}
+
+p {
+  margin: 0;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--arckeep-olive);
+  color: var(--arckeep-warm-ivory);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+}

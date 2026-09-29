@@ -20,6 +20,7 @@ const SOURCE_FIELDS: { key: keyof WaitingSources, label: string }[] = [
   { key: 'assignee', label: '指派给我' },
   { key: 'reviewRequested', label: '请求我 review' },
   { key: 'mentions', label: '@提及我' },
+  { key: 'todos', label: '待办「等我」' },
   { key: 'openPrs', label: '我仓库里的 open PR（待你审/合）' },
   { key: 'humanIssues', label: '要人动手的 Issue' },
   { key: 'statusDocs', label: '状态文档规则' },
@@ -43,7 +44,7 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
       '关键词和标签决定哪些 open Issue 算「要人动手」。同一段文字里的动作信号优先于已解决信号；只有整条都结束、后面没有待办时才算已解决。代码、引用和「需求 / 验收标准 / 背景 / 设计 / 规格」下面的匹配不算。状态文档正则示例：等 ?Dylan|AWAITING ACCEPT|HUMAN_REQUIRED|needs-dylan'
     ])
   ])
-  const sources: WaitingSources = { ...config.sources, todos: false }
+  const sources: WaitingSources = { ...config.sources }
   const toggles = el('div', { class: 'checks' })
   for (const field of SOURCE_FIELDS) {
     const input = el('input', { type: 'checkbox' })
@@ -51,10 +52,6 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
     input.addEventListener('change', () => { sources[field.key] = input.checked })
     toggles.append(el('label', { class: 'check' }, [input, field.label]))
   }
-  const todo = el('input', { type: 'checkbox' })
-  todo.disabled = true
-  todo.checked = false
-  toggles.append(el('label', { class: 'check' }, [todo, '待办「等我」还没接上（依赖待办 #4）']))
   const keywords = el('textarea', { 'aria-label': '人工动作关键词' })
   keywords.value = config.humanKeywords.join('\n')
   const labels = el('textarea', { 'aria-label': '人工动作标签' })
