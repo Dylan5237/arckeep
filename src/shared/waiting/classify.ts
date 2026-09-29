@@ -4,7 +4,7 @@ import { waitingExcerpt } from './human-text.js'
 import { escapeRegex } from './parse-github.js'
 import { compileUserRegexList } from './rules.js'
 import { evaluateSignals } from './signals.js'
-import { commentCloses, labelMatches, latestComment, latestStatusText, matchedLabel, mentionSentence, repoIsParked, statusIsDoneOrClosed, strongText, whenLabel } from './text-scan.js'
+import { commentClosesRecord, labelMatches, latestComment, latestStatusText, matchedLabel, mentionSentence, repoIsParked, statusIsDoneOrClosed, strongText, whenLabel } from './text-scan.js'
 import { WAITING_REASONS, type GithubRecord, type ReasonDetail, type WaitingConfig, type WaitingDraft, type WaitingSignal, type WaitingTier } from './types.js'
 
 export interface ClassifiedReason {
@@ -185,7 +185,7 @@ function quietPull(record: GithubRecord, config: WaitingConfig, now: Date): (Cla
 
 export function classifyRecord(record: GithubRecord, config: WaitingConfig, now: Date): WaitingDraft | null {
   const comment = latestComment(record)
-  const closed = Boolean(comment?.text && commentCloses(comment.text, config))
+  const closed = commentClosesRecord(record, config)
   const passComment = /\bPASS\b/i.test(comment?.text ?? '')
   const assignmentOpen = !closed && !statusIsDoneOrClosed(latestStatusText(record.body), config)
   const text = closed ? null : strongText(record, config)
