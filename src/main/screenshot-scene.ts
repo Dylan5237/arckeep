@@ -73,6 +73,14 @@ export function parseScreenshotScene(value: string | undefined): ScreenshotScene
 }
 
 export function screenshotWindowSize(scene: ScreenshotScene): { width: number, height: number } {
+  const size = screenshotFrame(scene)
+  if (process.env.ARCKEEP_SCREENSHOT_COMPACT === '1' && size.width > 800) {
+    return { width: 800, height: size.height }
+  }
+  return size
+}
+
+function screenshotFrame(scene: ScreenshotScene): { width: number, height: number } {
   if (scene === 'waiting-narrow' || scene === 'overview-narrow') return { width: 800, height: 1680 }
   if (scene === 'tools-narrow' || scene === 'narrow' || scene === 'todos-narrow') return { width: 800, height: 760 }
   if (scene === 'todos-split') return { width: 800, height: 1280 }

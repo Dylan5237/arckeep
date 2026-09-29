@@ -36,6 +36,7 @@ export interface AppState {
   waiting: WaitingConfig
   overview: OverviewConfig
   toolShelfJson: string
+  hideMainWindowOnLaunch: boolean
 }
 
 export interface OkResult<T> {
@@ -54,6 +55,7 @@ export interface ArckeepApi {
   getState(): Promise<AppState>
   setRepos(repos: string[]): Promise<IpcResult<{ watchedRepos: string[] }>>
   setHotkey(hotkey: string): Promise<IpcResult<{ hotkey: string }>>
+  setHideMainWindowOnLaunch(hide: boolean): Promise<IpcResult<{ hideMainWindowOnLaunch: boolean }>>
   setPat(token: string): Promise<IpcResult<{ patSaved: true }>>
   clearPat(): Promise<IpcResult<{ patSaved: false }>>
   testGithub(pastedToken?: string): Promise<{ ok: true, login: string } | { ok: false, error: string }>

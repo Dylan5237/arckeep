@@ -92,7 +92,8 @@ export class SettingsService {
       github,
       waiting: this.settings.waiting,
       overview: this.settings.overview,
-      toolShelfJson: this.settings.toolShelfJson
+      toolShelfJson: this.settings.toolShelfJson,
+      hideMainWindowOnLaunch: this.settings.hideMainWindowOnLaunch
     }
   }
 
@@ -142,6 +143,13 @@ export class SettingsService {
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : '关注仓库无效' }
     }
+  }
+
+  setHideMainWindowOnLaunch(input: unknown): IpcResult<{ hideMainWindowOnLaunch: boolean }> {
+    if (typeof input !== 'boolean') return { ok: false, error: '启动时隐藏主窗口必须是布尔值' }
+    this.settings.hideMainWindowOnLaunch = input
+    this.persist()
+    return { ok: true, data: { hideMainWindowOnLaunch: input } }
   }
 
   setHotkey(input: unknown): IpcResult<{ hotkey: string }> {

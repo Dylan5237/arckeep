@@ -34,6 +34,7 @@ for (const [scene, filename] of scenes) {
     cwd: root,
     env: {
       ...process.env,
+      ARCKEEP_SCREENSHOT_COMPACT: '1',
       ARCKEEP_SCREENSHOT: output,
       ARCKEEP_SCREENSHOT_SCENE: scene
     },

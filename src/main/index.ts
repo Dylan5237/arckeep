@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { IpcChannel } from '../shared/ipc.js'
 import { hotkeyUnavailableMessage, shouldNotifyStartupHotkeyFailure, trayMenuEntries, trayToolTip } from '../shared/hotkey-status.js'
+import { shouldShowMainWindowOnReady } from './launch-window.js'
 import { mergeRepoOptions } from '../shared/todos/repos.js'
 import { createTodoWaitingProvider } from '../shared/waiting/todo-source.js'
 import { createCaptureWindow, focusCaptureInput, showSavedToast } from './capture-window.js'
@@ -323,7 +324,11 @@ function createWindow(): BrowserWindow {
     window.hide()
   })
   window.once('ready-to-show', () => {
-    const showWindow = !screenshotPath || screenshotShowsMainWindow(screenshotScene)
+    const showWindow = shouldShowMainWindowOnReady({
+      screenshot: Boolean(screenshotPath),
+      screenshotShowsMainWindow: screenshotShowsMainWindow(screenshotScene),
+      hideMainWindowOnLaunch: service?.getSettings().hideMainWindowOnLaunch === true
+    })
     if (showWindow) window.show()
     maybeNotifyStartupHotkeyFailure(showWindow)
   })
@@ -398,6 +403,10 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
     const result = settings.setHotkey(hotkey)
     publishHotkeyStatus()
     return result
+  })
+  ipcMain.handle(IpcChannel.setHideMainWindowOnLaunch, (event, hide: unknown) => {
+    guard(event)
+    return settings.setHideMainWindowOnLaunch(hide)
   })
   ipcMain.handle(IpcChannel.setPat, (event, token: unknown) => {
     guard(event)
