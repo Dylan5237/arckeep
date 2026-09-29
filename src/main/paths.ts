@@ -11,12 +11,28 @@ export function settingsFilePath(userData: string, join: (...parts: string[]) =>
   return join(userData, 'settings.json')
 }
 
+export function todosFilePath(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'todos.jsonl')
+}
+
+export function testHookTodosPath(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'test-hook-todos.json')
+}
+
+export function captureDraftPath(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'capture-draft.json')
+}
+
 export function waitingCachePath(userData: string, join: (...parts: string[]) => string = path.join): string {
   return join(userData, 'waiting-cache.json')
 }
 
 export function waitingDismissalPath(userData: string, join: (...parts: string[]) => string = path.join): string {
   return join(userData, 'waiting-dismissals.json')
+}
+
+export function overviewCachePath(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'overview-cache.json')
 }
 
 /** Same folder the Electron app uses for `%APPDATA%\\Arckeep`. */

@@ -7,7 +7,7 @@ import { indexToLocation } from '../src/shared/tools/locate.js'
 import { confirmButtonLabel, copyFeedback, errorLine, filterActions, runStatus } from '../src/shared/tools/present.js'
 import { buildPreview } from '../src/shared/tools/preview.js'
 import { powershellLaunchScript } from '../src/shared/tools/quote.js'
-import { collectKnownRepos } from '../src/shared/tools/repos.js'
+import { collectKnownRepos, knownRepoSourceLabel } from '../src/shared/tools/repos.js'
 import { paramKind } from '../src/shared/tools/params.js'
 
 describe('tool shelf schema', () => {
@@ -169,6 +169,15 @@ describe('run outcome, copy, and known repositories', () => {
     const local = buildPreview(open, { repo: 'C:\\work\\notes' }, 'C:\\work\\demo', known)
     expect(local).toMatchObject({ type: 'open-folder', text: 'C:\\work\\notes' })
     expect(() => buildPreview(open, { repo: 'Dylan5237/arckeep' }, 'C:\\work\\demo', known)).toThrow(/已知仓库/)
+    const withTodos = collectKnownRepos({
+      watchedRepos: ['example/demo'],
+      githubRepos: [],
+      localPaths: [],
+      todoRepos: ['example/demo', 'south/harbor', 'not a repo']
+    })
+    expect(withTodos.find(repo => repo.github === 'south/harbor')?.sources).toEqual(['todo'])
+    expect(withTodos.find(repo => repo.github === 'example/demo')?.sources).toEqual(['watched', 'todo'])
+    expect(knownRepoSourceLabel(['watched', 'todo'])).toBe('关注列表、待办')
   })
 
   it('names the confirm button after the filled-in effect', () => {

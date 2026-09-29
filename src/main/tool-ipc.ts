@@ -25,6 +25,8 @@ export function registerToolIpc(options: {
   settings: SettingsService
   runner: ToolRunner
   repos?: KnownRepoLookup | null
+  /** Repositories already tagged on todos. Invalid tags are dropped later. */
+  todoRepos?: () => readonly string[]
   screenshotScene?: string
 }): void {
   const { guard, settings, runner } = options
@@ -32,6 +34,7 @@ export function registerToolIpc(options: {
     watchedRepos: settings.getSettings().watchedRepos,
     githubRepos: options.repos?.observedGithubRepos() ?? [],
     localPaths: settings.getSettings().waiting.localRepoDirs,
+    todoRepos: options.todoRepos?.() ?? [],
     linked: options.repos?.observedLocalLinks() ?? []
   })
   ipcMain.handle(IpcChannel.setToolShelf, (event, json: unknown) => {

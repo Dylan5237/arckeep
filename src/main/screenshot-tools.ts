@@ -41,6 +41,13 @@ const knownRepos: KnownRepo[] = [
     github: null,
     path: 'C:\\work\\notes',
     sources: ['local']
+  },
+  {
+    id: 'south/harbor',
+    label: 'south/harbor',
+    github: 'south/harbor',
+    path: null,
+    sources: ['todo']
   }
 ]
 

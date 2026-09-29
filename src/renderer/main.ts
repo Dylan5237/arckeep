@@ -1,8 +1,12 @@
 import brandMark from '../../docs/brand/logo/Arckeep_Master_Horizontal_Reverse.svg'
 import brandSymbol from '../../docs/brand/logo/Arckeep_Symbol_White.svg'
+import { activeHotkeyLabel, hotkeyUnavailableMessage } from '../shared/hotkey-status'
 import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
 import { DEFAULT_HOTKEY } from '../shared/types'
+import { renderOverview } from './overview-page'
+import { renderOverviewSettings } from './overview-settings'
+import { renderTodos } from './todos-page'
 import { renderToolSettings } from './tool-settings'
 import { renderTools } from './tools-page'
 import { renderWaiting } from './waiting-page'
@@ -10,24 +14,15 @@ import { renderWaitingSettings } from './waiting-settings'
 
 type ViewId = 'inbox' | 'projects' | 'todos' | 'tools' | 'settings'
 
-const PAGES: Record<'projects' | 'todos', { title: string, body: string }> = {
-  projects: {
-    title: '项目总览',
-    body: '关注的仓库会在这里汇总。列表留空时走自动模式。这一页先占位。'
-  },
-  todos: {
-    title: '待办',
-    body: '个人待办会放在这里。这一页先占位。'
-  }
-}
-
 const brand = document.querySelector<HTMLImageElement>('#brand-mark')
 if (brand) brand.src = brandMark
 const symbol = document.querySelector<HTMLImageElement>('#brand-symbol')
 if (symbol) symbol.src = brandSymbol
 
 const content = document.querySelector<HTMLElement>('#content')
+const hotkeyBanner = document.querySelector<HTMLElement>('#hotkey-banner')
 const navButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-view]')]
+let pendingHotkeyFocus = false
 
 function setActive(view: ViewId): void {
   for (const button of navButtons) {
@@ -51,23 +46,12 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node
 }
 
-function renderPlaceholder(view: 'projects' | 'todos'): void {
-  if (!content) return
-  const page = PAGES[view]
-  content.replaceChildren(
-    el('section', { class: 'page placeholder' }, [
-      el('h1', {}, [page.title]),
-      el('p', { class: 'lede' }, [page.body])
-    ])
-  )
-}
-
 function messageBox(parent: HTMLElement, kind: 'info' | 'error', text: string): void {
   parent.querySelector('.alert')?.remove()
   parent.append(el('div', { class: kind === 'error' ? 'alert error' : 'alert', role: 'alert' }, [text]))
 }
 
-async function renderSettings(options?: { focusToken?: boolean }): Promise<void> {
+async function renderSettings(options?: { focusToken?: boolean, focusWatch?: boolean }): Promise<void> {
   if (!content) return
   const page = el('section', { class: 'page' }, [
     el('h1', {}, ['设置']),
@@ -85,14 +69,21 @@ async function renderSettings(options?: { focusToken?: boolean }): Promise<void>
   }
 
   page.append(
+    renderHotkeyCard(state),
     renderGithubCard(state),
     renderReposCard(state),
-    renderHotkeyCard(state),
-    renderWaitingSettings(state, renderSettings),
-    await renderToolSettings(state, renderSettings)
+    renderWaitingSettings(state, () => renderSettings()),
+    renderOverviewSettings(state, () => renderSettings()),
+    await renderToolSettings(state, () => renderSettings())
   )
+  paintHotkeyBanner(state.hotkeyUnavailable)
   if (options?.focusToken) {
     page.querySelector<HTMLInputElement>('#github-pat')?.focus()
+  }
+  if (options?.focusWatch) {
+    const input = page.querySelector<HTMLInputElement>('#watched-repo')
+    input?.scrollIntoView({ block: 'center' })
+    input?.focus()
   }
 }
 
@@ -193,7 +184,12 @@ function renderReposCard(state: AppState): HTMLElement {
       list.append(el('li', {}, [el('span', {}, [repo]), remove]))
     }
   }
-  const input = el('input', { type: 'text', placeholder: 'example/demo', 'aria-label': '关注仓库' })
+  const input = el('input', {
+    id: 'watched-repo',
+    type: 'text',
+    placeholder: 'example/demo',
+    'aria-label': '关注仓库'
+  })
   const add = el('button', { type: 'button', class: 'primary' }, ['添加'])
   add.addEventListener('click', async () => {
     const result = await window.arckeep.setRepos([...state.watchedRepos, input.value])
@@ -239,13 +235,30 @@ async function applyHotkeyValue(value: string): Promise<void> {
 function renderHotkeyCard(state: AppState): HTMLElement {
   const card = el('section', { class: 'card' }, [
     el('h2', {}, ['全局热键']),
-    el('p', { class: 'hint' }, [`默认 ${DEFAULT_HOTKEY}。注册失败时会写出被占用的组合，并可在提示旁边直接换一个。`])
+    el('p', { class: 'hint' }, [`默认 ${DEFAULT_HOTKEY}，用来打开快速捕获。注册失败时会写出被占用的组合，并可在提示旁边直接换一个。`])
   ])
-  const input = el('input', { type: 'text', value: state.hotkey, 'aria-label': '全局热键' })
-  const save = el('button', { type: 'button', class: 'primary' }, ['保存热键'])
+  const input = el('input', { type: 'text', id: 'hotkey-input', value: state.hotkey, 'aria-label': '全局热键' })
+  const save = el('button', { type: 'button', id: 'hotkey-save', class: 'primary' }, ['保存热键'])
   save.addEventListener('click', () => { void applyHotkeyValue(input.value) })
-  card.append(el('div', { class: 'row' }, [input, save]))
-  if (state.hotkeyWarning) card.append(hotkeyWarningRow(state.hotkeyWarning))
+  card.append(el('div', { class: 'row' }, [
+    input,
+    save,
+    el('span', { id: 'hotkey-active', class: 'hotkey-active' }, [activeHotkeyLabel(state.activeHotkey)])
+  ]))
+  if (state.hotkeyWarning) {
+    const warning = hotkeyWarningRow(state.hotkeyWarning)
+    card.append(warning)
+    queueMicrotask(() => {
+      warning.scrollIntoView({ block: 'nearest' })
+    })
+  }
+  if (pendingHotkeyFocus) {
+    queueMicrotask(() => {
+      input.scrollIntoView({ block: 'nearest' })
+      input.focus()
+    })
+  }
+  pendingHotkeyFocus = false
   return card
 }
 
@@ -274,7 +287,7 @@ function hotkeyWarningRow(warning: string): HTMLElement {
   })
   const apply = el('button', { type: 'button', class: 'primary' }, ['改用这个'])
   apply.addEventListener('click', () => { void applyHotkeyValue(replacement.value) })
-  return el('div', { class: 'alert error hotkey-alert', role: 'alert' }, [
+  return el('div', { class: 'alert error hotkey-alert', id: 'hotkey-conflict', role: 'alert', tabindex: '-1' }, [
     el('span', {}, [warning]),
     replacement,
     record,
@@ -282,13 +295,55 @@ function hotkeyWarningRow(warning: string): HTMLElement {
   ])
 }
 
-async function show(view: ViewId, options?: { focusToken?: boolean }): Promise<void> {
+function paintHotkeyBanner(combo: string | null): void {
+  if (!hotkeyBanner) return
+  if (!combo) {
+    hotkeyBanner.hidden = true
+    hotkeyBanner.replaceChildren()
+    return
+  }
+  hotkeyBanner.hidden = false
+  const jump = el('button', { type: 'button', class: 'primary', id: 'hotkey-banner-action' }, ['换一个热键'])
+  jump.addEventListener('click', () => {
+    pendingHotkeyFocus = true
+    void show('settings')
+  })
+  hotkeyBanner.replaceChildren(
+    el('p', {}, [hotkeyUnavailableMessage(combo)]),
+    jump
+  )
+}
+
+async function refreshHotkeyBanner(): Promise<void> {
+  try {
+    const state = await window.arckeep.getState()
+    paintHotkeyBanner(state.hotkeyUnavailable)
+  } catch {
+    // The page still renders if state cannot be read.
+  }
+}
+
+let leaveTodos: (() => void) | null = null
+
+async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?: boolean }): Promise<void> {
+  leaveTodos?.()
+  leaveTodos = null
   setActive(view)
   if (!content) return
   if (view === 'settings') await renderSettings(options)
-  else if (view === 'inbox') await renderWaiting(content, (next, nextOptions) => { void show(next, nextOptions) })
-  else if (view === 'tools') await renderTools(content, () => { void show('settings') })
-  else renderPlaceholder(view)
+  else if (view === 'todos') {
+    await refreshHotkeyBanner()
+    leaveTodos = await renderTodos(content)
+  } else if (view === 'inbox') {
+    await refreshHotkeyBanner()
+    await renderWaiting(content, (next, nextOptions) => { void show(next, nextOptions) })
+  } else if (view === 'projects') {
+    await refreshHotkeyBanner()
+    await renderOverview(content, (next, nextOptions) => { void show(next, nextOptions) })
+  } else if (view === 'tools') {
+    await refreshHotkeyBanner()
+    await renderTools(content, () => { void show('settings') })
+  }
 }
 
 for (const button of navButtons) {
@@ -300,5 +355,20 @@ for (const button of navButtons) {
   })
 }
 
+window.arckeep.onHotkeyStatus(combo => {
+  paintHotkeyBanner(combo)
+})
+
+window.arckeep.onFocusHotkey(() => {
+  pendingHotkeyFocus = true
+  void show('settings')
+})
+
 const initial = new URLSearchParams(location.search).get('page')
-void show(initial === 'settings' ? 'settings' : initial === 'tools' ? 'tools' : 'inbox')
+void show(
+  initial === 'settings' ? 'settings'
+    : initial === 'projects' ? 'projects'
+      : initial === 'todos' ? 'todos'
+        : initial === 'tools' ? 'tools'
+          : 'inbox'
+)

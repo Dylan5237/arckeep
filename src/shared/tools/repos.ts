@@ -1,4 +1,4 @@
-export type KnownRepoSource = 'watched' | 'github' | 'local'
+export type KnownRepoSource = 'watched' | 'github' | 'todo' | 'local'
 
 export interface KnownRepo {
   id: string
@@ -8,11 +8,12 @@ export interface KnownRepo {
   sources: KnownRepoSource[]
 }
 
-const SOURCE_ORDER: KnownRepoSource[] = ['watched', 'github', 'local']
+const SOURCE_ORDER: KnownRepoSource[] = ['watched', 'github', 'todo', 'local']
 
 const SOURCE_LABEL: Record<KnownRepoSource, string> = {
   watched: '关注列表',
   github: 'GitHub',
+  todo: '待办',
   local: '本地路径'
 }
 
@@ -38,13 +39,15 @@ interface Acc {
 
 /**
  * Known repositories come only from data the app already has:
- * the settings watch list, repositories returned by GitHub, and local paths
- * the user configured (plus local checkouts already linked to a GitHub name).
+ * the settings watch list, repositories returned by GitHub, repositories tagged
+ * on todos, and local paths the user configured (plus local checkouts already
+ * linked to a GitHub name).
  */
 export function collectKnownRepos(input: {
   watchedRepos: readonly string[]
   githubRepos: readonly string[]
   localPaths: readonly string[]
+  todoRepos?: readonly string[]
   linked?: readonly { github: string, path: string }[]
 }): KnownRepo[] {
   const items: Acc[] = []
@@ -81,6 +84,9 @@ export function collectKnownRepos(input: {
   }
   for (const slug of input.githubRepos) {
     if (isGithubSlug(slug)) touchSlug(slug, 'github')
+  }
+  for (const slug of input.todoRepos ?? []) {
+    if (isGithubSlug(slug)) touchSlug(slug, 'todo')
   }
   for (const filePath of input.localPaths) {
     const trimmed = filePath.trim()
