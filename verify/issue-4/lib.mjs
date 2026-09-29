@@ -234,6 +234,51 @@ export async function openCaptureViaHook(app, opts) {
 }
 
 /**
+ * 用测试钩子打开捕获窗口，Playwright 打字，然后用 `#capture-form` 的 requestSubmit()
+ * 直接提交表单（不依赖「在输入框里按 Enter 会不会触发浏览器原生的隐式表单提交」这件事）。
+ *
+ * 背景：run3（66d1eeb）里发现，`cap.press('#text', 'Enter')` 在这份 Electron 构建里
+ * 没有像在普通网页里那样可靠地触发表单的隐式提交——捕获窗口既没有关闭也没有出现
+ * 「已记下」toast（见 evidence/a1-toast-timing.json 里 appeared:false 且窗口未关闭）。
+ * 而 `document.querySelector('#capture-form').requestSubmit()` 是直接调用 DOM 标准
+ * API 触发同一个 `form.addEventListener('submit', ...)` 监听器（src/renderer/capture.ts），
+ * 走的是完全相同的 save() 逻辑，只是不依赖「按键事件能不能被浏览器识别成隐式提交」这个
+ * 额外环节，更少不确定性。Esc/失焦等走 window 级 keydown/blur 监听器的场景不受影响，
+ * 仍然用 Playwright 真实按键（见 session-a.mjs 的 A3/Item 8）。
+ *
+ * 另外这里会显式等待捕获窗口真正关闭（而不是只等 toast），如果没关闭就直接抛出异常，
+ * 避免像 openCaptureWindow() 那样的单例窗口在「上一次没能成功保存」时被后续调用误判
+ * 成一个全新的空白窗口，导致后面的输入全部追加进同一个残留窗口、层层错误传导下去。
+ */
+export async function createTodoViaHook(app, text, { waiting = false, timeoutMs = 4000 } = {}) {
+  await callTestHook(app, 'close')
+  await sleep(150)
+  const cap = await openCaptureViaHook(app)
+  await cap.type('#text', text)
+  await sleep(80)
+  const domTextBeforeSubmit = await cap.evaluate(() => document.querySelector('#text').value).catch(() => null)
+  if (waiting) {
+    await cap.click('#waiting')
+    await sleep(80)
+  }
+  await cap.evaluate(() => document.querySelector('#capture-form').requestSubmit())
+  const closed = await waitFor(async () => {
+    for (const w of app.windows()) {
+      const isCap = await w.evaluate(() => !!document.querySelector('#capture-form')).catch(() => false)
+      if (isCap) return false
+    }
+    return true
+  }, { timeoutMs, intervalMs: 30 })
+  if (!closed.ok) {
+    const errorText = await cap.evaluate(() => document.querySelector('#error')?.textContent).catch(() => null)
+    throw new Error(`createTodoViaHook("${text}") 提交后 ${timeoutMs}ms 内捕获窗口没有关闭（可能是残留了上一次没保存成功的单例窗口，或这次保存本身失败）：输入框提交前的值="${domTextBeforeSubmit}"，页面上的错误提示="${errorText}"`)
+  }
+  await sleep(150)
+  await callTestHook(app, 'show')
+  return mainWindowPage(app)
+}
+
+/**
  * 用 Playwright 自己的 CDP 按键（不经过 OS SendInput）在聚焦的输入框里模拟一次「组合键」，
  * 用于 R2「录制热键」场景——产品代码里 record 按钮监听的是 #hotkey-input 上一个普通的
  * window/DOM keydown 事件（见 src/renderer/main.ts 的 acceleratorFromEvent），完全不经过

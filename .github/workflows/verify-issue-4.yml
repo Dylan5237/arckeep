@@ -29,7 +29,11 @@ jobs:
   verify:
     name: windows-latest 独立验收
     runs-on: windows-latest
-    timeout-minutes: 60
+    # 实测跑完全部 5 个 session 只要约 4-5 分钟（见 run.mjs 里 process.exit() 的修复说明：
+    # 之前没有这个 exit，脚本逻辑跑完后 Node 进程不退出，每次都被迫拖到 60 分钟超时）。
+    # 这里给足够宽裕的安全边际（含 4 个 occupyHotkey 调用各自最坏情况下的内部超时），
+    # 但不再用 60 分钟去掩盖潜在的真实挂起问题。
+    timeout-minutes: 25
     steps:
       - name: Checkout verify/issue-4-0734791
         uses: actions/checkout@v5

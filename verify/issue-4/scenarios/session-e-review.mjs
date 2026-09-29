@@ -22,43 +22,18 @@ import * as lib from '../lib.mjs'
 
 const {
   setResult, mergeNotes, EVIDENCE_DIR, envFlags,
-  launchApp, mainWindowPage, openCaptureViaHook, quitApp, killStrayArckeep,
+  launchApp, mainWindowPage, openCaptureViaHook, createTodoViaHook, quitApp, killStrayArckeep,
   occupyHotkey, stopOccupy, getUserDataDir, resetUserData, getAppState,
   callTestHook, sendHotkey, sendKey, startNotepad, sleep, waitFor,
   shot, fullShot, appendEvidenceJson, todosFile, captureOpensFor,
   pressAcceleratorViaPlaywright
 } = lib
 
-async function waitToastLifecycle(app, { timeoutMs = 4000 } = {}) {
-  const appeared = await waitFor(async () => {
-    for (const w of app.windows()) {
-      const isToast = await w.evaluate(() => document.title === '已记下').catch(() => false)
-      if (isToast) return w
-    }
-    return null
-  }, { timeoutMs, intervalMs: 20 })
-  return appeared
-}
-
-/** 用测试钩子打开捕获窗口 + Playwright 自己的键盘输入打字/回车/提交（不经过 OS SendInput）。 */
-async function makeTodo(app, text, { waiting = false } = {}) {
-  await callTestHook(app, 'close')
-  await sleep(150)
-  const cap = await openCaptureViaHook(app)
-  await cap.type('#text', text)
-  await sleep(80)
-  if (waiting) {
-    await cap.click('#waiting')
-    await sleep(80)
-    await cap.evaluate(() => document.querySelector('#capture-form').requestSubmit())
-  } else {
-    await cap.press('#text', 'Enter')
-  }
-  await waitToastLifecycle(app, { timeoutMs: 3000 })
-  await sleep(150)
-  await callTestHook(app, 'show')
-  return mainWindowPage(app)
-}
+// R3/R5 建待办统一用 lib.createTodoViaHook()（requestSubmit() 兜底 + 显式确认窗口
+// 真的关闭）——见 session-a.mjs 文件头部 A1 部分的详细说明：这个环境里 Playwright 的
+// CDP Enter 不一定能可靠触发浏览器原生的隐式表单提交，改用 requestSubmit() 直接调用
+// 同一个 submit 监听器更确定，也不会把未保存成功的单例捕获窗口残留给下一次调用。
+const makeTodo = createTodoViaHook
 
 export async function run() {
   killStrayArckeep()

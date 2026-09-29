@@ -93,7 +93,17 @@ async function main() {
   }
 }
 
-main().catch(err => {
+main().then(() => {
+  // 关键修复：上一版没有这个显式 process.exit()，导致跑完全部 5 个 session（实测只要约
+  // 4-5 分钟）、写完 results.json/index.md、打印完结论汇总之后，Node 进程本身却一直不
+  // 退出——用 gh run view --log 核对时间戳，main() 最后一行日志在 03:54:11 就已经打出来
+  // 了，但 job 一直挂到 60 分钟超时（04:49:35）才被 GitHub 强制取消。根因是本脚本全程会
+  // spawn 多个子进程（occupyHotkey 的独立 PowerShell 进程、Playwright 启动的
+  // Arckeep.exe），只要其中任何一个在脚本逻辑上「已经不需要了」但底层句柄/管道没有彻底
+  // 关闭，Node 的事件循环就会一直等下去，不会自然退出。显式 process.exit() 能确保脚本
+  // 逻辑跑完就立刻退出，不再因为某个游离的子进程/句柄把整个 GitHub Actions job 拖到超时。
+  process.exit(0)
+}).catch(err => {
   console.error('[run.mjs] 致命错误，验收脚本本身异常终止：', err)
-  process.exitCode = 1
+  process.exit(1)
 })
