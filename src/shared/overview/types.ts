@@ -75,6 +75,8 @@ export interface OverviewRow {
   warnings: OverviewWarning[]
   archived: boolean
   error: string | null
+  /** UI only. True when the row was loaded because it is on the watch list. Omitted from JSON. */
+  fromWatchList?: boolean
 }
 
 export type OverviewAuth = 'ok' | 'missing' | 'invalid'

@@ -75,7 +75,7 @@ function messageBox(parent: HTMLElement, kind: 'info' | 'error', text: string): 
   parent.append(el('div', { class: kind === 'error' ? 'alert error' : 'alert', role: 'alert' }, [text]))
 }
 
-async function renderSettings(options?: { focusToken?: boolean }): Promise<void> {
+async function renderSettings(options?: { focusToken?: boolean, focusWatch?: boolean }): Promise<void> {
   if (!content) return
   const page = el('section', { class: 'page' }, [
     el('h1', {}, ['设置']),
@@ -101,6 +101,11 @@ async function renderSettings(options?: { focusToken?: boolean }): Promise<void>
   )
   if (options?.focusToken) {
     page.querySelector<HTMLInputElement>('#github-pat')?.focus()
+  }
+  if (options?.focusWatch) {
+    const input = page.querySelector<HTMLInputElement>('#watched-repo')
+    input?.scrollIntoView({ block: 'center' })
+    input?.focus()
   }
 }
 
@@ -201,7 +206,12 @@ function renderReposCard(state: AppState): HTMLElement {
       list.append(el('li', {}, [el('span', {}, [repo]), remove]))
     }
   }
-  const input = el('input', { type: 'text', placeholder: 'example/demo', 'aria-label': '关注仓库' })
+  const input = el('input', {
+    id: 'watched-repo',
+    type: 'text',
+    placeholder: 'example/demo',
+    'aria-label': '关注仓库'
+  })
   const add = el('button', { type: 'button', class: 'primary' }, ['添加'])
   add.addEventListener('click', async () => {
     const result = await window.arckeep.setRepos([...state.watchedRepos, input.value])
@@ -290,7 +300,7 @@ function hotkeyWarningRow(warning: string): HTMLElement {
   ])
 }
 
-async function show(view: ViewId, options?: { focusToken?: boolean }): Promise<void> {
+async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?: boolean }): Promise<void> {
   setActive(view)
   if (!content) return
   if (view === 'settings') await renderSettings(options)

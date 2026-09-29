@@ -1,6 +1,7 @@
 import { isStaleGroup, overviewCounts } from '../shared/overview/classify'
+import { canRemoveFromWatchList, overviewMetaText, visibleWarningChips } from '../shared/overview/present'
 import { localAbsolute, localClock, relativeLabel } from '../shared/waiting/local-time'
-import type { CiState, OverviewRow, OverviewSnapshot, OverviewWarning } from '../shared/overview/types'
+import type { OverviewRow, OverviewSnapshot, OverviewWarning } from '../shared/overview/types'
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -19,16 +20,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
 const CHIP_CLASS: Record<string, string> = {
   '卡住': 'stuck',
   '停滞': 'stalled',
-  '空仓': 'empty',
-  '陈旧': 'stale'
-}
-
-const CI_LABEL: Record<CiState, string> = {
-  success: '通过',
-  failure: '失败',
-  pending: '进行中',
-  none: '无检查',
-  unknown: '未知'
+  '空仓': 'empty'
 }
 
 function externalIcon(): SVGElement {
@@ -50,25 +42,27 @@ function externalIcon(): SVGElement {
 function paint(host: HTMLElement, snapshot: OverviewSnapshot, handlers: {
   refresh: () => void
   settings: () => void
+  focusWatch: () => void
   open: (url: string) => void
+  remove: (name: string) => void
 }): void {
   const archived = snapshot.rows.filter(row => row.archived)
   const visible = snapshot.rows.filter(row => !row.archived)
   const active = visible.filter(row => !isStaleGroup(row))
   const stale = visible.filter(row => isStaleGroup(row))
   const counts = overviewCounts(snapshot.rows)
-  const summary = counts.repos === 0 && archived.length === 0
-    ? '打开这一页就会刷新。关注列表留空时走自动模式。'
-    : `${counts.repos} 个仓库 · ${counts.attention} 个需要看一眼`
   const refreshed = snapshot.refreshedAt
     ? relativeLabel(snapshot.refreshedAt, new Date())
     : '尚未刷新'
   const stamp = el('span', { class: 'waiting-stamp' }, [`上次刷新 ${refreshed}`])
   if (snapshot.refreshedAt) stamp.title = localAbsolute(snapshot.refreshedAt)
-  const toolbar = el('div', { class: 'waiting-toolbar' }, [
-    el('p', { class: 'waiting-summary' }, [summary]),
-    stamp
-  ])
+  const toolbar = el('div', { class: 'waiting-toolbar' })
+  if (counts.repos > 0 || archived.length > 0) {
+    toolbar.append(el('p', { class: 'waiting-summary' }, [
+      `${counts.repos} 个仓库 · ${counts.attention} 个需要看一眼`
+    ]))
+  }
+  toolbar.append(stamp)
   const refresh = el('button', { type: 'button', class: 'primary' }, [snapshot.refreshing ? '正在刷新' : '刷新'])
   const authBlocked = snapshot.auth === 'missing' || snapshot.auth === 'invalid'
   refresh.disabled = snapshot.refreshing || authBlocked
@@ -105,33 +99,43 @@ function paint(host: HTMLElement, snapshot: OverviewSnapshot, handlers: {
   if (snapshot.refreshing && snapshot.rows.length === 0) {
     page.append(el('p', { class: 'waiting-loading', role: 'status' }, ['正在刷新…']))
   } else if (!snapshot.refreshing && counts.repos === 0 && archived.length === 0 && snapshot.auth === 'ok') {
-    page.append(el('p', { class: 'waiting-empty' }, ['没有可显示的仓库']))
+    const add = el('button', { type: 'button', class: 'primary' }, ['去设置添加关注的仓库'])
+    add.addEventListener('click', handlers.focusWatch)
+    page.append(el('div', { class: 'overview-empty' }, [
+      el('p', {}, ['还没有可显示的仓库']),
+      add
+    ]))
   } else if (counts.repos > 0 || archived.length > 0) {
     const list = el('div', { class: 'overview-list' })
-    for (const row of active) list.append(renderRow(row, handlers.open))
+    for (const row of active) list.append(renderRow(row, handlers))
     page.append(list)
-    if (stale.length > 0) page.append(renderStale(stale, handlers.open))
-    if (archived.length > 0) page.append(renderArchived(archived, handlers.open))
+    if (stale.length > 0) page.append(renderStale(stale, handlers))
+    if (archived.length > 0) page.append(renderArchived(archived, handlers))
   }
   host.replaceChildren(page)
 }
 
-function renderArchived(rows: readonly OverviewRow[], open: (url: string) => void): HTMLElement {
+function renderArchived(rows: readonly OverviewRow[], handlers: RowHandlers): HTMLElement {
   const details = el('details', { class: 'archived-group' })
   details.append(el('summary', {}, [`已归档 · ${rows.length}`]))
-  for (const row of rows) details.append(renderRow(row, open))
+  for (const row of rows) details.append(renderRow(row, handlers))
   return details
 }
 
-function renderStale(rows: readonly OverviewRow[], open: (url: string) => void): HTMLElement {
+function renderStale(rows: readonly OverviewRow[], handlers: RowHandlers): HTMLElement {
   const details = el('details', { class: 'stale-group' })
   const summary = el('summary', {}, [`陈旧 · ${rows.length}`])
   details.append(summary)
-  for (const row of rows) details.append(renderRow(row, open))
+  for (const row of rows) details.append(renderRow(row, handlers))
   return details
 }
 
-function renderRow(row: OverviewRow, open: (url: string) => void): HTMLElement {
+interface RowHandlers {
+  open: (url: string) => void
+  remove: (name: string) => void
+}
+
+function renderRow(row: OverviewRow, handlers: RowHandlers): HTMLElement {
   const title = el('button', {
     type: 'button',
     class: 'waiting-title',
@@ -140,47 +144,45 @@ function renderRow(row: OverviewRow, open: (url: string) => void): HTMLElement {
     el('span', { class: 'waiting-title-text' }, [row.name]),
     externalIcon()
   ])
-  title.addEventListener('click', () => open(row.url))
+  title.addEventListener('click', () => handlers.open(row.url))
   const chips = el('span', { class: 'reason-chips' })
   if (row.archived) {
     chips.append(el('span', { class: 'chip chip-archived' }, ['已归档']))
   } else {
-    for (const item of row.warnings) chips.append(warningChip(item, open))
-    const stuck = row.warnings.some(item => item.kind === '卡住')
-    if (!row.error && !stuck && (row.ciState === 'success' || row.ciState === 'pending' || row.ciState === 'none')) {
-      chips.append(el('span', { class: `chip chip-ci chip-ci-${row.ciState}` }, [CI_LABEL[row.ciState]]))
-    }
+    for (const item of visibleWarningChips(row)) chips.append(warningChip(item, handlers.open))
   }
-  const metaText = row.error
-    ? row.error
-    : row.lastCommitAt
-      ? `${relativeLabel(row.lastCommitAt, new Date())} · ${row.openPrCount} 个 open PR`
-      : `尚无提交 · ${row.openPrCount} 个 open PR`
-  const meta = el('span', { class: row.error ? 'waiting-meta overview-error' : 'waiting-meta' }, [metaText])
+  const meta = el('span', {
+    class: row.error ? 'waiting-meta overview-error' : 'waiting-meta'
+  }, [overviewMetaText(row, new Date())])
   if (row.lastCommitAt) meta.title = localAbsolute(row.lastCommitAt)
-  return el('div', { class: `overview-row${row.error ? ' is-error' : ''}` }, [
-    title,
-    chips,
-    meta
-  ])
+  const children: Array<Node | string> = [title, chips, meta]
+  if (canRemoveFromWatchList(row)) {
+    const remove = el('button', { type: 'button', class: 'ghost tiny overview-remove' }, ['从关注列表移除'])
+    remove.addEventListener('click', () => { void handlers.remove(row.name) })
+    children.push(remove)
+  }
+  return el('div', { class: `overview-row${row.error ? ' is-error' : ''}` }, children)
 }
 
 function warningChip(warning: OverviewWarning, open: (url: string) => void): HTMLElement {
   const kind = CHIP_CLASS[warning.kind] ?? 'other'
   const target = warning.targets[0]?.url
   if (!target) return el('span', { class: `chip chip-${kind}`, title: warning.hint }, [warning.label])
-  const chip = el('button', {
-    type: 'button',
-    class: `chip chip-${kind}`,
+  const chip = el('a', {
+    class: `chip chip-link chip-${kind}`,
+    href: target,
     title: warning.hint
-  }, [warning.label])
-  chip.addEventListener('click', () => open(target))
+  }, [warning.label, externalIcon()])
+  chip.addEventListener('click', event => {
+    event.preventDefault()
+    open(target)
+  })
   return chip
 }
 
 export async function renderOverview(
   host: HTMLElement,
-  navigate: (view: 'settings', options?: { focusToken?: boolean }) => void
+  navigate: (view: 'settings', options?: { focusToken?: boolean, focusWatch?: boolean }) => void
 ): Promise<void> {
   const loading: OverviewSnapshot = {
     rows: [],
@@ -195,8 +197,17 @@ export async function renderOverview(
     paint(host, snapshot, {
       refresh: () => { void reload() },
       settings: () => navigate('settings', { focusToken: true }),
-      open: url => { void window.arckeep.openExternal(url) }
+      focusWatch: () => navigate('settings', { focusWatch: true }),
+      open: url => { void window.arckeep.openExternal(url) },
+      remove: name => { void removeWatched(name) }
     })
+  }
+  const removeWatched = async (name: string) => {
+    const state = await window.arckeep.getState()
+    const next = state.watchedRepos.filter(item => item.toLowerCase() !== name.toLowerCase())
+    const result = await window.arckeep.setRepos(next)
+    if (!result.ok) return
+    await reload()
   }
   const reload = async () => {
     apply({ ...loading, refreshing: true, rows: [] })

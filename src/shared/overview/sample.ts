@@ -117,5 +117,7 @@ export function sampleOverviewErrorRows(): OverviewRow[] {
     repo({ owner: 'harbor', name: 'blank', empty: true, ci: 'none' }),
     repo({ owner: 'northline', name: 'missing', error: '仓库不存在或无权访问' })
   ]
-  return classifyOverview(facts, defaultOverviewConfig(), SAMPLE_NOW)
+  return classifyOverview(facts, defaultOverviewConfig(), SAMPLE_NOW).map(row => (
+    row.error ? { ...row, fromWatchList: true } : row
+  ))
 }

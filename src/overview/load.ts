@@ -409,8 +409,13 @@ export async function loadOverview(options: {
   if (loaded.aborted) {
     errors.push({ source: '仓库', message: 'GitHub 速率限制，本页保留上次结果' })
   }
+  const fromWatchList = options.watchedRepos.length > 0
+  const rows = selectOverviewRows(
+    classifyOverview(loaded.facts, options.config, options.now),
+    includeArchived
+  ).map(row => ({ ...row, fromWatchList }))
   return {
-    rows: selectOverviewRows(classifyOverview(loaded.facts, options.config, options.now), includeArchived),
+    rows,
     fresh: !loaded.aborted,
     rateLimitResetAt,
     auth: 'ok',

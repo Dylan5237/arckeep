@@ -221,6 +221,14 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: Scr
       if (details) details.open = true
     `)
   }
+  if (scene === 'overview-chip-hover') {
+    await window.webContents.executeJavaScript(`
+      const chip = document.querySelector('a.chip-link')
+      if (!chip) throw new Error('warning chip was not rendered')
+      chip.classList.add('is-hover')
+      chip.focus()
+    `)
+  }
   if (scene === 'waiting-hover') {
     await window.webContents.executeJavaScript(`
       const row = document.querySelector('.waiting-row')

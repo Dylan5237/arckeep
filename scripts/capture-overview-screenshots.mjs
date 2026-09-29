@@ -19,7 +19,8 @@ const scenes = [
   ['overview-invalid-token', 'overview-unauthorized.png'],
   ['overview-loading', 'overview-loading.png'],
   ['overview-row-error', 'overview-row-error.png'],
-  ['overview-narrow', 'overview-narrow.png']
+  ['overview-narrow', 'overview-narrow.png'],
+  ['overview-chip-hover', 'overview-chip-hover.png']
 ]
 
 for (const [scene, filename] of scenes) {

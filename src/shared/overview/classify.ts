@@ -180,13 +180,21 @@ function byName(left: OverviewRow, right: OverviewRow): number {
   return left.name.localeCompare(right.name)
 }
 
+const ATTENTION_KINDS = new Set<OverviewWarningKind>(['卡住', '停滞', '空仓'])
+
+export function countsAsAttention(row: OverviewRow): boolean {
+  if (row.archived) return false
+  if (row.error) return true
+  return row.warnings.some(item => ATTENTION_KINDS.has(item.kind))
+}
+
 export function overviewCounts(rows: readonly OverviewRow[]): { repos: number, attention: number } {
   let repos = 0
   let attention = 0
   for (const row of rows) {
     if (row.archived) continue
     repos += 1
-    if (row.warnings.length > 0 || row.error) attention += 1
+    if (countsAsAttention(row)) attention += 1
   }
   return { repos, attention }
 }

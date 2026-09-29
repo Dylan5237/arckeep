@@ -29,6 +29,8 @@ describe('screenshot fixtures', () => {
     expect(screenshotStartPage('overview')).toBe('projects')
     expect(screenshotStartPage('overview-narrow')).toBe('projects')
     expect(screenshotWindowSize('waiting-hover')).toEqual({ width: 1180, height: 900 })
+    expect(screenshotWindowSize('overview-chip-hover')).toEqual({ width: 1180, height: 900 })
+    expect(screenshotStartPage('overview-chip-hover')).toBe('projects')
     expect(screenshotOpensSettings('waiting-hover')).toBe(false)
     expect(parseScreenshotScene('not-a-scene')).toBe('nav')
   })

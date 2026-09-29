@@ -27,7 +27,8 @@ export const SCREENSHOT_SCENES = [
   'overview-invalid-token',
   'overview-loading',
   'overview-row-error',
-  'overview-narrow'
+  'overview-narrow',
+  'overview-chip-hover'
 ] as const
 
 export type ScreenshotScene = (typeof SCREENSHOT_SCENES)[number]
@@ -52,7 +53,7 @@ export function parseScreenshotScene(value: string | undefined): ScreenshotScene
 
 export function screenshotWindowSize(scene: ScreenshotScene): { width: number, height: number } {
   if (scene === 'waiting-narrow' || scene === 'overview-narrow') return { width: 800, height: 1680 }
-  if (scene === 'waiting-hover') return { width: 1180, height: 900 }
+  if (scene === 'waiting-hover' || scene === 'overview-chip-hover') return { width: 1180, height: 900 }
   if (scene === 'waiting-watch' || scene === 'waiting-hidden' || scene === 'waiting-family') return { width: 1180, height: 720 }
   if (scene === 'narrow') return { width: 800, height: 760 }
   if (scene === 'overview-archived') return { width: 1180, height: 820 }
@@ -87,7 +88,8 @@ export function screenshotReadyText(scene: ScreenshotScene): string {
   if (scene === 'waiting-rate-limit') return '速率限制'
   if (scene === 'overview' || scene === 'overview-narrow' || scene === 'overview-collapsed') return 'harbor/lumen'
   if (scene === 'overview-archived') return '已归档'
-  if (scene === 'overview-empty') return '没有可显示的仓库'
+  if (scene === 'overview-empty') return '还没有可显示的仓库'
+  if (scene === 'overview-chip-hover') return '卡住：CI 失败'
   if (scene === 'overview-no-token') return '未配置 GitHub 认证'
   if (scene === 'overview-invalid-token') return 'GitHub 认证无效或已过期'
   if (scene === 'overview-loading') return '正在刷新'

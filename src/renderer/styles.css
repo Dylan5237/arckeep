@@ -368,6 +368,13 @@ textarea {
   flex: 0 0 auto;
 }
 
+.reason-chips {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -506,23 +513,56 @@ main:has(.waiting) {
   color: #8C3A2A;
 }
 
-button.chip {
-  border: 0;
+a.chip-link {
+  gap: 3px;
+  color: inherit;
+  text-decoration: none;
   cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
+}
+
+a.chip-link .external-icon {
+  display: none;
+}
+
+a.chip-link:hover,
+a.chip-link:focus-visible,
+a.chip-link.is-hover {
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+a.chip-link:hover .external-icon,
+a.chip-link:focus-visible .external-icon,
+a.chip-link.is-hover .external-icon {
+  display: block;
+}
+
+a.chip-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .chip-stuck { background: #F3D9D2; color: #7A2E22; }
 .chip-stalled { background: #F3E4C8; color: #6A4A16; }
 .chip-empty { background: #E3E1EA; color: #3D3A55; }
-.chip-stale { background: #E8DDF0; color: #4C3268; }
-.chip-ci-success { background: #DCECD4; color: #2C5324; }
-.chip-ci-failure { background: #F3D9D2; color: #7A2E22; }
-.chip-ci-pending { background: #D9E4F2; color: #1E3A5F; }
-.chip-ci-none { background: var(--arckeep-soft-stone); color: var(--arckeep-muted-graphite); }
 .chip-archived { background: var(--arckeep-soft-stone); color: var(--arckeep-muted-graphite); }
+
+.overview-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.overview-empty p {
+  margin: 0;
+}
+
+button.overview-remove {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
 
 .stale-group,
 .archived-group {

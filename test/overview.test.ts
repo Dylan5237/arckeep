@@ -7,9 +7,10 @@ import { overviewCachePath, settingsFilePath } from '../src/main/paths.js'
 import { SettingsService } from '../src/main/settings-service.js'
 import type { SecretBox } from '../src/main/token-store.js'
 import { classifyOverview, inAutoScope, isEmptyRepo, isReviewStuck, overviewCounts, selectOverviewRows } from '../src/shared/overview/classify.js'
+import { canRemoveFromWatchList, overviewMetaText, visibleWarningChips } from '../src/shared/overview/present.js'
 import { defaultOverviewConfig, parseOverviewConfig } from '../src/shared/overview/rules.js'
 import type { OverviewConfig, OverviewPullRequest, OverviewRepoFacts, OverviewRow } from '../src/shared/overview/types.js'
-import { runOverviewCli } from '../src/overview/cli.js'
+import { runOverviewCli, toOverviewJson } from '../src/overview/cli.js'
 import { loadOverview, parseRepositoryNode } from '../src/overview/load.js'
 
 const NOW = new Date('2026-09-28T00:00:00.000Z')
@@ -204,7 +205,7 @@ describe('overview warnings', () => {
     expect(rows.map(row => row.name)).toEqual(['example/live', 'example/old'])
     expect(rows[1]).toMatchObject({ archived: true, warnings: [] })
     expect(selectOverviewRows(rows, false).map(row => row.name)).toEqual(['example/live'])
-    expect(overviewCounts(rows)).toEqual({ repos: 1, attention: 1 })
+    expect(overviewCounts(rows)).toEqual({ repos: 1, attention: 0 })
     expect(overviewCounts(selectOverviewRows(rows, true)).repos).toBe(1)
   })
 
@@ -264,6 +265,62 @@ describe('overview warnings', () => {
     expect(source).not.toContain('Dylan5237/')
     expect(parseOverviewConfig(undefined)).toEqual(defaults)
     expect(() => parseOverviewConfig({ staleDays: 0 })).toThrow('停滞天数')
+  })
+
+  it('counts only 卡住, 停滞, 空仓, and errors, and keeps quiet CI off the chips', () => {
+    const failed = classifyOverview([facts({
+      name: 'example/failed',
+      url: 'https://github.com/example/failed',
+      ciState: 'failure',
+      ciFailureUrl: 'https://github.com/example/failed/actions/runs/9',
+      openPrCount: 2,
+      lastCommitAt: ago(1),
+      pushedAt: ago(1)
+    })], config(), NOW)[0]!
+    const quiet = classifyOverview([facts({ ciState: 'success', openPrCount: 0 })], config(), NOW)[0]!
+    const pending = classifyOverview([facts({ name: 'example/pending', ciState: 'pending' })], config(), NOW)[0]!
+    const none = classifyOverview([facts({ name: 'example/none', ciState: 'none' })], config(), NOW)[0]!
+    const stale = classifyOverview([facts({
+      name: 'example/old',
+      pushedAt: ago(120),
+      lastCommitAt: ago(120),
+      ciState: 'none'
+    })], config(), NOW)[0]!
+    const missing = classifyOverview([facts({
+      name: 'example/gone',
+      error: '仓库不存在或无权访问',
+      lastCommitAt: null,
+      pushedAt: null,
+      ciState: 'unknown'
+    })], config(), NOW)[0]!
+    const archived = classifyOverview([facts({
+      name: 'example/archived',
+      archived: true,
+      ciState: 'failure',
+      pushedAt: ago(400),
+      lastCommitAt: ago(400)
+    })], config(), NOW)[0]!
+
+    expect(visibleWarningChips(failed).map(item => item.label)).toEqual(['卡住：CI 失败'])
+    expect(visibleWarningChips(failed)[0]?.targets).toEqual([
+      { url: 'https://github.com/example/failed/actions/runs/9' }
+    ])
+    expect(overviewMetaText(failed, NOW)).toBe('1 天前 · 2 个 PR 待合并')
+    expect(overviewMetaText(failed, NOW)).not.toContain('open PR')
+    expect(visibleWarningChips(quiet)).toEqual([])
+    expect(overviewMetaText(quiet, NOW)).toBe('1 天前 · CI 通过')
+    expect(overviewMetaText(pending, NOW)).toContain('CI 进行中')
+    expect(overviewMetaText(none, NOW)).toContain('无 CI')
+    expect(stale.warnings.map(item => item.kind)).toContain('陈旧')
+    expect(visibleWarningChips(stale).map(item => item.kind)).not.toContain('陈旧')
+    expect(visibleWarningChips(archived)).toEqual([])
+    expect(canRemoveFromWatchList(missing)).toBe(false)
+    expect(canRemoveFromWatchList({ ...missing, fromWatchList: true })).toBe(true)
+    expect(canRemoveFromWatchList({ ...quiet, fromWatchList: true })).toBe(false)
+    expect(overviewCounts([failed, quiet, pending, none, stale, missing, archived])).toEqual({
+      repos: 6,
+      attention: 2
+    })
   })
 })
 
@@ -352,8 +409,12 @@ describe('overview loading', () => {
       error: '仓库不存在或无权访问',
       ciState: 'unknown',
       warnings: [],
-      openPrCount: 0
+      openPrCount: 0,
+      fromWatchList: true
     })
+    expect(result.rows.every(row => row.fromWatchList)).toBe(true)
+    expect(canRemoveFromWatchList(result.rows[1]!)).toBe(true)
+    expect(canRemoveFromWatchList(result.rows[0]!)).toBe(false)
     expect(result.rows[0]?.ciState).toBe('success')
   })
 
@@ -505,6 +566,7 @@ describe('overview loading', () => {
       fetchImpl
     })
     expect(hidden.rows.map(row => row.name)).toEqual(['example/recent'])
+    expect(hidden.rows.every(row => row.fromWatchList === false)).toBe(true)
     expect(seen).toEqual(['recent'])
     seen.length = 0
     const shown = await loadOverview({
@@ -613,6 +675,12 @@ describe('overview cli', () => {
       targets: [{ url: 'https://github.com/example/stuck/pull/8' }]
     })
     expect(stuck?.lastCommitAt).toBe('2026-09-27T00:00:00.000Z')
+    const withFlag = toOverviewJson([{ ...stuck!, fromWatchList: true }])
+    expect(withFlag[0]).not.toHaveProperty('fromWatchList')
+    expect(Object.keys(withFlag[0]!).sort()).toEqual([
+      'archived', 'ciState', 'error', 'lastCommitAt', 'name', 'openPrCount', 'url', 'warnings'
+    ])
+    expect(rows.every(row => !('fromWatchList' in row))).toBe(true)
   })
 
   it('leaves archived repositories out unless --include-archived', async () => {
