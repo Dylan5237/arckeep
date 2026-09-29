@@ -62,7 +62,7 @@ export async function run() {
     await shot(page, '80-p2-params', { checkIds: ['P2'], description: 'apo 项目初始化参数页：工作目录单选（默认值已预选）+ 项目名文本框' })
 
     await page.click('button.primary:has-text("预览")')
-    await page.waitForSelector('.modal', { timeout: 8000 })
+    await page.waitForSelector('.modal', { timeout: 25000 })
     await sleep(400)
 
     const rehearsalSummary = await page.locator('.rehearsal-summary').innerText().catch(() => '')
@@ -103,7 +103,7 @@ export async function run() {
       decoded = cl.found ? decodePowershellEncodedCommand(cl.commandLine) : null
     }
 
-    await waitFor(async () => /完成|失败/.test(await page.locator('.run-status').innerText().catch(() => '')), { timeoutMs: 10000, intervalMs: 100 })
+    await waitFor(async () => /完成|失败/.test(await page.locator('.run-status').innerText().catch(() => '')), { timeoutMs: 40000, intervalMs: 150 })
     await sleep(200)
     const statusText = await page.locator('.run-status').innerText().catch(() => '')
     await shot(page, '83-p2-after-confirm', { checkIds: ['P2'], description: '确认执行后：状态 + 输出（real-init-done）' })

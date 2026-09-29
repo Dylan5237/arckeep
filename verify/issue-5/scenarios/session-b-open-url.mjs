@@ -108,7 +108,12 @@ export async function run() {
     await cap.fill('#text', '验收：核对已知仓库列表 #Dylan5237/term-lens')
     await shot(cap, '14-p1-capture-todo', { checkIds: ['P1'], description: '快速捕获里写一条关联 Dylan5237/term-lens 的待办' })
     await cap.press('#text', 'Enter')
-    await sleep(300)
+    // 给保存 IPC 往返足够时间；顺手记一下捕获窗口是否显示了报错（诊断用，不参与判定）。
+    await sleep(1200)
+    const captureErrorText = await cap.locator('#error').innerText().catch(() => '<读取失败>')
+    const captureStillOpen = await cap.isClosed().then(() => false).catch(() => true)
+    const todosAfterCapture = await callTestHook(app, 'todos').catch(err => ({ error: String(err) }))
+    appendEvidenceJson('p1-capture-diagnostic', { captureErrorText, captureStillOpen, todosAfterCapture })
 
     // 3) 打开仓库 → 参数页应能看到两个来源都在列表里
     await gotoTools(page)

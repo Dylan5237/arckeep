@@ -406,8 +406,13 @@ export async function saveToolShelfJson(page, json) {
 
 /** 回到工具架的动作列表页。renderTools() 只有 session 停在 loading/shelf/empty/problem 时才会重新拉取
  * 列表，其它状态（running/copied/quiet/params/preview 的残留）单纯点导航栏不会回到列表——
- * 所以要先点掉当前这条动作里「返回工具架」/「关闭」/「取消」之类的收尾按钮，再点导航。 */
+ * 所以要先点掉当前这条动作里「返回工具架」/「关闭」/「取消」之类的收尾按钮，再点导航。
+ * 真机上观察到：如果上一条 run-command 动作真的还在跑（.run-status 显示「运行中」），这时候
+ * 唯一能点的按钮是「中止」，不在上面这组收尾按钮里——如果不管它，会一直等不到任何收尾按钮，
+ * 6 次重试全部落空。这里额外兜底：看到「运行中」且只有「中止」按钮时，主动点一次中止，
+ * 把这条判定为「异常卡住的动作」而不是让后面所有 session 都被拖累连环失败。 */
 export async function gotoTools(page) {
+  let abortedStuckRun = false
   for (let attempt = 0; attempt < 6; attempt += 1) {
     if (await page.locator('.tool-search').count() > 0) return
     const backButtons = [
@@ -422,6 +427,16 @@ export async function gotoTools(page) {
         await btn.first().click().catch(() => {})
         clicked = true
         break
+      }
+    }
+    if (!clicked && !abortedStuckRun) {
+      const stillRunning = await page.locator('.run-status').innerText().catch(() => '')
+      const abortBtn = page.locator('button.danger:has-text("中止")')
+      if (stillRunning.includes('运行中') && await abortBtn.count() > 0) {
+        abortedStuckRun = true
+        await abortBtn.first().click().catch(() => {})
+        await sleep(500)
+        clicked = true
       }
     }
     await page.click('[data-view="tools"]').catch(() => {})

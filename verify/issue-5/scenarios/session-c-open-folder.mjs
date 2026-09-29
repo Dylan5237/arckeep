@@ -39,7 +39,11 @@ export async function run() {
         type: 'open-folder',
         editor: compileInfo.exe,
         path: '{{folder}}',
-        params: [{ key: 'folder', label: '文件夹', required: true, input: 'directory' }]
+        // 故意不给 input:'directory'：这里要测「含空格/中文路径原样传给 argv」，需要能用
+        // page.fill() 直接打自定义路径进去；key='folder'/label='文件夹' 不会被 paramKind
+        // 的启发式判成 directory（那样会变成单选组 + 浏览按钮，没有文本框可填），见 C4
+        // 才是专门测 directory 单选组 UI 的地方（Session G）。
+        params: [{ key: 'folder', label: '文件夹', required: true }]
       },
       {
         id: 'open-folder-noparam',
