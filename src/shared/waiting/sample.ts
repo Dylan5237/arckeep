@@ -1,3 +1,4 @@
+import { primaryAction } from './action.js'
 import type { WaitingRow } from './types.js'
 
 const REPOS = [
@@ -89,6 +90,10 @@ export function sampleWaitingRows(): WaitingRow[] {
           ? `https://github.com/${repo}/tree/feature-${index}`
           : `https://github.com/${repo}/${slug}/${number}`,
       reasons: [...reasons],
+      action: primaryAction(type, reasons),
+      parentNumber: null,
+      parent: null,
+      childCount: 0,
       waitingDays,
       daysEstimated: index % 7 === 0,
       updatedAt: '2026-09-01T00:00:00.000Z',

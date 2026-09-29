@@ -14,6 +14,7 @@ function base(partial: Partial<WaitingSnapshot>): WaitingSnapshot {
     notices: [],
     showIgnored: false,
     hiddenCount: 3,
+    hiddenRepos: [],
     todosAvailable: false,
     ...partial
   }
@@ -23,6 +24,75 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
   if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover') {
     const rows = sampleWaitingRows().sort((left, right) => right.waitingDays - left.waitingDays || left.title.localeCompare(right.title))
     return base({ rows, hiddenCount: 4 })
+  }
+  if (scene === 'waiting-watch') {
+    const rows = sampleWaitingRows()
+      .filter(row => row.repo === 'northwind/ledger')
+      .slice(0, 3)
+      .map((row, index) => index === 2
+        ? { ...row, repo: 'stranger/public', title: '指派给你的那一条', reasons: ['指派'], action: '要你动手', type: 'issue' as const }
+        : row)
+    return base({
+      rows,
+      hiddenCount: 0,
+      notices: ['仅关注的仓库只保留和你有关的条目，不会把别人的 open PR 整仓列出来。']
+    })
+  }
+  if (scene === 'waiting-family') {
+    const repo = 'northwind/ledger'
+    const parent = sampleWaitingRows().find(row => row.type === 'issue')
+    const baseRow = parent ?? sampleWaitingRows()[0]
+    if (!baseRow) return base({ hiddenCount: 0, rows: [] })
+    const child = (number: number, title: string, days: number): typeof baseRow => ({
+      ...baseRow,
+      id: `sample:${repo}#${number}`,
+      repo,
+      number,
+      type: 'issue',
+      title,
+      url: `https://github.com/${repo}/issues/${number}`,
+      reasons: ['要人动手'],
+      action: '要你动手',
+      waitingDays: days,
+      daysEstimated: false,
+      parentNumber: 40,
+      parent: `https://github.com/${repo}/issues/40`,
+      childCount: 0,
+      ignored: false
+    })
+    return base({
+      hiddenCount: 0,
+      rows: [
+        {
+          ...baseRow,
+          id: `sample:${repo}#40`,
+          repo,
+          number: 40,
+          type: 'issue',
+          title: '确认导出范围',
+          url: `https://github.com/${repo}/issues/40`,
+          reasons: ['要人动手'],
+          action: '要你动手',
+          waitingDays: 6,
+          daysEstimated: false,
+          parentNumber: null,
+          parent: null,
+          childCount: 2,
+          ignored: false
+        },
+        child(41, '核对导出的列名', 4),
+        child(42, '看空状态的截图', 2)
+      ]
+    })
+  }
+  if (scene === 'waiting-hidden') {
+    const rows = sampleWaitingRows().slice(0, 2)
+    return base({
+      rows,
+      showIgnored: true,
+      hiddenCount: 6,
+      hiddenRepos: ['stranger/public']
+    })
   }
   if (scene === 'waiting-empty') return base({ hiddenCount: 0, rows: [] })
   if (scene === 'waiting-no-token') return base({ auth: 'missing', refreshedAt: null, hiddenCount: 0 })
@@ -45,6 +115,8 @@ export function createScreenshotWaiting(scene: ScreenshotScene): {
   snooze: (id?: unknown, days?: unknown) => IpcResult<WaitingSnapshot>
   ignore: (id?: unknown) => IpcResult<WaitingSnapshot>
   restore: (id?: unknown) => IpcResult<WaitingSnapshot>
+  hideRepo: (repo?: unknown) => IpcResult<WaitingSnapshot>
+  unhideRepo: (repo?: unknown) => IpcResult<WaitingSnapshot>
   setShowIgnored: (value?: unknown) => IpcResult<WaitingSnapshot>
   advanceDays: (days?: unknown) => IpcResult<WaitingSnapshot>
 } {
@@ -59,6 +131,8 @@ export function createScreenshotWaiting(scene: ScreenshotScene): {
     snooze: () => ok(),
     ignore: () => ok(),
     restore: () => ok(),
+    hideRepo: () => ok(),
+    unhideRepo: () => ok(),
     setShowIgnored: () => ok(),
     advanceDays: () => ({ ok: false, error: '测试钩子未开启' })
   }

@@ -1,5 +1,12 @@
+import { primaryAction } from './action.js'
 import { addDays } from './days.js'
+import { annotateIssueFamily } from './sub-issues.js'
 import type { DismissalMap, DismissalRecord, WaitingDraft, WaitingRow } from './types.js'
+
+export interface DismissalState {
+  items: DismissalMap
+  hiddenRepos: string[]
+}
 
 export function emptyDismissals(): DismissalMap {
   return {}
@@ -39,16 +46,37 @@ function isNewer(updatedAt: string, seen: string | null): boolean {
   return next > previous
 }
 
+function hiddenRepoSet(repos: readonly string[]): Set<string> {
+  return new Set(repos.map(repo => repo.toLowerCase()))
+}
+
+export function hideRepo(repos: readonly string[], repo: string): string[] {
+  const key = repo.toLowerCase()
+  if (repos.some(item => item.toLowerCase() === key)) return [...repos]
+  return [...repos, repo]
+}
+
+export function unhideRepo(repos: readonly string[], repo: string): string[] {
+  const key = repo.toLowerCase()
+  return repos.filter(item => item.toLowerCase() !== key)
+}
+
 export function partitionDismissals(
   drafts: readonly WaitingDraft[],
   map: DismissalMap,
   now: Date,
-  showIgnored: boolean
+  showIgnored: boolean,
+  hiddenRepos: readonly string[] = []
 ): { rows: WaitingRow[], hiddenCount: number, map: DismissalMap } {
   let nextMap = map
+  const hidden = hiddenRepoSet(hiddenRepos)
   const rows: WaitingRow[] = []
   let hiddenCount = 0
   for (const draft of drafts) {
+    if (hidden.has(draft.repo.toLowerCase())) {
+      hiddenCount += 1
+      continue
+    }
     let record: DismissalRecord | undefined = nextMap[draft.id]
     if (record?.ignored && isNewer(draft.updatedAt, record.ignoredUpdatedAt)) {
       nextMap = restoreDraft(nextMap, draft.id)
@@ -68,11 +96,36 @@ export function partitionDismissals(
       title: draft.title,
       url: draft.url,
       reasons: [...draft.reasons],
+      action: draft.action || primaryAction(draft.type, draft.reasons),
       waitingDays: draft.waitingDays,
       daysEstimated: draft.daysEstimated,
       updatedAt: draft.updatedAt,
-      ignored
+      ignored,
+      parentNumber: draft.parentNumber,
+      parent: draft.parent,
+      childCount: 0
     })
   }
-  return { rows, hiddenCount, map: nextMap }
+  const listed = annotateIssueFamily(rows)
+  return {
+    rows: listed.map((row, index) => ({ ...row, ignored: rows[index]?.ignored ?? false })),
+    hiddenCount,
+    map: nextMap
+  }
+}
+
+export function readDismissalState(raw: unknown): DismissalState {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { items: {}, hiddenRepos: [] }
+  const record = raw as Record<string, unknown>
+  if (record.version === 2 && record.items && typeof record.items === 'object' && !Array.isArray(record.items)) {
+    const hiddenRepos = Array.isArray(record.hiddenRepos)
+      ? record.hiddenRepos.filter((repo): repo is string => typeof repo === 'string' && repo.includes('/'))
+      : []
+    return { items: record.items as DismissalMap, hiddenRepos }
+  }
+  return { items: raw as DismissalMap, hiddenRepos: [] }
+}
+
+export function writeDismissalState(state: DismissalState): { version: 2, items: DismissalMap, hiddenRepos: string[] } {
+  return { version: 2, items: state.items, hiddenRepos: [...state.hiddenRepos] }
 }
