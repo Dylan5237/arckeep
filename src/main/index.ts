@@ -173,6 +173,45 @@ function createWindow(): BrowserWindow {
   return window
 }
 
+async function pointAtWaitingRow(window: BrowserWindow, index: number, openIgnore: boolean): Promise<void> {
+  const place = async (): Promise<{ x: number, y: number }> => window.webContents.executeJavaScript(`
+    (() => {
+      const rows = [...document.querySelectorAll('.waiting-row')]
+      for (const row of rows) row.classList.remove('show-actions')
+      const row = rows[${index}]
+      if (!row) throw new Error('waiting row was not rendered')
+      const box = row.getBoundingClientRect()
+      if (${openIgnore ? 'true' : 'false'}) {
+        const menu = row.querySelector('details.ignore')
+        if (!(menu instanceof HTMLDetailsElement)) throw new Error('ignore menu was not rendered')
+        menu.open = true
+        const label = [...menu.querySelectorAll('button')].map(button => button.textContent ?? '').join('\\n')
+        if (!label.includes('忽略这一条') || !label.includes('这个仓库')) throw new Error('ignore menu items missing')
+        const wide = [...menu.querySelectorAll('button')].find(button => (button.textContent ?? '').includes('这个仓库'))
+        if (!wide || wide.getClientRects().length !== 1 || wide.scrollWidth > wide.clientWidth + 1) {
+          throw new Error('ignore menu item wrapped')
+        }
+      }
+      return { x: Math.round(box.x + Math.min(160, box.width / 3)), y: Math.round(box.y + box.height / 2) }
+    })()
+  `)
+  await window.webContents.executeJavaScript(`document.querySelectorAll('.waiting-row')[${index}]?.scrollIntoView({ block: 'center' })`)
+  const point = await place()
+  window.webContents.sendInputEvent({ type: 'mouseMove', x: point.x, y: point.y })
+  await new Promise(resolve => setTimeout(resolve, 60))
+  const moved = await place()
+  window.webContents.sendInputEvent({ type: 'mouseMove', x: moved.x, y: moved.y })
+  await new Promise(resolve => setTimeout(resolve, 60))
+  const visible = await window.webContents.executeJavaScript(`
+    [...document.querySelectorAll('.waiting-row')].filter(row => {
+      if (row.classList.contains('is-ignored')) return false
+      const actions = row.querySelector('.row-actions')
+      return Boolean(actions) && getComputedStyle(actions).opacity !== '0'
+    }).length
+  `)
+  if (visible !== 1) throw new Error(`expected one row of actions, saw ${visible}`)
+}
+
 async function captureScreenshot(window: BrowserWindow, file: string, scene: string): Promise<void> {
   if (scene === 'invalid-token' || scene === 'connected') {
     await window.webContents.executeJavaScript(`
@@ -202,12 +241,12 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: str
         ? '未配置'
         : scene === 'hotkey-conflict'
           ? '已被其他程序占用'
-          : scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover'
+          : scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover' || scene === 'waiting-ignore'
             ? '验收北区截图'
             : scene === 'waiting-watch'
-              ? '不会把别人的 open PR'
+              ? '指派给你的那一条'
               : scene === 'waiting-hidden'
-                ? '已忽略的仓库'
+                ? '另有 4 条已延后或已忽略'
                 : scene === 'waiting-family'
                   ? '含 2 个子项'
                   : scene === 'waiting-empty'
@@ -231,14 +270,31 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: str
     await new Promise(resolve => setTimeout(resolve, 50))
   }
   if (!seen) throw new Error(`screenshot scene ${scene} did not show ${expected}`)
-  if (scene === 'waiting-hover') {
-    await window.webContents.executeJavaScript(`
-      const row = document.querySelector('.waiting-row')
-      if (!row) throw new Error('waiting row was not rendered')
-      row.classList.add('show-actions')
-      const details = row.querySelector('details')
-      if (details) details.open = true
+  if (scene === 'waiting-hover' || scene === 'waiting-ignore') {
+    await pointAtWaitingRow(window, scene === 'waiting-hover' ? 8 : 0, scene === 'waiting-ignore')
+  } else if (scene.startsWith('waiting')) {
+    window.webContents.sendInputEvent({ type: 'mouseMove', x: 24, y: 80 })
+    await new Promise(resolve => setTimeout(resolve, 200))
+    const stray = await window.webContents.executeJavaScript(`
+      [...document.querySelectorAll('.waiting-row')].filter(row => {
+        if (row.classList.contains('is-ignored')) return false
+        const actions = row.querySelector('.row-actions')
+        return Boolean(actions) && getComputedStyle(actions).opacity !== '0'
+      }).length
     `)
+    if (stray !== 0) throw new Error(`actions visible without hover: ${stray}`)
+  }
+  if (scene === 'waiting-hidden') {
+    const matched = await window.webContents.executeJavaScript(`
+      (() => {
+        const hint = document.body.innerText.match(/另有 (\\d+) 条已延后或已忽略/)
+        const count = hint ? Number(hint[1]) : -1
+        const faded = document.querySelectorAll('.waiting-row.is-ignored').length
+        const restores = [...document.querySelectorAll('.waiting-row.is-ignored button')].filter(button => button.textContent === '恢复').length
+        return count === faded && restores === count && count > 0
+      })()
+    `)
+    if (!matched) throw new Error('ignored rows did not match the hidden count')
   }
   await new Promise(resolve => setTimeout(resolve, 150))
   const image = await window.webContents.capturePage()

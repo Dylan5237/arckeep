@@ -21,7 +21,7 @@ function base(partial: Partial<WaitingSnapshot>): WaitingSnapshot {
 }
 
 export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapshot {
-  if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover') {
+  if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover' || scene === 'waiting-ignore') {
     const rows = sampleWaitingRows().sort((left, right) => right.waitingDays - left.waitingDays || left.title.localeCompare(right.title))
     return base({ rows, hiddenCount: 4 })
   }
@@ -35,7 +35,7 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
     return base({
       rows,
       hiddenCount: 0,
-      notices: ['仅关注的仓库只保留和你有关的条目，不会把别人的 open PR 整仓列出来。']
+      notices: []
     })
   }
   if (scene === 'waiting-family') {
@@ -86,11 +86,13 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
     })
   }
   if (scene === 'waiting-hidden') {
-    const rows = sampleWaitingRows().slice(0, 2)
+    const rows = sampleWaitingRows().sort((left, right) => right.waitingDays - left.waitingDays || left.title.localeCompare(right.title))
+    const fadedCount = 4
+    const faded = rows.slice(0, fadedCount).map(row => ({ ...row, ignored: true }))
     return base({
-      rows,
+      rows: [...faded, ...rows.slice(fadedCount, 16)],
       showIgnored: true,
-      hiddenCount: 6,
+      hiddenCount: fadedCount,
       hiddenRepos: ['stranger/public']
     })
   }

@@ -10,20 +10,6 @@ const ACTION_CLASS: Record<string, string> = {
   '待办': 'act-todo'
 }
 
-let inputMode: 'mouse' | 'keyboard' = 'mouse'
-let repaintActions: (() => void) | null = null
-let inputBound = false
-
-function bindInputMode(): void {
-  if (inputBound) return
-  inputBound = true
-  window.addEventListener('keydown', event => {
-    if (event.key !== 'Tab' && !event.key.startsWith('Arrow')) return
-    inputMode = 'keyboard'
-    repaintActions?.()
-  })
-}
-
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
@@ -160,56 +146,6 @@ function renderHiddenRepos(repos: readonly string[], unhideRepo: (repo: string) 
   return section
 }
 
-function wireRowActions(list: HTMLElement): void {
-  bindInputMode()
-  const rows = () => [...list.querySelectorAll<HTMLElement>('.waiting-row')]
-  const paintActive = () => {
-    const all = rows()
-    for (const row of all) {
-      if (inputMode === 'keyboard') row.classList.remove('show-actions')
-      else if (row.dataset.hover !== '1') row.classList.remove('show-actions')
-    }
-    if (inputMode === 'keyboard') {
-      const focused = all.find(row => row.contains(document.activeElement))
-      focused?.classList.add('show-actions')
-      return
-    }
-    all.find(row => row.dataset.hover === '1')?.classList.add('show-actions')
-  }
-  repaintActions = paintActive
-  list.addEventListener('pointerover', event => {
-    if (inputMode !== 'mouse') return
-    const target = event.target
-    if (!(target instanceof Element)) return
-    const row = target.closest('.waiting-row')
-    if (!(row instanceof HTMLElement)) return
-    for (const item of rows()) delete item.dataset.hover
-    row.dataset.hover = '1'
-    paintActive()
-  })
-  list.addEventListener('pointerleave', () => {
-    if (inputMode !== 'mouse') return
-    for (const item of rows()) delete item.dataset.hover
-    paintActive()
-  })
-  list.addEventListener('pointerdown', event => {
-    inputMode = 'mouse'
-    const target = event.target
-    const row = target instanceof Element ? target.closest('.waiting-row') : null
-    for (const item of rows()) delete item.dataset.hover
-    if (row instanceof HTMLElement) row.dataset.hover = '1'
-    paintActive()
-  })
-  list.addEventListener('focusin', () => {
-    if (inputMode === 'keyboard') paintActive()
-  })
-  list.addEventListener('focusout', () => {
-    window.setTimeout(() => {
-      if (inputMode === 'keyboard') paintActive()
-    }, 0)
-  })
-}
-
 function renderGroups(rows: readonly WaitingRow[], handlers: {
   snooze: (id: string, days: 1 | 3 | 7) => void
   ignore: (id: string) => void
@@ -233,7 +169,6 @@ function renderGroups(rows: readonly WaitingRow[], handlers: {
     }
     group?.append(renderRow(row, handlers))
   }
-  wireRowActions(list)
   return list
 }
 
@@ -300,11 +235,15 @@ function renderRow(row: WaitingRow, handlers: {
       el('summary', {}, ['延后']),
       menu
     ])
-    const ignore = el('button', { type: 'button', class: 'ghost tiny' }, ['忽略'])
-    ignore.addEventListener('click', () => handlers.ignore(row.id))
-    const hide = el('button', { type: 'button', class: 'ghost tiny' }, ['不看这个仓库'])
+    const ignoreOne = el('button', { type: 'button', class: 'ghost tiny' }, ['忽略这一条'])
+    ignoreOne.addEventListener('click', () => handlers.ignore(row.id))
+    const hide = el('button', { type: 'button', class: 'ghost tiny' }, [`不看 ${row.repo} 这个仓库`])
     hide.addEventListener('click', () => handlers.hideRepo(row.repo))
-    menu.append(hide)
+    const ignoreMenu = el('div', { class: 'snooze-menu ignore-menu' }, [ignoreOne, hide])
+    const ignore = el('details', { class: 'snooze ignore' }, [
+      el('summary', {}, ['忽略']),
+      ignoreMenu
+    ])
     actions.append(snooze, ignore)
   }
   const body = [days, title, chip, meta, actions]
