@@ -5,8 +5,8 @@ import path from 'node:path'
 import * as lib from '../lib.mjs'
 
 const {
-  setResult, EVIDENCE_DIR, launchApp, mainWindowPage, captureWindowPage, quitApp, killStrayArckeep,
-  getUserDataDir, resetUserData, todosFile, shot, appendEvidenceJson, callTestHook, sendHotkey, sendText, sendKey, sleep
+  setResult, EVIDENCE_DIR, launchApp, mainWindowPage, quitApp, killStrayArckeep,
+  getUserDataDir, resetUserData, todosFile, shot, appendEvidenceJson, createTodoViaHook
 } = lib
 
 function buildCorruptJsonl() {
@@ -43,7 +43,7 @@ export async function run() {
 
   try {
     app = await launchApp({ label: 'B-corrupt' })
-    const page = await mainWindowPage(app, { timeoutMs: 15000 })
+    let page = await mainWindowPage(app, { timeoutMs: 15000 })
     await page.click('[data-view="todos"]')
     await page.waitForSelector('.todo-list, .empty-todos', { timeout: 5000 })
     await shot(page, '30-corrupt-jsonl-loaded', { checkIds: ['7'], description: 'App 手工插入坏数据后照常启动，其它条目完整' })
@@ -54,16 +54,13 @@ export async function run() {
     const afterLoadBytes = Buffer.byteLength(afterLoadContent, 'utf8')
     const unchangedAfterLoad = afterLoadContent === content
 
-    // 追加一条新待办，确认追加写不会破坏坏行、且坏行原样还在
-    await callTestHook(app, 'close')
-    await sleep(250)
-    sendHotkey('Ctrl+Alt+Space')
-    await captureWindowPage(app, { timeoutMs: 5000 })
-    sendText('损坏测试-新增条目')
-    await sleep(150)
-    sendKey('Return')
-    await sleep(800)
-    await callTestHook(app, 'show')
+    // 追加一条新待办，确认追加写不会破坏坏行、且坏行原样还在。这里不是在测「真实全局热键
+    // 能不能触发」（那是 Item 1/A1 的职责，这个 CI 环境已确认 SendInput 投递不通，见
+    // evidence/preflight.json），只是需要某种方式打开捕获窗口写一条新待办去触发一次追加写，
+    // 改用 lib.createTodoViaHook()（测试钩子打开 + Playwright 键盘输入 + requestSubmit()
+    // 直接触发 submit 监听器，不依赖不确定的 CDP Enter 隐式提交语义，见 session-a.mjs
+    // 文件头部 A1 部分的详细说明）。
+    page = await createTodoViaHook(app, '损坏测试-新增条目')
 
     const afterAppendContent = fs.readFileSync(file, 'utf8')
     const afterAppendBytes = Buffer.byteLength(afterAppendContent, 'utf8')

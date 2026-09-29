@@ -251,7 +251,7 @@ export async function openCaptureViaHook(app, opts) {
  * 成一个全新的空白窗口，导致后面的输入全部追加进同一个残留窗口、层层错误传导下去。
  */
 export async function createTodoViaHook(app, text, { waiting = false, timeoutMs = 4000 } = {}) {
-  await callTestHook(app, 'close')
+  await ensureCaptureWindowClosed(app)
   await sleep(150)
   const cap = await openCaptureViaHook(app)
   await cap.type('#text', text)
@@ -276,6 +276,46 @@ export async function createTodoViaHook(app, text, { waiting = false, timeoutMs 
   await sleep(150)
   await callTestHook(app, 'show')
   return mainWindowPage(app)
+}
+
+/**
+ * 强制关闭当前打开的捕获窗口（如果有），确保下一次 openCaptureViaHook() 拿到的
+ * 是真正全新的窗口，而不是产品代码里 openCaptureWindow() 单例复用的一个还带着
+ * 上一步残留内容的旧窗口。
+ *
+ * 重要澄清（这份 harness 里之前一直有个误解，见 git log）：测试钩子的 'close' 动作
+ * （callTestHook(app,'close')）实际调用的是 src/main/index.ts 里的 closeMainWindow()
+ * -> mainWindow?.close()，而 mainWindow 有 `window.on('close', ...)` 监听器在没有
+ * isQuitting 时会 preventDefault() 只是把主窗口隐藏到托盘——这跟捕获窗口完全是两个
+ * 不同的 BrowserWindow 实例，对捕获窗口是否打开/关闭没有任何影响。产品代码里也没有
+ * 任何测试钩子动作是专门用来关闭捕获窗口的：捕获窗口只会在真正保存成功
+ * （closeCapture('saved')）、Esc 存草稿、或失焦 200ms 计时器到期时才会自己关闭。
+ * 之前 harness 里很多地方在「重新打开捕获窗口」前调用 callTestHook(app,'close')，
+ * 本意是想「关掉上一个捕获窗口拿到干净状态」，但实际上只是误关/复原了主窗口（无害，
+ * 但也没有达到清空捕获窗口的效果）——如果上一步因为异常没有走到 Esc/提交/失焦，
+ * 捕获窗口会真的原样留在打开状态，下一次 openCaptureViaHook() 会命中 openCaptureWindow()
+ * 单例判断（captureWindow 存在且没被销毁）而复用同一个脏窗口，导致新输入的文字追加
+ * 进残留内容里。这个函数直接拿到捕获窗口对应的 BrowserWindow 句柄调用真正的 close()
+ * （捕获窗口本身没有拦截 'close' 事件，见 src/main/capture-window.ts，所以这一步
+ * 是真实、无副作用的关闭），是唯一能可靠保证「下一次拿到的是全新捕获窗口」的办法。
+ */
+export async function ensureCaptureWindowClosed(app, { timeoutMs = 2000 } = {}) {
+  for (const w of app.windows()) {
+    const isCap = await w.evaluate(() => !!document.querySelector('#capture-form')).catch(() => false)
+    if (!isCap) continue
+    try {
+      const bw = await app.browserWindow(w)
+      await bw.evaluate(win => { if (!win.isDestroyed()) win.close() })
+    } catch { /* 拿句柄/关闭这一刻窗口可能已经自己关掉了，不算错误 */ }
+  }
+  const closed = await waitFor(async () => {
+    for (const w of app.windows()) {
+      const isCap = await w.evaluate(() => !!document.querySelector('#capture-form')).catch(() => false)
+      if (isCap) return false
+    }
+    return true
+  }, { timeoutMs, intervalMs: 30 })
+  return closed.ok
 }
 
 /**

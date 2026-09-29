@@ -3,8 +3,8 @@
 import * as lib from '../lib.mjs'
 
 const {
-  setResult, launchApp, mainWindowPage, captureWindowPage, quitApp, killStrayArckeep,
-  getUserDataDir, resetUserData, callTestHook, sendHotkey, sendText, sendKey, sleep,
+  setResult, launchApp, mainWindowPage, quitApp, killStrayArckeep,
+  getUserDataDir, resetUserData, createTodoViaHook, ensureCaptureWindowClosed, openCaptureViaHook,
   windowContentBounds, shot, appendEvidenceJson
 } = lib
 
@@ -39,17 +39,11 @@ export async function run() {
     app = await launchApp({ label: 'D-narrow' })
     let page = await mainWindowPage(app, { timeoutMs: 15000 })
 
-    // 造一点待办数据，让待办页/等我处理不是空状态
-    await callTestHook(app, 'close')
-    await sleep(250)
-    sendHotkey('Ctrl+Alt+Space')
-    await captureWindowPage(app, { timeoutMs: 5000 })
-    sendText('窄窗口测试待办 #example/demo')
-    await sleep(150)
-    sendKey('Return')
-    await sleep(800)
-    await callTestHook(app, 'show')
-    page = await mainWindowPage(app)
+    // 造一点待办数据，让待办页/等我处理不是空状态。这里不是在测「真实全局热键能不能触发」
+    // （那是 Item 1/A1 的职责，这个 CI 环境已确认 SendInput 投递不通，见 evidence/preflight.json），
+    // 只是需要某种方式打开捕获窗口写一条待办，改用 lib.createTodoViaHook()（同 session-a.mjs/
+    // session-b-corrupt.mjs 的处理方式）。
+    page = await createTodoViaHook(app, '窄窗口测试待办 #example/demo')
 
     const sizes = [{ width: 800, height: 600 }, { width: 640, height: 600 }]
     const report = []
@@ -76,17 +70,14 @@ export async function run() {
     }
 
     // 快速捕获窗口本身是固定尺寸（460x348，resizable:false），不会随主窗口变化；
-    // 检查它在自身固定尺寸下没有横向溢出即可。
+    // 检查它在自身固定尺寸下没有横向溢出即可。同样不是在测热键机制本身，改用测试钩子打开。
     await setMainWindowSize(app, page, 1120, 760)
-    await callTestHook(app, 'close')
-    await sleep(250)
-    sendHotkey('Ctrl+Alt+Space')
-    const cap = await captureWindowPage(app, { timeoutMs: 5000 })
+    await ensureCaptureWindowClosed(app)
+    const cap = await openCaptureViaHook(app)
     const captureCheck = await overflowCheck(cap)
     await shot(cap, '53-capture-fixed-size', { checkIds: ['E3'], description: '快速捕获窗口固定 460x348，本身不会因主窗口变窄而受影响' })
-    sendKey('Escape')
-    await sleep(300)
-    await callTestHook(app, 'show')
+    await cap.press('#text', 'Escape').catch(() => {})
+    await ensureCaptureWindowClosed(app).catch(() => {})
 
     appendEvidenceJson('e3-narrow-report', { report, captureCheck })
 

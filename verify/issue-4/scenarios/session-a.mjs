@@ -25,7 +25,7 @@ import * as lib from '../lib.mjs'
 const {
   setResult, mergeNotes, logEvidence, EVIDENCE_DIR, envFlags,
   launchApp, mainWindowPage, captureWindowPage, openCaptureViaHook, waitCaptureFocused,
-  createTodoViaHook,
+  createTodoViaHook, ensureCaptureWindowClosed,
   callTestHook, getAppState, quitApp, killStrayArckeep,
   startNotepad, sendHotkey, sendKey, foreground,
   fullShot, shot, waitFor, sleep, getUserDataDir, resetUserData, todosFile,
@@ -314,100 +314,124 @@ export async function run() {
   // BrowserWindow.blur() 编程调用模拟（同样触发主进程真实的 'blur' 监听器），
   // 不依赖已知失效的 OS 级前台切换。
   // =====================================================================
+  // A3 case 1 / case 2 / Item 8 之间用 cap 变量串起来。三段各自单独一层 try/catch，
+  // 避免任何一段意外抛出（比如这个 CI 环境本身就有的失焦/焦点抖动）把后面还没跑到的
+  // 步骤和最终的 setResult('8'/'A3', ...) 一起冲掉——那样會让本该分别是 PASS/FAIL 的
+  // 子项全部退化成一条笼统的「进程内验证异常」，也会让后面复用同一个 app/page 的
+  // Item 4 从一个已经跑飞的状态开始。
+  //
+  // 关键澄清：每段开头都用 ensureCaptureWindowClosed(app) 而不是 callTestHook(app,'close')
+  // 来保证「拿到的是全新捕获窗口」。callTestHook(app,'close') 实际调用的是主进程的
+  // closeMainWindow()（隐藏主窗口到托盘），跟捕获窗口是不是干净的没有任何关系——捕获窗口
+  // 只有真的保存成功/Esc存草稿/失焦超时才会自己关闭；如果上一步异常中途退出、既没
+  // Esc 也没提交，捕获窗口会原样留在打开状态，下一次 openCaptureViaHook() 会命中
+  // openCaptureWindow() 单例判断而复用同一个脏窗口，输入的新文字会追加进残留内容里
+  // （详见 lib.mjs 里 ensureCaptureWindowClosed() 的完整说明）。
+  let cap
+  const draftText1 = 'Esc应该存成草稿'
+  let draftAfterEsc = { text: null }
+  let restoredValue = null
+  let countBefore = 0
+  let escDidNotCreateTodo = false
   try {
-    const countBefore = (await page.evaluate(() => window.arckeep.listTodos())).length
+    countBefore = (await page.evaluate(() => window.arckeep.listTodos())).length
 
     // A3 case 1：输入后 Esc -> 存草稿 -> 再次打开 -> 原样恢复（进程内，未重启）
-    await callTestHook(app, 'close')
-    await sleep(150)
-    let cap = await openCaptureViaHook(app)
-    const draftText1 = 'Esc应该存成草稿'
+    await ensureCaptureWindowClosed(app)
+    cap = await openCaptureViaHook(app)
     await cap.type('#text', draftText1)
     await sleep(100)
     await cap.press('#text', 'Escape')
     await sleep(300)
-    const draftAfterEsc = await page.evaluate(() => window.arckeep.getCaptureDraft())
-    await callTestHook(app, 'close')
-    await sleep(150)
+    draftAfterEsc = await page.evaluate(() => window.arckeep.getCaptureDraft())
+    await ensureCaptureWindowClosed(app)
     cap = await openCaptureViaHook(app)
     await sleep(100)
-    const restoredValue = await cap.evaluate(() => document.querySelector('#text').value)
+    restoredValue = await cap.evaluate(() => document.querySelector('#text').value)
     await shot(cap, '10-draft-restored', { checkIds: ['A3', '8'], description: 'Esc 存草稿后再次打开，原样恢复' })
 
     // Item 2 后半：Esc 不新增待办
     const countAfterEscRestore = (await page.evaluate(() => window.arckeep.listTodos())).length
-    const escDidNotCreateTodo = countAfterEscRestore === countBefore
+    escDidNotCreateTodo = countAfterEscRestore === countBefore
+  } catch (err) {
+    mergeNotes('A3', `Esc 存草稿场景异常：${err}`)
+  }
 
-    // A3 case 2：编程调用 BrowserWindow.blur()，等价于「点击窗口外面」使捕获框失焦
-    let clickOutsideOk = false
-    try {
-      await cap.press('#text', 'Escape') // 先清掉这一份，重新开一份用于失焦测试
-      await sleep(300)
-      cap = await openCaptureViaHook(app)
-      const draftText2 = '点外面也该存草稿'
-      await cap.type('#text', draftText2)
-      await sleep(100)
-      const bwHandle = await app.browserWindow(cap)
-      await bwHandle.evaluate(win => win.blur())
-      await sleep(500) // 等主进程里的 200ms blur 计时器把窗口关掉
-      const capStillOpen = await Promise.all(app.windows().map(w => w.evaluate(() => !!document.querySelector('#capture-form')).catch(() => false)))
-      const draftAfterBlur = await page.evaluate(() => window.arckeep.getCaptureDraft())
-      clickOutsideOk = !capStillOpen.some(Boolean) && draftAfterBlur.text === draftText2
-      fullShot('11-blur-outside-draft', { checkIds: ['A3'], description: '捕获框失焦（BrowserWindow.blur() 编程调用，等价于点击窗口外面）后自动关闭并存草稿' })
-      appendEvidenceJson('a3-blur-draft', { draftAfterBlur })
-    } catch (err) {
-      mergeNotes('A3', `失焦场景异常：${err}`)
-    }
+  let clickOutsideOk = false
+  const draftText2 = '点外面也该存草稿'
+  try {
+    // A3 case 2：编程调用 BrowserWindow.blur()，等价于「点击窗口外面」使捕获框失焦。
+    await ensureCaptureWindowClosed(app)
+    cap = await openCaptureViaHook(app)
+    await cap.type('#text', draftText2)
+    await sleep(100)
+    const bwHandle = await app.browserWindow(cap)
+    await bwHandle.evaluate(win => win.blur())
+    await sleep(500) // 等主进程里的 200ms blur 计时器把窗口关掉
+    const capStillOpen = await Promise.all(app.windows().map(w => w.evaluate(() => !!document.querySelector('#capture-form')).catch(() => false)))
+    const draftAfterBlur = await page.evaluate(() => window.arckeep.getCaptureDraft())
+    clickOutsideOk = !capStillOpen.some(Boolean) && draftAfterBlur.text === draftText2
+    fullShot('11-blur-outside-draft', { checkIds: ['A3'], description: '捕获框失焦（BrowserWindow.blur() 编程调用，等价于点击窗口外面）后自动关闭并存草稿' })
+    appendEvidenceJson('a3-blur-draft', { draftAfterBlur })
+  } catch (err) {
+    mergeNotes('A3', `失焦场景异常：${err}`)
+  }
 
+  let beforeClearValue = null
+  let clearedValue = null
+  let draftAfterClearEsc = { text: null }
+  let valueAfterReopen = null
+  try {
     // Item 8：清空后 Esc，草稿一起清掉，下次打开不再恢复
-    await callTestHook(app, 'close')
-    await sleep(150)
+    await ensureCaptureWindowClosed(app)
     cap = await openCaptureViaHook(app)
     await sleep(100)
-    const beforeClearValue = await cap.evaluate(() => document.querySelector('#text').value)
+    beforeClearValue = await cap.evaluate(() => document.querySelector('#text').value)
     // Playwright 键盘事件：Ctrl+A 全选，Delete 清空（不是脚本直接置空 value）
     await cap.click('#text')
     await cap.press('#text', 'Control+A')
     await sleep(80)
     await cap.press('#text', 'Delete')
     await sleep(100)
-    const clearedValue = await cap.evaluate(() => document.querySelector('#text').value)
+    clearedValue = await cap.evaluate(() => document.querySelector('#text').value)
     await cap.press('#text', 'Escape')
     await sleep(300)
-    const draftAfterClearEsc = await page.evaluate(() => window.arckeep.getCaptureDraft())
-    await callTestHook(app, 'close')
-    await sleep(150)
+    draftAfterClearEsc = await page.evaluate(() => window.arckeep.getCaptureDraft())
+    await ensureCaptureWindowClosed(app)
     cap = await openCaptureViaHook(app)
     await sleep(100)
-    const valueAfterReopen = await cap.evaluate(() => document.querySelector('#text').value)
+    valueAfterReopen = await cap.evaluate(() => document.querySelector('#text').value)
     await shot(cap, '12-draft-cleared', { checkIds: ['8'], description: '清空后 Esc，下次打开是空的，草稿没有恢复' })
-    await cap.press('#text', 'Escape')
+    await cap.press('#text', 'Escape').catch(() => {})
     await sleep(300)
-    await callTestHook(app, 'show')
-    page = await mainWindowPage(app)
-
-    const item8Ok = beforeClearValue === draftText1 && clearedValue === '' && (!draftAfterClearEsc.text) && valueAfterReopen === ''
-    setResult('8', item8Ok ? 'PASS' : 'FAIL', {
-      evidence: ['10-draft-restored.png', '12-draft-cleared.png'],
-      steps: '打开捕获窗口输入文字，Esc 关闭 -> 草稿有内容且再次打开会恢复（已验证）；再打开一次，Playwright 键盘事件 Ctrl+A 全选 + Delete 清空输入框 -> Esc -> getCaptureDraft() 应为空 -> 再次打开 -> 输入框应为空',
-      notes: `清空前草稿="${beforeClearValue}"；Ctrl+A+Delete 后值="${clearedValue}"；Esc 后草稿="${JSON.stringify(draftAfterClearEsc)}"；再次打开值="${valueAfterReopen}"（打开捕获窗口用的是测试钩子而非真实热键，见文件头部环境限制说明；渲染进程内部的 Esc/清空逻辑本身用 Playwright 真实 CDP 按键事件验证，与真实按键效果一致）`
-    })
-
-    setResult('A3', (draftAfterEsc.text === draftText1 && restoredValue === draftText1 && clickOutsideOk) ? 'PASS' : 'FAIL', {
-      evidence: ['10-draft-restored.png', '11-blur-outside-draft-full.png'],
-      steps: '1) 打开捕获窗口，Playwright 打字，Playwright 发 Esc -> getCaptureDraft() 应含刚输入内容 2) 再次打开 -> 输入框应原样恢复 3) 再打开一份，打字后用 BrowserWindow.blur() 编程调用模拟点击窗口外面使捕获框失焦（触发与真实失焦相同的主进程 blur 监听器）-> 200ms 后应自动关闭并把内容存进草稿 4) 退出应用重启后仍能恢复见下方',
-      notes: `Esc 后草稿="${draftAfterEsc.text}"；再次打开恢复值="${restoredValue}"；失焦（BrowserWindow.blur()，等价于点外面）保存草稿=${clickOutsideOk}；打开捕获窗口用测试钩子而非真实热键（见环境限制说明），验证的是草稿保存/恢复逻辑本身，不是热键机制`
-    })
-    mergeNotes('2', `Esc 不新增待办：${escDidNotCreateTodo}`)
   } catch (err) {
-    setResult('8', 'FAIL', { notes: `异常：${err.stack || err}` })
-    mergeNotes('A3', `进程内验证异常：${err}`)
+    mergeNotes('8', `清空后 Esc 场景异常：${err}`)
   }
+
+  // 不论上面三段各自成败，统一收尾：强制关掉任何残留的捕获窗口，切回主窗口，再落最终
+  // 判定——避免任何一段的异常导致 setResult('8'/'A3', ...) 整体缺失，也避免残留的捕获
+  // 窗口污染后面 Item 4 的第一次 createTodoViaHook 调用。
+  await ensureCaptureWindowClosed(app).catch(() => {})
+  await callTestHook(app, 'show').catch(() => {})
+  page = await mainWindowPage(app)
+
+  const item8Ok = beforeClearValue === draftText1 && clearedValue === '' && (!draftAfterClearEsc.text) && valueAfterReopen === ''
+  setResult('8', item8Ok ? 'PASS' : 'FAIL', {
+    evidence: ['10-draft-restored.png', '12-draft-cleared.png'],
+    steps: '打开捕获窗口输入文字，Esc 关闭 -> 草稿有内容且再次打开会恢复（已验证）；再打开一次，Playwright 键盘事件 Ctrl+A 全选 + Delete 清空输入框 -> Esc -> getCaptureDraft() 应为空 -> 再次打开 -> 输入框应为空',
+    notes: `清空前草稿="${beforeClearValue}"；Ctrl+A+Delete 后值="${clearedValue}"；Esc 后草稿="${JSON.stringify(draftAfterClearEsc)}"；再次打开值="${valueAfterReopen}"（打开捕获窗口用的是测试钩子而非真实热键，见文件头部环境限制说明；渲染进程内部的 Esc/清空逻辑本身用 Playwright 真实 CDP 按键事件验证，与真实按键效果一致）`
+  })
+
+  setResult('A3', (draftAfterEsc.text === draftText1 && restoredValue === draftText1 && clickOutsideOk) ? 'PASS' : 'FAIL', {
+    evidence: ['10-draft-restored.png', '11-blur-outside-draft-full.png'],
+    steps: '1) 打开捕获窗口，Playwright 打字，Playwright 发 Esc -> getCaptureDraft() 应含刚输入内容 2) 再次打开 -> 输入框应原样恢复 3) 再打开一份，打字后用 BrowserWindow.blur() 编程调用模拟点击窗口外面使捕获框失焦（触发与真实失焦相同的主进程 blur 监听器）-> 200ms 后应自动关闭并把内容存进草稿 4) 退出应用重启后仍能恢复见下方',
+    notes: `Esc 后草稿="${draftAfterEsc.text}"；再次打开恢复值="${restoredValue}"；失焦（BrowserWindow.blur()，等价于点外面）保存草稿=${clickOutsideOk}；打开捕获窗口用测试钩子而非真实热键（见环境限制说明），验证的是草稿保存/恢复逻辑本身，不是热键机制`
+  })
+  mergeNotes('2', `Esc 不新增待办：${escDidNotCreateTodo}`)
 
   // A3：退出应用重启后再次打开仍能恢复草稿
   try {
-    await callTestHook(app, 'close')
-    await sleep(150)
+    await ensureCaptureWindowClosed(app)
     let cap = await openCaptureViaHook(app)
     const restartDraft = '重启后应该还在的草稿'
     await cap.type('#text', restartDraft)
@@ -417,8 +441,6 @@ export async function run() {
     await quitApp(app)
     app = await launchApp({ label: 'A-draft-restart' })
     page = await mainWindowPage(app)
-    await callTestHook(app, 'close')
-    await sleep(150)
     cap = await openCaptureViaHook(app)
     await sleep(100)
     const valueAfterAppRestart = await cap.evaluate(() => document.querySelector('#text').value)
