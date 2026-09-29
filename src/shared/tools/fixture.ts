@@ -1,5 +1,5 @@
 import type { KnownRepo } from './repos.js'
-import type { ToolAction } from './types.js'
+import type { Rehearsal, ToolAction } from './types.js'
 
 export interface ToolFixtureShelf {
   page: 'tools'
@@ -18,13 +18,14 @@ export interface ToolFixtureParams {
 
 export interface ToolFixturePreview {
   page: 'tools'
-  scene: 'preview'
+  scene: 'preview' | 'preview-failed'
   action: ToolAction
   values: Record<string, string>
   previewText: string
   dryRun?: string
   cwd: string
   shellLabel: string
+  rehearsal: Rehearsal
 }
 
 export interface ToolFixtureRun {

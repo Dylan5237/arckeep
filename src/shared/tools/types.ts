@@ -58,6 +58,16 @@ export interface ToolShelfConfig {
   actions: ToolAction[]
 }
 
+export interface Rehearsal {
+  /** files: parsed a create-list. raw: show the dry-run text. failed: block confirm. unavailable: no dry-run command. */
+  status: 'files' | 'raw' | 'failed' | 'unavailable'
+  summary: string
+  files?: string[]
+  canConfirm: boolean
+  /** Short mark such as 无法预演. */
+  mark?: string
+}
+
 export interface ActionPreview {
   actionId: string
   title: string
@@ -67,11 +77,13 @@ export interface ActionPreview {
    * The script is the user command, without runner details such as `exit $LASTEXITCODE`.
    */
   text: string
-  /** Dry-run (or other preview) command. Shown only. Confirm does not run it. */
+  /** Dry-run command. Executed for the summary. Confirm runs `text`, never this string. */
   dryRun?: string
   shell?: ShellKind
   cwd?: string
   argv?: string[]
+  /** Filled when a run-command preview actually rehearses. */
+  rehearsal?: Rehearsal
 }
 
 export interface ToolRunEvent {

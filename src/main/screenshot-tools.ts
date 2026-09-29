@@ -1,5 +1,6 @@
 import type { ToolFixture } from '../shared/tools/fixture.js'
 import { buildPreview } from '../shared/tools/preview.js'
+import { summarizeDryRun } from '../shared/tools/rehearsal.js'
 import type { KnownRepo } from '../shared/tools/repos.js'
 import type { ToolAction } from '../shared/tools/types.js'
 import { validateToolShelfText } from './tool-validate.js'
@@ -8,6 +9,7 @@ export const TOOL_SCREENSHOT_SCENES = [
   'tools',
   'tools-params',
   'tools-preview',
+  'tools-preview-failed',
   'tools-running',
   'tools-success',
   'tools-failed',
@@ -202,19 +204,36 @@ export function buildToolFixture(scene: string): ToolFixture | null {
       knownRepos
     }
   }
-  if (scene === 'tools-preview') {
+  if (scene === 'tools-preview' || scene === 'tools-preview-failed') {
     const action = apoAction()
     const values = { cwd: 'C:\\work\\demo', name: 'demo' }
     const preview = buildPreview(action, values, 'C:\\work\\demo')
+    const failed = scene === 'tools-preview-failed'
+    const rehearsal = summarizeDryRun({
+      cwd: 'C:\\work\\demo',
+      code: failed ? 2 : 0,
+      stdout: failed
+        ? ''
+        : [
+          'create README.md',
+          'create src/app.ts',
+          'create package.json',
+          'create tsconfig.json',
+          'create .gitignore'
+        ].join('\n'),
+      stderr: failed ? '目标目录不为空' : '',
+      aborted: false
+    })
     return {
       page: 'tools',
-      scene: 'preview',
+      scene: failed ? 'preview-failed' : 'preview',
       action,
       values,
       previewText: preview.text,
       dryRun: preview.dryRun,
       cwd: 'C:\\work\\demo',
-      shellLabel: 'PowerShell'
+      shellLabel: 'PowerShell',
+      rehearsal
     }
   }
   const command = "apo init --name '北区'"
@@ -290,9 +309,11 @@ export function toolScreenshotExpectation(scene: string): string | null {
     case 'tools-narrow':
       return '打开发布说明'
     case 'tools-params':
-      return 'north/atlas'
+      return '将打开 https://github.com/north/atlas'
     case 'tools-preview':
-      return '在 C:\\work\\demo 初始化 demo'
+      return '将在 C:\\work\\demo 创建 5 个文件：README.md、src/app.ts、package.json、tsconfig.json、.gitignore'
+    case 'tools-preview-failed':
+      return '预演失败（退出码 2）：目标目录不为空'
     case 'tools-running':
       return '正在初始化北区'
     case 'tools-success':
@@ -310,4 +331,42 @@ export function toolScreenshotExpectation(scene: string): string | null {
     default:
       return null
   }
+}
+
+/** Extra DOM checks for scenes whose visible copy is easy to regress. */
+export function toolScreenshotCheck(scene: string): string | null {
+  if (scene === 'tools-preview') {
+    return `(() => {
+      const fold = document.querySelector('details.tool-command')
+      return fold instanceof HTMLDetailsElement
+        && fold.open === false
+        && document.body.innerText.includes('查看命令')
+        && !document.body.innerText.includes('shell:')
+        && !document.body.innerText.includes('--dry-run')
+    })()`
+  }
+  if (scene === 'tools-preview-failed') {
+    return `(() => {
+      const labels = [...document.querySelectorAll('button')].map(button => button.textContent ?? '')
+      return document.body.innerText.includes('预演没有成功，不能继续执行。')
+        && !labels.some(label => label.includes('初始化'))
+        && labels.includes('取消')
+    })()`
+  }
+  if (scene === 'tools-params') {
+    return `(() => {
+      const labels = [...document.querySelectorAll('button')].map(button => button.textContent ?? '')
+      return labels.includes('打开') && !labels.includes('预览') && !document.body.innerText.includes('即将执行')
+    })()`
+  }
+  if (scene === 'tools-success') {
+    return `!document.body.innerText.includes('（无）')
+      && !document.body.innerText.includes('标准错误')
+      && document.body.innerText.includes('标准输出')
+      && document.body.innerText.includes('已创建项目 北区')`
+  }
+  if (scene === 'tools-narrow') {
+    return 'window.innerWidth < 900'
+  }
+  return null
 }

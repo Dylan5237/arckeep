@@ -92,7 +92,10 @@ export interface ArckeepApi {
   exportToolShelf(json: string): Promise<IpcResult<{ cancelled: boolean }>>
   previewTool(actionId: string, params: Record<string, string>): Promise<IpcResult<ActionPreview>>
   runTool(actionId: string, params: Record<string, string>): Promise<IpcResult<
-    { kind: 'run', runId: string } | { kind: 'open-url' } | { kind: 'open-folder' } | { kind: 'template' }
+    | { kind: 'run', runId: string }
+    | { kind: 'open-url' }
+    | { kind: 'open-folder' }
+    | { kind: 'template', text: string }
   >>
   abortTool(runId: string): Promise<IpcResult<true>>
   copyText(text: string): Promise<IpcResult<true>>

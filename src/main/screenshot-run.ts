@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { BrowserWindow, WebContents } from 'electron'
 import type { ScreenshotScene } from './screenshot-scene.js'
 import { MOCK_GITHUB_LOGIN, screenshotReadyText } from './screenshot-scene.js'
-import { toolScreenshotExpectation } from './screenshot-tools.js'
+import { toolScreenshotCheck, toolScreenshotExpectation } from './screenshot-tools.js'
 
 async function waitUntil(contents: WebContents, predicateSource: string, label: string): Promise<void> {
   const start = Date.now()
@@ -235,6 +235,8 @@ export async function presentScreenshot(options: {
     }
   } else if (toolScreenshotExpectation(scene)) {
     await waitUntil(contents, includesText(toolScreenshotExpectation(scene) ?? ''), scene)
+    const extra = toolScreenshotCheck(scene)
+    if (extra) await waitUntil(contents, extra, `${scene} check`)
     const leaked = await contents.executeJavaScript(`document.body.innerText.includes('LASTEXITCODE')`)
     if (leaked) throw new Error(`screenshot scene ${scene} showed a shell exit wrapper`)
   } else if (scene === 'waiting-hover' || scene === 'waiting-ignore') {
