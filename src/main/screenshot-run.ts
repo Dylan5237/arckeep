@@ -538,6 +538,13 @@ export async function presentScreenshot(options: {
   }
 
   await new Promise(resolve => setTimeout(resolve, 150))
+  if (scene === 'connected') {
+    await contents.executeJavaScript(`(() => {
+      const main = document.querySelector('main')
+      if (main) main.scrollTop = main.scrollHeight
+    })()`)
+    await new Promise(resolve => setTimeout(resolve, 200))
+  }
   const image = await contents.capturePage()
   mkdirSync(path.dirname(file), { recursive: true })
   writeFileSync(file, image.toPNG())

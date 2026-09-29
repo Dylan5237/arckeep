@@ -50,7 +50,7 @@ function messageBox(parent: HTMLElement, kind: 'info' | 'error', text: string): 
 
 async function renderSettings(options?: { focusToken?: boolean, focusWatch?: boolean }): Promise<void> {
   if (!content) return
-  const page = el('section', { class: 'page' }, [
+  const page = el('section', { class: 'page settings' }, [
     el('h1', {}, ['设置']),
     el('p', { class: 'lede' }, ['GitHub 认证、关注仓库和全局热键保存在本机，重启后仍然在。'])
   ])
