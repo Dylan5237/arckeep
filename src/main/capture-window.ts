@@ -39,7 +39,7 @@ export function focusCaptureInput(window: BrowserWindow): void {
 export function createCaptureWindow(options: CaptureWindowOptions): BrowserWindow {
   const window = new BrowserWindow({
     width: 460,
-    height: 348,
+    height: 376,
     show: false,
     title: '快速捕获',
     backgroundColor: '#F5F2EA',
