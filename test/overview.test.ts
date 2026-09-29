@@ -32,6 +32,7 @@ function facts(patch: Partial<OverviewRepoFacts> = {}): OverviewRepoFacts {
     sizeKb: 24,
     hasDefaultBranchCommit: true,
     pushedAt: ago(1),
+    createdAt: null,
     lastCommitAt: ago(1),
     lastIssueActivityAt: null,
     openPrCount: 0,
@@ -167,8 +168,17 @@ describe('overview warnings', () => {
     expect(kinds(classifyOverview([facts({ sizeKb: 0 })], rules, NOW)[0]!)).toContain('空仓')
     expect(kinds(classifyOverview([facts({ hasDefaultBranchCommit: false, lastCommitAt: null })], rules, NOW)[0]!)).toContain('空仓')
 
-    const ancient = classifyOverview([facts({
+    const pushedRecently = classifyOverview([facts({
       pushedAt: ago(1),
+      createdAt: ago(200),
+      lastCommitAt: ago(91),
+      lastIssueActivityAt: ago(91)
+    })], rules, NOW)[0]
+    expect(pushedRecently?.group).toBe('active')
+    expect(kinds(pushedRecently!)).toEqual(['停滞'])
+    const ancient = classifyOverview([facts({
+      pushedAt: ago(91),
+      createdAt: ago(200),
       lastCommitAt: ago(91),
       lastIssueActivityAt: ago(91)
     })], rules, NOW)[0]
@@ -423,6 +433,69 @@ describe('overview warnings', () => {
     expect(countsAsAttention(activeEmpty)).toBe(true)
     expect(overviewCounts([staleFailure, staleEmpty, activeEmpty, aged(29)])).toEqual({ repos: 4, attention: 2 })
   })
+
+  it('groups an empty repo by the newest of commit, issue activity, push, and creation', () => {
+    const rules = config()
+    const untouched = (createdDays: number, patch: Partial<OverviewRepoFacts> = {}) => classifyOverview([facts({
+      name: 'example/untouched',
+      url: 'https://github.com/example/untouched',
+      isEmpty: true,
+      sizeKb: 0,
+      hasDefaultBranchCommit: false,
+      pushedAt: null,
+      lastCommitAt: null,
+      lastIssueActivityAt: null,
+      createdAt: ago(createdDays),
+      ciState: 'none',
+      ...patch
+    })], rules, NOW)[0]!
+
+    const yearsOld = untouched(800)
+    expect(yearsOld.group).toBe('stale')
+    expect(kinds(yearsOld)).toEqual(['空仓', '陈旧'])
+    expect(kinds(yearsOld)).not.toContain('停滞')
+    expect(visibleWarningChips(yearsOld).map(item => item.kind)).toEqual(['空仓'])
+    expect(countsAsAttention(yearsOld)).toBe(false)
+    expect(overviewCounts([yearsOld])).toEqual({ repos: 1, attention: 0 })
+
+    const born29 = untouched(29)
+    const born30 = untouched(30)
+    const born31 = untouched(31)
+    expect(born29.group).toBe('active')
+    expect(born30.group).toBe('active')
+    expect(born31.group).toBe('stale')
+    expect(kinds(born29)).toEqual(['空仓'])
+    expect(kinds(born29)).not.toContain('停滞')
+    expect(kinds(untouched(6))).not.toContain('停滞')
+    expect(countsAsAttention(born29)).toBe(true)
+    expect(countsAsAttention(born31)).toBe(false)
+    expect(visibleWarningChips(born31).map(item => item.kind)).toEqual(['空仓'])
+    expect(overviewCounts([born29, born31])).toEqual({ repos: 2, attention: 1 })
+
+    const discussed = untouched(400, { lastIssueActivityAt: ago(10) })
+    expect(discussed.group).toBe('active')
+    expect(kinds(discussed)).toEqual(['空仓'])
+    expect(countsAsAttention(discussed)).toBe(true)
+    expect(overviewCounts([discussed])).toEqual({ repos: 1, attention: 1 })
+
+    const pushed = (days: number) => untouched(400, {
+      name: 'example/side-push',
+      url: 'https://github.com/example/side-push',
+      isEmpty: false,
+      sizeKb: 4,
+      pushedAt: ago(days)
+    })
+    const recentPush = pushed(5)
+    expect(recentPush.group).toBe('active')
+    expect(kinds(recentPush)).toEqual(['空仓'])
+    expect(kinds(recentPush)).not.toContain('停滞')
+    expect(countsAsAttention(recentPush)).toBe(true)
+    const oldPush = pushed(40)
+    expect(oldPush.group).toBe('stale')
+    expect(visibleWarningChips(oldPush).map(item => item.kind)).toEqual(['空仓'])
+    expect(countsAsAttention(oldPush)).toBe(false)
+    expect(overviewCounts([recentPush, oldPush])).toEqual({ repos: 2, attention: 1 })
+  })
 })
 
 describe('overview loading', () => {
@@ -568,6 +641,7 @@ describe('overview loading', () => {
       isEmpty: empty,
       diskUsage: empty ? 0 : 8,
       pushedAt: empty ? null : ago(days),
+      createdAt: empty ? ago(500) : ago(days),
       defaultBranchRef: empty ? null : { target: { oid: 'abc', committedDate: ago(days), statusCheckRollup: null } },
       pullRequests: { totalCount: 0, nodes: [] },
       issues: { nodes: [] },
@@ -625,14 +699,16 @@ describe('overview loading', () => {
     expect(queries.some(query => /watching\s*\(/.test(query))).toBe(false)
     expect(queries.some(query => query.includes('OWNER, COLLABORATOR, ORGANIZATION_MEMBER'))).toBe(true)
     expect(seen.sort()).toEqual(['blank', 'collab', 'member', 'owned'])
+    expect(queries.some(query => query.includes('\n  createdAt\n'))).toBe(true)
     expect(result.rows.map(row => [row.name, row.group])).toEqual([
       ['example/collab', 'active'],
-      ['example/blank', 'active'],
       ['example/owned', 'active'],
-      ['example/member', 'stale']
+      ['example/member', 'stale'],
+      ['example/blank', 'stale']
     ])
     expect(result.rows.some(row => row.name.includes('only-watch') || row.name.includes('reader') || row.name.includes('triage'))).toBe(false)
-    expect(overviewCounts(result.rows)).toEqual({ repos: 4, attention: 2 })
+    expect(visibleWarningChips(result.rows.find(row => row.name === 'example/blank')!).map(item => item.kind)).toEqual(['空仓'])
+    expect(overviewCounts(result.rows)).toEqual({ repos: 4, attention: 1 })
     expect(result.rows.find(row => row.name === 'example/collab')?.warnings.map(item => item.kind)).toEqual(['停滞'])
     expect(result.rows.find(row => row.name === 'example/member')?.warnings.map(item => item.kind)).toEqual(['陈旧'])
   })
@@ -840,12 +916,21 @@ describe('repository node', () => {
       isEmpty: false,
       diskUsage: 0,
       pushedAt: null,
+      createdAt: ago(3),
       defaultBranchRef: null,
       pullRequests: { totalCount: 0, nodes: [] }
     }, 'example/new')
     expect(parsed.hasDefaultBranchCommit).toBe(false)
+    expect(parsed.createdAt).toBe(ago(3))
     expect(parsed.sizeKb).toBe(0)
-    expect(kinds(classifyOverview([parsed], config(), NOW)[0]!)).toContain('空仓')
+    const fresh = classifyOverview([parsed], config(), NOW)[0]!
+    expect(fresh.group).toBe('active')
+    expect(kinds(fresh)).toEqual(['空仓'])
+    expect(kinds(fresh)).not.toContain('停滞')
+    const dormant = classifyOverview([{ ...parsed, createdAt: ago(400) }], config(), NOW)[0]!
+    expect(dormant.group).toBe('stale')
+    expect(countsAsAttention(dormant)).toBe(false)
+    expect(visibleWarningChips(dormant).map(item => item.kind)).toEqual(['空仓'])
   })
 
   it('reads issue and pull comment times as activity, not only the commit', () => {

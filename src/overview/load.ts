@@ -112,6 +112,7 @@ const REPO_FIELDS = `
   isEmpty
   isArchived
   diskUsage
+  createdAt
   pushedAt
   defaultBranchRef {
     target {
@@ -182,6 +183,7 @@ function errorFacts(name: string, message: string): OverviewRepoFacts {
     sizeKb: null,
     hasDefaultBranchCommit: false,
     pushedAt: null,
+    createdAt: null,
     lastCommitAt: null,
     lastIssueActivityAt: null,
     openPrCount: 0,
@@ -333,6 +335,7 @@ export function parseRepositoryNode(node: unknown, requestedName: string): Overv
     sizeKb,
     hasDefaultBranchCommit: Boolean(oid || committedDate),
     pushedAt: 'pushedAt' in node && typeof node.pushedAt === 'string' ? node.pushedAt : null,
+    createdAt: 'createdAt' in node ? readIso(node.createdAt) : null,
     lastCommitAt: committedDate,
     lastIssueActivityAt: readIssueActivity(node),
     openPrCount,
