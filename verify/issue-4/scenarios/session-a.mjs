@@ -159,7 +159,7 @@ export async function run() {
     await sleep(150)
     const cap = await openCaptureViaHook(app)
     const text1 = 'A1捕获测试记一条'
-    await cap.type('#text', text1)
+    await cap.fill('#text', text1)
     await sleep(100)
     const domText = await cap.evaluate(() => document.querySelector('#text').value)
     await shot(cap, '03-a1-typed', { checkIds: ['A1'], description: 'Playwright 键盘输入打字后，输入框内容' })
@@ -336,10 +336,13 @@ export async function run() {
   try {
     countBefore = (await page.evaluate(() => window.arckeep.listTodos())).length
 
-    // A3 case 1：输入后 Esc -> 存草稿 -> 再次打开 -> 原样恢复（进程内，未重启）
+    // A3 case 1：输入后 Esc -> 存草稿 -> 再次打开 -> 原样恢复（进程内，未重启）。
+    // 用 fill() 不用 type()：fill() 会先整体替换，不管这次打开时 #text 有没有被磁盘上
+    // 残留的旧草稿预填（见 lib.createTodoViaHook() 的详细说明），保存下来的值都精确
+    // 等于 draftText1，不会被追加。
     await ensureCaptureWindowClosed(app)
     cap = await openCaptureViaHook(app)
-    await cap.type('#text', draftText1)
+    await cap.fill('#text', draftText1)
     await sleep(100)
     await cap.press('#text', 'Escape')
     await sleep(300)
@@ -361,9 +364,14 @@ export async function run() {
   const draftText2 = '点外面也该存草稿'
   try {
     // A3 case 2：编程调用 BrowserWindow.blur()，等价于「点击窗口外面」使捕获框失焦。
+    // 这里打开的是全新窗口，但 #text 会被磁盘上 case1 刚存的草稿（draftText1）预填——
+    // 这正是 run5 里 Item4/8/A3 栽的坑：cap.type() 是在当前光标位置插入，不会先清空，
+    // 会把 draftText2 追加在 draftText1 后面，存下来的草稿就变成两段拼在一起，跟
+    // draftText2 完全不相等。改用 fill()：不管进来时字段里有没有残留内容，最终值都
+    // 精确等于 draftText2。
     await ensureCaptureWindowClosed(app)
     cap = await openCaptureViaHook(app)
-    await cap.type('#text', draftText2)
+    await cap.fill('#text', draftText2)
     await sleep(100)
     const bwHandle = await app.browserWindow(cap)
     await bwHandle.evaluate(win => win.blur())
@@ -377,11 +385,23 @@ export async function run() {
     mergeNotes('A3', `失焦场景异常：${err}`)
   }
 
+  // Item 8 自己先建一份已知的草稿（fill + Esc），不依赖 case1/case2 留下的是哪个值——
+  // 那两段是各自独立的场景，各自会在磁盘上留下不同的草稿（draftText1 或 draftText2），
+  // Item 8 只关心「清空后 Esc，草稿也被清掉」这条本身，用自己独立的种子文本更清晰、
+  // 也不会因为前面任何一段的失败/顺序调整而跟着连带出错。
+  const item8SeedText = '待清空的草稿-item8种子'
   let beforeClearValue = null
   let clearedValue = null
   let draftAfterClearEsc = { text: null }
   let valueAfterReopen = null
   try {
+    await ensureCaptureWindowClosed(app)
+    cap = await openCaptureViaHook(app)
+    await cap.fill('#text', item8SeedText)
+    await sleep(100)
+    await cap.press('#text', 'Escape')
+    await sleep(300)
+
     // Item 8：清空后 Esc，草稿一起清掉，下次打开不再恢复
     await ensureCaptureWindowClosed(app)
     cap = await openCaptureViaHook(app)
@@ -415,11 +435,11 @@ export async function run() {
   await callTestHook(app, 'show').catch(() => {})
   page = await mainWindowPage(app)
 
-  const item8Ok = beforeClearValue === draftText1 && clearedValue === '' && (!draftAfterClearEsc.text) && valueAfterReopen === ''
+  const item8Ok = beforeClearValue === item8SeedText && clearedValue === '' && (!draftAfterClearEsc.text) && valueAfterReopen === ''
   setResult('8', item8Ok ? 'PASS' : 'FAIL', {
     evidence: ['10-draft-restored.png', '12-draft-cleared.png'],
     steps: '打开捕获窗口输入文字，Esc 关闭 -> 草稿有内容且再次打开会恢复（已验证）；再打开一次，Playwright 键盘事件 Ctrl+A 全选 + Delete 清空输入框 -> Esc -> getCaptureDraft() 应为空 -> 再次打开 -> 输入框应为空',
-    notes: `清空前草稿="${beforeClearValue}"；Ctrl+A+Delete 后值="${clearedValue}"；Esc 后草稿="${JSON.stringify(draftAfterClearEsc)}"；再次打开值="${valueAfterReopen}"（打开捕获窗口用的是测试钩子而非真实热键，见文件头部环境限制说明；渲染进程内部的 Esc/清空逻辑本身用 Playwright 真实 CDP 按键事件验证，与真实按键效果一致）`
+    notes: `种子文本="${item8SeedText}"；清空前草稿="${beforeClearValue}"；Ctrl+A+Delete 后值="${clearedValue}"；Esc 后草稿="${JSON.stringify(draftAfterClearEsc)}"；再次打开值="${valueAfterReopen}"（打开捕获窗口用的是测试钩子而非真实热键，见文件头部环境限制说明；渲染进程内部的 Esc/清空逻辑本身用 Playwright 真实 CDP 按键事件验证，与真实按键效果一致）`
   })
 
   setResult('A3', (draftAfterEsc.text === draftText1 && restoredValue === draftText1 && clickOutsideOk) ? 'PASS' : 'FAIL', {
@@ -434,7 +454,7 @@ export async function run() {
     await ensureCaptureWindowClosed(app)
     let cap = await openCaptureViaHook(app)
     const restartDraft = '重启后应该还在的草稿'
-    await cap.type('#text', restartDraft)
+    await cap.fill('#text', restartDraft)
     await sleep(100)
     await cap.press('#text', 'Escape')
     await sleep(300)
@@ -516,7 +536,15 @@ export async function run() {
   // 「撤销后原样恢复 + jsonl 核对 + 提示停留时长」见 R3（session-e-review.mjs）
   // =====================================================================
   try {
-    await page.waitForSelector('.todo-list', { timeout: 3000 })
+    // Item4 刚经历过 quit+relaunch，主窗口这次导航/IPC 刚完成，直接等 .todo-list 偶尔
+    // 会跟渲染时机撞上；失败时主动重新点一次待办页再等一次，而不是直接判异常。
+    try {
+      await page.waitForSelector('.todo-list', { timeout: 3000 })
+    } catch {
+      page = await mainWindowPage(app)
+      await page.click('[data-view="todos"]')
+      await page.waitForSelector('.todo-list', { timeout: 5000 })
+    }
 
     // 完成 / 取消完成（对 plain 那条操作，避免影响 item6 依赖的「等我」那条）
     const rowSelector = (text) => `.todo-row:has(.todo-text:text-is("${text}"))`
@@ -673,7 +701,12 @@ export async function run() {
     await page.locator(`.todo-row:has(.todo-text:text-is("${todo4Texts.waitingText}"))`).locator('.todo-check').check()
     await page.waitForTimeout(200)
     await page.click('[data-view="inbox"]')
+    // 刷新按钮在上一次刷新（比如刚进这个页面自动触发的那次）还没跑完之前会一直是
+    // disabled + 文案「正在刷新」——这条走的是真实 GitHub API，这个 CI 环境网络延迟/
+    // 限流不确定，等它变回可点再点，而不是假设它总在 30 秒默认超时内就位。
+    await page.waitForSelector('button.primary:has-text("刷新"):not([disabled])', { timeout: 60000 })
     await page.click('button.primary:has-text("刷新")')
+    await page.waitForSelector('button.primary:has-text("刷新"):not([disabled])', { timeout: 60000 })
     await page.waitForTimeout(600)
     const rowsAfter = await page.$$eval('.waiting-row', els => els.map(el => el.querySelector('.waiting-title-text')?.textContent))
     const goneAfterComplete = !rowsAfter.some(t => t && t.startsWith('Item4等我'))

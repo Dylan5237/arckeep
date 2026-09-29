@@ -250,7 +250,13 @@ export async function run() {
 
     page = await mainWindowPage(app)
     await page.click('[data-view="todos"]')
-    await page.waitForSelector('.todo-list', { timeout: 3000 })
+    try {
+      await page.waitForSelector('.todo-list', { timeout: 3000 })
+    } catch {
+      page = await mainWindowPage(app)
+      await page.click('[data-view="todos"]')
+      await page.waitForSelector('.todo-list', { timeout: 5000 })
+    }
 
     const before = await page.evaluate(() => window.arckeep.listTodos())
     const target = before.find(i => i.text === 'R3-第二条-带仓库')

@@ -249,12 +249,21 @@ export async function openCaptureViaHook(app, opts) {
  * 另外这里会显式等待捕获窗口真正关闭（而不是只等 toast），如果没关闭就直接抛出异常，
  * 避免像 openCaptureWindow() 那样的单例窗口在「上一次没能成功保存」时被后续调用误判
  * 成一个全新的空白窗口，导致后面的输入全部追加进同一个残留窗口、层层错误传导下去。
+ *
+ * 还有一个更隐蔽的坑（run5 里 Item4/8/A3 就是栽在这上面）：捕获窗口打开时会自动用磁盘上
+ * 上一次没保存成功的草稿（getCaptureDraft()）预填 #text（见 src/renderer/capture.ts），
+ * 只要上一次交互是 Esc/失焦（走 dismiss，不清草稿）而不是成功保存（走 closeCapture('saved')
+ * 才会 clearCaptureDraft()），这次打开就会带着上次的文字。Playwright 的 cap.type() 是在
+ * 当前光标位置插入字符，不是先清空——如果不先清掉，新打的字会追加在残留草稿后面，保存下来
+ * 的 text 就变成「上次草稿+这次文字」拼在一起，跟期望的精确字符串完全不一样。这里用
+ * cap.fill() 而不是 cap.type()：fill() 会先整体选中再替换，不管进来时字段里有没有残留
+ * 草稿，最终值都精确等于 text，不依赖光标位置或已有内容。
  */
 export async function createTodoViaHook(app, text, { waiting = false, timeoutMs = 4000 } = {}) {
   await ensureCaptureWindowClosed(app)
   await sleep(150)
   const cap = await openCaptureViaHook(app)
-  await cap.type('#text', text)
+  await cap.fill('#text', text)
   await sleep(80)
   const domTextBeforeSubmit = await cap.evaluate(() => document.querySelector('#text').value).catch(() => null)
   if (waiting) {

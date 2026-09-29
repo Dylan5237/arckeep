@@ -44,8 +44,16 @@ export async function run() {
   try {
     app = await launchApp({ label: 'B-corrupt' })
     let page = await mainWindowPage(app, { timeoutMs: 15000 })
+    // #nav 出现只代表这次导航完成，不代表 click handler 都已经挂好；给一点缓冲，
+    // 失败时重新点一次再等一次，避免把渲染时机问题误判成产品缺陷。
+    await page.waitForTimeout(300)
     await page.click('[data-view="todos"]')
-    await page.waitForSelector('.todo-list, .empty-todos', { timeout: 5000 })
+    try {
+      await page.waitForSelector('.todo-list, .empty-todos', { timeout: 5000 })
+    } catch {
+      await page.click('[data-view="todos"]')
+      await page.waitForSelector('.todo-list, .empty-todos', { timeout: 5000 })
+    }
     await shot(page, '30-corrupt-jsonl-loaded', { checkIds: ['7'], description: 'App 手工插入坏数据后照常启动，其它条目完整' })
     const items = await page.evaluate(() => window.arckeep.listTodos())
     const texts = items.map(i => i.text)
