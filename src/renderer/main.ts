@@ -5,20 +5,18 @@ import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
 import { DEFAULT_HOTKEY } from '../shared/types'
 import { renderTodos } from './todos-page'
+import { renderToolSettings } from './tool-settings'
+import { renderTools } from './tools-page'
 import { renderWaiting } from './waiting-page'
 import { renderWaitingSettings } from './waiting-settings'
 
 type ViewId = 'inbox' | 'projects' | 'todos' | 'tools' | 'settings'
-type PlaceholderId = Exclude<ViewId, 'settings' | 'todos' | 'inbox'>
+type PlaceholderId = Exclude<ViewId, 'settings' | 'todos' | 'inbox' | 'tools'>
 
 const PAGES: Record<PlaceholderId, { title: string, body: string }> = {
   projects: {
     title: '项目总览',
     body: '关注的仓库会在这里汇总。列表留空时走自动模式。这一页先占位。'
-  },
-  tools: {
-    title: '工具架',
-    body: '常用工具入口会放在这里。这一页先占位。'
   }
 }
 
@@ -91,7 +89,8 @@ async function renderSettings(options?: { focusToken?: boolean }): Promise<void>
     renderHotkeyCard(state),
     renderGithubCard(state),
     renderReposCard(state),
-    renderWaitingSettings(state, () => renderSettings())
+    renderWaitingSettings(state, () => renderSettings()),
+    await renderToolSettings(state, () => renderSettings())
   )
   paintHotkeyBanner(state.hotkeyUnavailable)
   if (options?.focusToken) {
@@ -344,6 +343,9 @@ async function show(view: ViewId, options?: { focusToken?: boolean }): Promise<v
   } else if (view === 'inbox') {
     await refreshHotkeyBanner()
     await renderWaiting(content, (next, nextOptions) => { void show(next, nextOptions) })
+  } else if (view === 'tools') {
+    await refreshHotkeyBanner()
+    await renderTools(content, () => { void show('settings') })
   } else {
     await refreshHotkeyBanner()
     renderPlaceholder(view)
@@ -369,4 +371,9 @@ window.arckeep.onFocusHotkey(() => {
 })
 
 const initial = new URLSearchParams(location.search).get('page')
-void show(initial === 'settings' ? 'settings' : initial === 'todos' ? 'todos' : 'inbox')
+void show(
+  initial === 'settings' ? 'settings'
+    : initial === 'todos' ? 'todos'
+      : initial === 'tools' ? 'tools'
+        : 'inbox'
+)

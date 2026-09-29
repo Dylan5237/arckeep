@@ -1,3 +1,4 @@
+import { TOOL_SCREENSHOT_SCENES } from './screenshot-tools.js'
 import { SettingsService } from './settings-service.js'
 import type { SecretBox } from './token-store.js'
 
@@ -30,7 +31,8 @@ export const SCREENSHOT_SCENES = [
   'waiting-hover',
   'waiting-watch',
   'waiting-hidden',
-  'waiting-family'
+  'waiting-family',
+  ...TOOL_SCREENSHOT_SCENES
 ] as const
 
 export type ScreenshotScene = (typeof SCREENSHOT_SCENES)[number]
@@ -55,7 +57,12 @@ export function parseScreenshotScene(value: string | undefined): ScreenshotScene
 
 export function screenshotWindowSize(scene: ScreenshotScene): { width: number, height: number } {
   if (scene === 'waiting-narrow') return { width: 800, height: 1680 }
+  if (scene === 'tools-narrow') return { width: 800, height: 1500 }
   if (scene === 'narrow' || scene === 'todos-narrow') return { width: 800, height: 760 }
+  if (scene === 'tools' || scene === 'tools-running' || scene === 'tools-exit' || scene === 'tools-aborted') {
+    return { width: 1120, height: 1100 }
+  }
+  if (scene === 'tools-invalid') return { width: 1120, height: 980 }
   if (scene === 'waiting-hover') return { width: 1180, height: 900 }
   if (scene === 'waiting-watch' || scene === 'waiting-hidden' || scene === 'waiting-family') return { width: 1180, height: 720 }
   if (scene === 'waiting' || scene === 'waiting-rate-limit') return { width: 1180, height: 1680 }
@@ -73,7 +80,12 @@ export function screenshotWindowSize(scene: ScreenshotScene): { width: number, h
 }
 
 export function screenshotOpensSettings(scene: ScreenshotScene): boolean {
-  return scene === 'signed-out' || scene === 'invalid-token' || scene === 'connected' || scene === 'hotkey-conflict' || scene === 'hotkey-save-conflict'
+  return scene === 'signed-out'
+    || scene === 'invalid-token'
+    || scene === 'connected'
+    || scene === 'hotkey-conflict'
+    || scene === 'hotkey-save-conflict'
+    || scene === 'tools-invalid'
 }
 
 export function screenshotOpensTodos(scene: ScreenshotScene): boolean {
@@ -90,6 +102,13 @@ export function screenshotShowsMainWindow(scene: ScreenshotScene): boolean {
     && scene !== 'capture-filled'
     && scene !== 'capture-draft'
     && scene !== 'capture-saved'
+}
+
+export function screenshotStartPage(scene: ScreenshotScene): 'inbox' | 'settings' | 'tools' | 'todos' {
+  if (screenshotOpensSettings(scene)) return 'settings'
+  if (screenshotOpensTodos(scene)) return 'todos'
+  if (scene.startsWith('tools')) return 'tools'
+  return 'inbox'
 }
 
 function fixtureSecretBox(): SecretBox {

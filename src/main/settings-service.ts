@@ -1,6 +1,7 @@
 import { parseWaitingConfig } from '../shared/waiting/rules.js'
 import type { WaitingConfig } from '../shared/waiting/types.js'
 import type { AppState, IpcResult } from '../shared/types.js'
+import { validateToolShelfText } from './tool-validate.js'
 import {
   readGhAuthToken,
   resolveGithubAuth,
@@ -87,8 +88,18 @@ export class SettingsService {
       hotkeyWarning: this.runtime.warning,
       hotkeyUnavailable: this.runtime.banner,
       github,
-      waiting: this.settings.waiting
+      waiting: this.settings.waiting,
+      toolShelfJson: this.settings.toolShelfJson
     }
+  }
+
+  setToolShelfJson(input: unknown): IpcResult<{ toolShelfJson: string }> {
+    if (typeof input !== 'string') return { ok: false, error: '工具架配置必须是 JSON 文本' }
+    const validated = validateToolShelfText(input)
+    if (!validated.ok) return { ok: false, error: validated.error }
+    this.settings.toolShelfJson = input
+    this.persist()
+    return { ok: true, data: { toolShelfJson: input } }
   }
 
   setWaiting(input: unknown): IpcResult<{ waiting: WaitingConfig }> {

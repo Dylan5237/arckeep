@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "arckeep://schema/tool-shelf.schema.json",
+  "title": "Arckeep 工具架",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "actions"],
+  "properties": {
+    "version": { "const": 1 },
+    "actions": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/action" }
+    }
+  },
+  "$defs": {
+    "param": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,40}$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "default": { "type": "string", "maxLength": 4000 },
+        "required": { "type": "boolean" }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "type"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,60}$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "description": { "type": "string", "maxLength": 400 },
+        "type": { "enum": ["open-url", "open-folder", "run-command", "template"] },
+        "params": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/param" }
+        },
+        "url": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "path": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "editor": { "type": "string", "maxLength": 400 },
+        "shell": { "enum": ["cmd", "powershell", "git-bash"] },
+        "cwd": { "type": "string", "maxLength": 4000 },
+        "command": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 8000 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "open-url" } },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["url"],
+            "properties": {
+              "path": false,
+              "editor": false,
+              "shell": false,
+              "cwd": false,
+              "command": false,
+              "text": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "open-folder" } },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["path"],
+            "properties": {
+              "url": false,
+              "shell": false,
+              "cwd": false,
+              "command": false,
+              "text": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "run-command" } },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["command", "shell"],
+            "properties": {
+              "url": false,
+              "path": false,
+              "editor": false,
+              "text": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "template" } },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["text"],
+            "properties": {
+              "url": false,
+              "path": false,
+              "editor": false,
+              "shell": false,
+              "cwd": false,
+              "command": false
+            }
+          }
+        }
+      ]
+    }
+  }
+}

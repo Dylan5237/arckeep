@@ -25,7 +25,15 @@ describe('screenshot fixtures', () => {
     expect(screenshotWindowSize('waiting-narrow')).toEqual({ width: 800, height: 1680 })
     expect(screenshotWindowSize('waiting-hover')).toEqual({ width: 1180, height: 900 })
     expect(screenshotOpensSettings('waiting-hover')).toBe(false)
+    expect(screenshotWindowSize('waiting-watch')).toEqual({ width: 1180, height: 720 })
+    expect(parseScreenshotScene('waiting-hidden')).toBe('waiting-hidden')
+    expect(parseScreenshotScene('waiting-family')).toBe('waiting-family')
+    expect(screenshotOpensSettings('waiting-watch')).toBe(false)
+    expect(screenshotWindowSize('tools-narrow')).toEqual({ width: 800, height: 1500 })
+    expect(screenshotOpensSettings('tools')).toBe(false)
+    expect(screenshotOpensSettings('tools-invalid')).toBe(true)
     expect(parseScreenshotScene('not-a-scene')).toBe('nav')
+    expect(parseScreenshotScene('tools-exit')).toBe('tools-exit')
   })
 
   it('builds mocked auth states without writing the stand-in secrets as plaintext', async () => {

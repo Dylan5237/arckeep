@@ -3,6 +3,7 @@ import path from 'node:path'
 import type { BrowserWindow, WebContents } from 'electron'
 import type { ScreenshotScene } from './screenshot-scene.js'
 import { MOCK_GITHUB_LOGIN } from './screenshot-scene.js'
+import { toolScreenshotExpectation } from './screenshot-tools.js'
 
 async function waitUntil(contents: WebContents, predicateSource: string, label: string): Promise<void> {
   const start = Date.now()
@@ -150,6 +151,8 @@ export async function presentScreenshot(options: {
       true
     `)
     await waitUntil(contents, includesText('删除这条待办？'), '删除这条待办？')
+  } else if (toolScreenshotExpectation(scene)) {
+    await waitUntil(contents, includesText(toolScreenshotExpectation(scene) ?? ''), scene)
   } else if (scene === 'waiting-hover') {
     await waitUntil(contents, includesText('验收北区截图'), '验收北区截图')
     await contents.executeJavaScript(`

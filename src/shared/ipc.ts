@@ -28,5 +28,16 @@ export const IpcChannel = {
   setShowIgnored: 'waiting:show-ignored',
   setWaiting: 'waiting:set-config',
   openExternal: 'waiting:open-external',
-  advanceWaitingDays: 'waiting:advance-days'
+  advanceWaitingDays: 'waiting:advance-days',
+  setToolShelf: 'tools:set-config',
+  getToolExample: 'tools:example',
+  getToolCatalog: 'tools:catalog',
+  importToolShelf: 'tools:import',
+  exportToolShelf: 'tools:export',
+  previewTool: 'tools:preview',
+  runTool: 'tools:run',
+  abortTool: 'tools:abort',
+  copyText: 'tools:copy',
+  getToolFixture: 'tools:fixture',
+  toolEvent: 'tools:event'
 } as const

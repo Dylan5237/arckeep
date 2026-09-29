@@ -14,15 +14,15 @@ import {
   normalizeTodoId,
   normalizeTodoInput,
   normalizeTodoUpdate,
+  requireSender,
   requireTrustedSender
 } from './ipc-validators.js'
 import { captureDraftPath, settingsFilePath, testHookTodosPath, todosFilePath, userDataDir, waitingCachePath, waitingDismissalPath } from './paths.js'
 import {
   createScreenshotSettings,
   parseScreenshotScene,
-  screenshotOpensSettings,
-  screenshotOpensTodos,
   screenshotShowsMainWindow,
+  screenshotStartPage,
   screenshotWindowSize
 } from './screenshot-scene.js'
 import { presentScreenshot } from './screenshot-run.js'
@@ -47,6 +47,8 @@ import { clearCaptureDraft, loadCaptureDraft, saveCaptureDraft } from './todos/d
 import { TodoStore } from './todos/store.js'
 import { createSafeStorageBox } from './token-store.js'
 import type { HotkeyRegistrar } from './hotkey.js'
+import { registerToolIpc } from './tool-ipc.js'
+import { ToolRunner } from './tool-runner.js'
 import { createUrlGuard, isTrustedBrowserUrl } from './url-trust.js'
 import { hardenedWebPreferences } from './window-prefs.js'
 
@@ -73,6 +75,11 @@ let service: SettingsService | null = null
 let todos: TodoStore | null = null
 let waiting: WaitingService | ReturnType<typeof createScreenshotWaiting> | null = null
 let hotkeyNoticeSent = false
+const toolRunner = new ToolRunner(event => {
+  const win = mainWindow
+  if (!win || win.isDestroyed()) return
+  win.webContents.send(IpcChannel.toolEvent, event)
+})
 
 const devServerOrigin = process.env.ARCKEEP_DEV === '1' ? process.env.VITE_DEV_SERVER_URL ?? null : null
 const rendererDir = path.join(__dirname, '../renderer')
@@ -347,9 +354,8 @@ function createWindow(): BrowserWindow {
     })
   }
 
-  const query: Record<string, string> = {}
-  if (screenshotPath && screenshotOpensSettings(screenshotScene)) query.page = 'settings'
-  if (screenshotPath && screenshotOpensTodos(screenshotScene)) query.page = 'todos'
+  const startPage = screenshotPath ? screenshotStartPage(screenshotScene) : 'inbox'
+  const query: Record<string, string> = startPage === 'inbox' ? {} : { page: startPage }
   loadRenderer(window, 'index.html', query)
   return window
 }
@@ -556,6 +562,13 @@ if (!gotLock) {
       })
     }
     registerIpc(service, todos)
+    registerToolIpc({
+      guard: event => requireSender(event, mainWindow?.webContents ?? null),
+      getWindow: () => mainWindow,
+      settings: service,
+      runner: toolRunner,
+      screenshotScene
+    })
     mainWindow = createWindow()
     try {
       createTray()
@@ -572,6 +585,7 @@ if (!gotLock) {
 const handleBeforeQuit = createGracefulShutdownHandler({
   quit: () => app.quit(),
   shutdown: () => {
+    toolRunner.abortAll()
     globalShortcut.unregisterAll()
     tray?.destroy()
     tray = null
