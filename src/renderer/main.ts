@@ -4,6 +4,8 @@ import { activeHotkeyLabel, hotkeyUnavailableMessage } from '../shared/hotkey-st
 import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
 import { DEFAULT_HOTKEY } from '../shared/types'
+import { renderOverview } from './overview-page'
+import { renderOverviewSettings } from './overview-settings'
 import { renderTodos } from './todos-page'
 import { renderToolSettings } from './tool-settings'
 import { renderTools } from './tools-page'
@@ -11,14 +13,6 @@ import { renderWaiting } from './waiting-page'
 import { renderWaitingSettings } from './waiting-settings'
 
 type ViewId = 'inbox' | 'projects' | 'todos' | 'tools' | 'settings'
-type PlaceholderId = Exclude<ViewId, 'settings' | 'todos' | 'inbox' | 'tools'>
-
-const PAGES: Record<PlaceholderId, { title: string, body: string }> = {
-  projects: {
-    title: '项目总览',
-    body: '关注的仓库会在这里汇总。列表留空时走自动模式。这一页先占位。'
-  }
-}
 
 const brand = document.querySelector<HTMLImageElement>('#brand-mark')
 if (brand) brand.src = brandMark
@@ -52,23 +46,12 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node
 }
 
-function renderPlaceholder(view: PlaceholderId): void {
-  if (!content) return
-  const page = PAGES[view]
-  content.replaceChildren(
-    el('section', { class: 'page placeholder' }, [
-      el('h1', {}, [page.title]),
-      el('p', { class: 'lede' }, [page.body])
-    ])
-  )
-}
-
 function messageBox(parent: HTMLElement, kind: 'info' | 'error', text: string): void {
   parent.querySelector('.alert')?.remove()
   parent.append(el('div', { class: kind === 'error' ? 'alert error' : 'alert', role: 'alert' }, [text]))
 }
 
-async function renderSettings(options?: { focusToken?: boolean }): Promise<void> {
+async function renderSettings(options?: { focusToken?: boolean, focusWatch?: boolean }): Promise<void> {
   if (!content) return
   const page = el('section', { class: 'page' }, [
     el('h1', {}, ['设置']),
@@ -90,11 +73,17 @@ async function renderSettings(options?: { focusToken?: boolean }): Promise<void>
     renderGithubCard(state),
     renderReposCard(state),
     renderWaitingSettings(state, () => renderSettings()),
+    renderOverviewSettings(state, () => renderSettings()),
     await renderToolSettings(state, () => renderSettings())
   )
   paintHotkeyBanner(state.hotkeyUnavailable)
   if (options?.focusToken) {
     page.querySelector<HTMLInputElement>('#github-pat')?.focus()
+  }
+  if (options?.focusWatch) {
+    const input = page.querySelector<HTMLInputElement>('#watched-repo')
+    input?.scrollIntoView({ block: 'center' })
+    input?.focus()
   }
 }
 
@@ -195,7 +184,12 @@ function renderReposCard(state: AppState): HTMLElement {
       list.append(el('li', {}, [el('span', {}, [repo]), remove]))
     }
   }
-  const input = el('input', { type: 'text', placeholder: 'example/demo', 'aria-label': '关注仓库' })
+  const input = el('input', {
+    id: 'watched-repo',
+    type: 'text',
+    placeholder: 'example/demo',
+    'aria-label': '关注仓库'
+  })
   const add = el('button', { type: 'button', class: 'primary' }, ['添加'])
   add.addEventListener('click', async () => {
     const result = await window.arckeep.setRepos([...state.watchedRepos, input.value])
@@ -322,7 +316,7 @@ async function refreshHotkeyBanner(): Promise<void> {
 
 let leaveTodos: (() => void) | null = null
 
-async function show(view: ViewId, options?: { focusToken?: boolean }): Promise<void> {
+async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?: boolean }): Promise<void> {
   leaveTodos?.()
   leaveTodos = null
   setActive(view)
@@ -334,12 +328,12 @@ async function show(view: ViewId, options?: { focusToken?: boolean }): Promise<v
   } else if (view === 'inbox') {
     await refreshHotkeyBanner()
     await renderWaiting(content, (next, nextOptions) => { void show(next, nextOptions) })
+  } else if (view === 'projects') {
+    await refreshHotkeyBanner()
+    await renderOverview(content, (next, nextOptions) => { void show(next, nextOptions) })
   } else if (view === 'tools') {
     await refreshHotkeyBanner()
     await renderTools(content, () => { void show('settings') })
-  } else {
-    await refreshHotkeyBanner()
-    renderPlaceholder(view)
   }
 }
 
@@ -364,7 +358,8 @@ window.arckeep.onFocusHotkey(() => {
 const initial = new URLSearchParams(location.search).get('page')
 void show(
   initial === 'settings' ? 'settings'
-    : initial === 'todos' ? 'todos'
-      : initial === 'tools' ? 'tools'
-        : 'inbox'
+    : initial === 'projects' ? 'projects'
+      : initial === 'todos' ? 'todos'
+        : initial === 'tools' ? 'tools'
+          : 'inbox'
 )

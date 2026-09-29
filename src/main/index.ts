@@ -17,7 +17,17 @@ import {
   requireSender,
   requireTrustedSender
 } from './ipc-validators.js'
-import { captureDraftPath, settingsFilePath, testHookTodosPath, todosFilePath, userDataDir, waitingCachePath, waitingDismissalPath } from './paths.js'
+import { OverviewService } from './overview-service.js'
+import {
+  captureDraftPath,
+  overviewCachePath,
+  settingsFilePath,
+  testHookTodosPath,
+  todosFilePath,
+  userDataDir,
+  waitingCachePath,
+  waitingDismissalPath
+} from './paths.js'
 import {
   createScreenshotSettings,
   parseScreenshotScene,
@@ -25,6 +35,7 @@ import {
   screenshotStartPage,
   screenshotWindowSize
 } from './screenshot-scene.js'
+import { createScreenshotOverview } from './screenshot-overview.js'
 import { presentScreenshot } from './screenshot-run.js'
 import { createScreenshotWaiting } from './screenshot-waiting.js'
 import {
@@ -74,6 +85,7 @@ let isQuitting = false
 let service: SettingsService | null = null
 let todos: TodoStore | null = null
 let waiting: WaitingService | ReturnType<typeof createScreenshotWaiting> | null = null
+let overview: OverviewService | ReturnType<typeof createScreenshotOverview> | null = null
 let hotkeyNoticeSent = false
 const toolRunner = new ToolRunner(event => {
   const win = mainWindow
@@ -524,6 +536,20 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
     guard(event)
     return waiting?.advanceDays(days) ?? { ok: false, error: '等我处理尚未就绪' }
   })
+  ipcMain.handle(IpcChannel.getOverview, event => {
+    guard(event)
+    return overview?.current()
+  })
+  ipcMain.handle(IpcChannel.refreshOverview, event => {
+    guard(event)
+    return overview?.refresh() ?? Promise.reject(new Error('项目总览尚未就绪'))
+  })
+  ipcMain.handle(IpcChannel.setOverview, (event, config: unknown) => {
+    guard(event)
+    const saved = settings.setOverview(config)
+    if (!saved.ok) return saved
+    return settings.getState().then(state => ({ ok: true as const, data: state }))
+  })
 }
 
 const gotLock = app.requestSingleInstanceLock()
@@ -554,6 +580,7 @@ if (!gotLock) {
     if (screenshotPath) {
       service = createScreenshotSettings(screenshotScene, settingsFilePath(userData))
       waiting = createScreenshotWaiting(screenshotScene)
+      overview = createScreenshotOverview(screenshotScene)
     } else {
       service = new SettingsService({
         file: settingsFilePath(userData),
@@ -568,6 +595,9 @@ if (!gotLock) {
         dismissals: waitingDismissalPath(userData)
       }, {
         todos: todoProvider,
+        log: message => console.error(message)
+      })
+      overview = new OverviewService(service, overviewCachePath(userData), {
         log: message => console.error(message)
       })
     }

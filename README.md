@@ -2,7 +2,7 @@
 
 Arckeep：Dylan 的 AI 原生个人工作台（Windows 桌面应用）。
 
-这个仓库目前是骨架加待办：Electron + TypeScript，主进程 / preload / 渲染进程分离。等我处理、项目总览、工具架仍是占位页。设置、托盘和打包流水线已经接上。待办写在 userData 里的 `todos.jsonl`（只追加，读的时候折叠）。默认全局热键 `Ctrl+Alt+Space` 打开快速捕获，输入框直接获得焦点。正文里的 `#owner/repo`、能对上的 `#仓库名` 和 `!等我` 会在保存时拆出来。Esc 或点到窗口外不创建待办，草稿写在 `capture-draft.json`，下次热键还会回来。正文被清空后再按 Esc，连仓库标签和等我一起丢掉。可以在设置里改热键。
+这个仓库是 Electron + TypeScript，主进程 / preload / 渲染进程分离。「等我处理」「项目总览」「待办」和「工具架」都已经接上。设置、托盘和打包流水线也已经接上。待办写在 userData 里的 `todos.jsonl`（只追加，读的时候折叠）。默认全局热键 `Ctrl+Alt+Space` 打开快速捕获，输入框直接获得焦点。正文里的 `#owner/repo`、能对上的 `#仓库名` 和 `!等我` 会在保存时拆出来。Esc 或点到窗口外不创建待办，草稿写在 `capture-draft.json`，下次热键还会回来。正文被清空后再按 Esc，连仓库标签和等我一起丢掉。可以在设置里改热键。
 
 渲染层用 Vite 打包的普通 TypeScript，没有 UI 框架。页面只有导航和一张设置表单，先不引入组件运行时。
 
@@ -23,7 +23,10 @@ npm run typecheck
 npm test
 npm run build:app
 npm start
+npm run overview -- --json
 ```
+
+`npm run overview -- --json` 只读查询项目总览，认证用 `gh auth token` 或环境变量 `GITHUB_TOKEN`。默认不含已归档仓库；`--include-archived` 把它们加回来，并带 `archived: true`。`--fixture` 不访问网络。
 
 设置写在 `app.getPath('userData')`。应用启动时把该目录指到 `%APPDATA%\Arckeep\`（目录名是 `Arckeep`，不是 package 名的小写）。GitHub token 经 Electron `safeStorage` 加密后写入 `settings.json`，不写日志、不以明文落盘。本机 `gh auth token` 可用时优先使用 gh CLI，不把这份 token 再存一份。
 
