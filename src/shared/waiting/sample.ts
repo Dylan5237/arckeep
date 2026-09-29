@@ -79,7 +79,13 @@ export function sampleWaitingRows(): WaitingRow[] {
               ? '请确认这一版能否合入'
               : reasons.includes('提及')
                 ? '@你 出现在最新评论里'
-                : reasons[0] ?? '等待'
+                : reasons.includes('状态文档')
+                  ? 'STATUS.md 开头写着 NEEDS USER ACTION'
+                  : reasons.includes('没推送')
+                    ? '本地分支比 origin 超前，还没有 push'
+                    : reasons.includes('待办')
+                      ? '待办：核对这周要你处理的事项'
+                      : reasons[0] ?? '等待'
     const type = reasons.includes('待办')
       ? 'todo' as const
       : reasons.includes('待你审/合') || reasons.includes('请求 review')

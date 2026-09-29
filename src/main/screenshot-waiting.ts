@@ -58,6 +58,7 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
       parentNumber: 40,
       parent: `https://github.com/${repo}/issues/40`,
       childCount: 0,
+      tier: 'strong',
       ignored: false
     })
     return base({
@@ -78,6 +79,7 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
           parentNumber: null,
           parent: null,
           childCount: 2,
+          tier: 'strong',
           ignored: false
         },
         child(41, '核对导出的列名', 4),
