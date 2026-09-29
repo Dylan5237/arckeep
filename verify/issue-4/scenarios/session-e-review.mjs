@@ -457,8 +457,23 @@ export async function run() {
     await shot(page, '72-r5-collapsed-again', { checkIds: ['R5'], description: 'R5：再次点击折叠回去' })
 
     // 取消完成一条，应回到未完成列表，N 减少
-    await page.click('[data-action="completed-group"] summary') // 展开以便操作
-    await page.waitForTimeout(100)
+    // 分组渲染逻辑（todos-page.ts）每次重绘都用 group.open = storedCompletedOpen()
+    // 从 localStorage 读值；而 <details> 的 toggle 事件是异步派发的，如果点击之后、
+    // toggle 事件把新状态写回 localStorage 之前，正好来了一次跟本次点击无关的重绘
+    // （比如 onTodosChanged 广播触发的 draw()），新画出来的 <details> 就会用旧值把
+    // 刚才这次点击「视觉上顶开了、状态上又合上」。所以这里不是点一次就假设一定展开，
+    // 而是轮询校验 el.open === true，没展开就再点一次，直到真的展开或者放弃重试。
+    let openRetries = 0
+    let reopened = false
+    for (let i = 0; i < 8; i++) {
+      const isOpen = await page.locator('[data-action="completed-group"]').evaluate(el => el.open).catch(() => false)
+      if (isOpen) { reopened = true; break }
+      await page.click('[data-action="completed-group"] summary').catch(() => {})
+      openRetries = i + 1
+      await page.waitForTimeout(250)
+    }
+    appendEvidenceJson('r5-reopen-before-uncheck', { reopened, openRetries })
+    await page.waitForSelector(`${rowSelector('R5-待完成-A')} .todo-check`, { state: 'visible', timeout: 5000 })
     await page.locator(rowSelector('R5-待完成-A')).locator('.todo-check').uncheck()
     await page.waitForTimeout(200)
     const summaryTextAfterUncheck = await page.textContent('[data-action="completed-group"] summary').catch(() => null)
@@ -479,9 +494,9 @@ export async function run() {
       && backInOpenList === 1
 
     setResult('R5', ok ? 'PASS' : 'FAIL', {
-      evidence: ['70-r5-collapsed-default.png', '71-r5-expanded.png', '72-r5-collapsed-again.png', '73-r5-uncheck-moves-back.png', 'r5-summary.json'],
+      evidence: ['70-r5-collapsed-default.png', '71-r5-expanded.png', '72-r5-collapsed-again.png', '73-r5-uncheck-moves-back.png', 'r5-summary.json', 'r5-reopen-before-uncheck.json'],
       steps: '新建 4 条待办，完成其中 2 条；重新进入待办页，核对「已完成」分组默认折叠（<details open===false>）、标题「已完成 · N」与实际完成数一致；点击标题展开能看到这些行；再点击折叠回去；取消其中一条完成状态，核对它回到未完成列表、N 相应减一',
-      notes: `默认折叠=${!detailsOpenDefault}；标题="${summaryText}"（实际完成数=${actualCompletedCount}）；DOM 内可见行数与实际一致=${completedCountInDom === actualCompletedCount}；点击展开后 open=${detailsOpenAfterClick}，可见行数=${visibleAfterExpand}；再次点击折叠后 open=${detailsOpenAfterSecondClick}（应为false）；取消完成后标题="${summaryTextAfterUncheck}"；该条是否回到未完成列表=${backInOpenList === 1}`
+      notes: `默认折叠=${!detailsOpenDefault}；标题="${summaryText}"（实际完成数=${actualCompletedCount}）；DOM 内可见行数与实际一致=${completedCountInDom === actualCompletedCount}；点击展开后 open=${detailsOpenAfterClick}，可见行数=${visibleAfterExpand}；再次点击折叠后 open=${detailsOpenAfterSecondClick}（应为false）；取消完成前重新展开是否需要多次点击=${reopened ? `是，重试 ${openRetries} 次后才真正展开` : '未能展开（放弃重试）'}（若>0 次说明碰到了 <details> toggle 事件异步写 localStorage 与后台重绘的时序竞争，见代码注释，这不是本条要测的行为，只是为了绕开测试环境里的时序竞争，产品本身「点了却没展开」这个现象本身值得关注）；取消完成后标题="${summaryTextAfterUncheck}"；该条是否回到未完成列表=${backInOpenList === 1}`
     })
   } catch (err) {
     setResult('R5', 'FAIL', { notes: `异常：${err.stack || err}` })

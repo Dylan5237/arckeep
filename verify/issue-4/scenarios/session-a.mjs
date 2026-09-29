@@ -435,17 +435,25 @@ export async function run() {
   await callTestHook(app, 'show').catch(() => {})
   page = await mainWindowPage(app)
 
+  // setResult() 是整体替换 results[id]（verdict/evidence/steps/notes 全覆盖），不是
+  // 追加——如果 case1/case2/Item8 三段里任何一段的 catch 已经用 mergeNotes('8'/'A3', ...)
+  // 记过异常信息，这里直接 setResult() 会把那条异常信息整个覆盖掉，导致最终报告只看到
+  // 「哪个字段不等于期望值」而看不到「为什么会不等于」（run6 就是这样，A3/8 的 catch 都
+  // 记了异常但被这里覆盖没了）。先把已有 notes 取出来拼进最终字符串，不覆盖丢失。
+  const notes8Before = lib.results['8'].notes
+  const notesA3Before = lib.results.A3.notes
+
   const item8Ok = beforeClearValue === item8SeedText && clearedValue === '' && (!draftAfterClearEsc.text) && valueAfterReopen === ''
   setResult('8', item8Ok ? 'PASS' : 'FAIL', {
     evidence: ['10-draft-restored.png', '12-draft-cleared.png'],
     steps: '打开捕获窗口输入文字，Esc 关闭 -> 草稿有内容且再次打开会恢复（已验证）；再打开一次，Playwright 键盘事件 Ctrl+A 全选 + Delete 清空输入框 -> Esc -> getCaptureDraft() 应为空 -> 再次打开 -> 输入框应为空',
-    notes: `种子文本="${item8SeedText}"；清空前草稿="${beforeClearValue}"；Ctrl+A+Delete 后值="${clearedValue}"；Esc 后草稿="${JSON.stringify(draftAfterClearEsc)}"；再次打开值="${valueAfterReopen}"（打开捕获窗口用的是测试钩子而非真实热键，见文件头部环境限制说明；渲染进程内部的 Esc/清空逻辑本身用 Playwright 真实 CDP 按键事件验证，与真实按键效果一致）`
+    notes: `种子文本="${item8SeedText}"；清空前草稿="${beforeClearValue}"；Ctrl+A+Delete 后值="${clearedValue}"；Esc 后草稿="${JSON.stringify(draftAfterClearEsc)}"；再次打开值="${valueAfterReopen}"（打开捕获窗口用的是测试钩子而非真实热键，见文件头部环境限制说明；渲染进程内部的 Esc/清空逻辑本身用 Playwright 真实 CDP 按键事件验证，与真实按键效果一致）${notes8Before ? ` [子步骤异常记录] ${notes8Before}` : ''}`
   })
 
   setResult('A3', (draftAfterEsc.text === draftText1 && restoredValue === draftText1 && clickOutsideOk) ? 'PASS' : 'FAIL', {
     evidence: ['10-draft-restored.png', '11-blur-outside-draft-full.png'],
     steps: '1) 打开捕获窗口，Playwright 打字，Playwright 发 Esc -> getCaptureDraft() 应含刚输入内容 2) 再次打开 -> 输入框应原样恢复 3) 再打开一份，打字后用 BrowserWindow.blur() 编程调用模拟点击窗口外面使捕获框失焦（触发与真实失焦相同的主进程 blur 监听器）-> 200ms 后应自动关闭并把内容存进草稿 4) 退出应用重启后仍能恢复见下方',
-    notes: `Esc 后草稿="${draftAfterEsc.text}"；再次打开恢复值="${restoredValue}"；失焦（BrowserWindow.blur()，等价于点外面）保存草稿=${clickOutsideOk}；打开捕获窗口用测试钩子而非真实热键（见环境限制说明），验证的是草稿保存/恢复逻辑本身，不是热键机制`
+    notes: `Esc 后草稿="${draftAfterEsc.text}"；再次打开恢复值="${restoredValue}"；失焦（BrowserWindow.blur()，等价于点外面）保存草稿=${clickOutsideOk}；打开捕获窗口用测试钩子而非真实热键（见环境限制说明），验证的是草稿保存/恢复逻辑本身，不是热键机制${notesA3Before ? ` [子步骤异常记录] ${notesA3Before}` : ''}`
   })
   mergeNotes('2', `Esc 不新增待办：${escDidNotCreateTodo}`)
 
@@ -591,7 +599,14 @@ export async function run() {
 
     // 编辑：文字 / 仓库 / 等我
     await page.locator(rowSelector('Item4带仓库')).locator('[data-action="edit"]').click()
-    await page.waitForSelector('.todo-editor', { timeout: 2000 })
+    try {
+      await page.waitForSelector('.todo-editor', { timeout: 5000 })
+    } catch {
+      // CI 里偶尔第一次点击的时候这一行还没画完整/被上一步的重绘顶掉，点击落空；
+      // 重新定位再点一次，给足够的时间等编辑器画出来。
+      await page.locator(rowSelector('Item4带仓库')).locator('[data-action="edit"]').click()
+      await page.waitForSelector('.todo-editor', { timeout: 5000 })
+    }
     const editor = page.locator('.todo-editor')
     await editor.locator('input[type="text"]').first().fill('Item4带仓库-已编辑')
     await editor.locator('input[aria-label="仓库标签"]').fill('example/edited-repo')
@@ -695,22 +710,44 @@ export async function run() {
     const userDataDir3 = await getUserDataDir(app)
     appendEvidenceJson('item6-waiting-rows', rows)
 
+    // 记录当前 GitHub 认证状态：按硬性规则 #4，被测 App 启动时环境里已经
+    // 去掉了真实 GH_TOKEN/GITHUB_TOKEN，所以这里预期 auth==='missing'。
+    // window.arckeep.getWaiting() 只读缓存快照，不会触发网络请求。
+    const authSnapshot = await page.evaluate(() => window.arckeep.getWaiting())
+    appendEvidenceJson('item6-auth-state', {
+      auth: authSnapshot.auth,
+      refreshing: authSnapshot.refreshing,
+      rowCount: authSnapshot.rows.length
+    })
+    const refreshButtonDisabled = await page.locator('button.primary:has-text("刷新")').isDisabled()
+
     // 完成该待办后应从等我处理消失
     await page.click('[data-view="todos"]')
     await page.waitForSelector('.todo-list', { timeout: 3000 })
     await page.locator(`.todo-row:has(.todo-text:text-is("${todo4Texts.waitingText}"))`).locator('.todo-check').check()
     await page.waitForTimeout(200)
+    // 「等我处理」页面没有监听 todos:changed 事件去自动重算，唯一的重算时机
+    // 是 renderWaiting() 挂载时无条件调用一次 reload()——所以重新点导航切到
+    // 这一页本身就会触发一次刷新，不依赖工具栏上的「刷新」按钮。
+    // 「刷新」按钮在 auth==='missing'/'invalid' 时会永久 disabled（源码
+    // waiting-page.ts: refresh.disabled = snapshot.refreshing || authBlocked），
+    // 这正是硬性规则 #4（不给被测 App 真实 GitHub token）下的预期行为，不是产品
+    // 缺陷，所以不再等它变为可点——只有在它本来就没被 disabled 时才顺手点一下。
+    await page.click('[data-view="todos"]')
     await page.click('[data-view="inbox"]')
-    // 刷新按钮在上一次刷新（比如刚进这个页面自动触发的那次）还没跑完之前会一直是
-    // disabled + 文案「正在刷新」——这条走的是真实 GitHub API，这个 CI 环境网络延迟/
-    // 限流不确定，等它变回可点再点，而不是假设它总在 30 秒默认超时内就位。
-    await page.waitForSelector('button.primary:has-text("刷新"):not([disabled])', { timeout: 60000 })
-    await page.click('button.primary:has-text("刷新")')
-    await page.waitForSelector('button.primary:has-text("刷新"):not([disabled])', { timeout: 60000 })
-    await page.waitForTimeout(600)
+    await page.waitForSelector('.waiting-row, .waiting-empty, .waiting-loading', { timeout: 8000 })
+    await page.waitForFunction(() => {
+      const btn = document.querySelector('button.primary')
+      return btn && btn.textContent !== '正在刷新'
+    }, { timeout: 15000 }).catch(() => {})
+    if (!refreshButtonDisabled) {
+      await page.click('button.primary:has-text("刷新")').catch(() => {})
+      await page.waitForTimeout(600)
+    }
+    await page.waitForTimeout(400)
     const rowsAfter = await page.$$eval('.waiting-row', els => els.map(el => el.querySelector('.waiting-title-text')?.textContent))
     const goneAfterComplete = !rowsAfter.some(t => t && t.startsWith('Item4等我'))
-    await shot(page, '23-waiting-after-complete', { checkIds: ['6'], description: '完成后从等我处理消失' })
+    await shot(page, '23-waiting-after-complete', { checkIds: ['6'], description: '完成后从等我处理消失（导航切页触发的自动 reload，不依赖可能因缺 GitHub token 而永久 disabled 的「刷新」按钮）' })
 
     // 交叉核对：npm run waiting -- --json（源码 checkout 里跑，APPDATA 指向与本次 userData 相同的父目录）
     let cliResult = null
@@ -737,9 +774,9 @@ export async function run() {
     const ok = Boolean(todoRow && todoRow.chip === '待办' && todoRow.chipClass?.includes('act-todo')
       && /\d+/.test(todoRow.days || '') && goneAfterComplete)
     setResult('6', ok ? 'PASS' : 'FAIL', {
-      evidence: ['22-waiting-with-todo.png', '23-waiting-after-complete.png', 'item6-waiting-rows.json', 'item6-npm-run-waiting.json'],
-      steps: '在待办页勾选「等我」，切到「等我处理」页刷新，核对出现的行有「待办」chip 和天数；把它标完成，再刷新，应从列表消失；在源码 checkout（同一份 todos.jsonl 所在的 APPDATA）里跑 npm run waiting -- --json 核对同一条记录',
-      notes: `等我处理里的行=${JSON.stringify(todoRow)}；完成后消失=${goneAfterComplete}；npm run waiting --json 命中 type:todo 的记录=${JSON.stringify(cliTodoRow)}`
+      evidence: ['22-waiting-with-todo.png', '23-waiting-after-complete.png', 'item6-waiting-rows.json', 'item6-auth-state.json', 'item6-npm-run-waiting.json'],
+      steps: '在待办页勾选「等我」，切到「等我处理」页（挂载时会自动 reload 一次），核对出现的行有「待办」chip 和天数；把它标完成，切走再切回触发同样的自动 reload，应从列表消失；在源码 checkout（同一份 todos.jsonl 所在的 APPDATA）里跑 npm run waiting -- --json 核对同一条记录',
+      notes: `等我处理里的行=${JSON.stringify(todoRow)}；完成后消失=${goneAfterComplete}；npm run waiting --json 命中 type:todo 的记录=${JSON.stringify(cliTodoRow)}；GitHub 认证状态 auth="${authSnapshot.auth}"，「刷新」按钮 disabled=${refreshButtonDisabled}（按硬性规则 #4 被测 App 没有真实 GH_TOKEN，auth==='missing' 时源码 refresh.disabled=snapshot.refreshing||authBlocked 会让这个按钮永久点不动，这是预期行为不是产品缺陷；本条「待办」chip 的出现/消失走的是本地 todos.jsonl 驱动的重算，不依赖这个按钮或真实 GitHub 网络请求）`
     })
   } catch (err) {
     setResult('6', 'FAIL', { notes: `异常：${err.stack || err}` })
