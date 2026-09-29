@@ -72,6 +72,15 @@ input[type="text"] {
   font-size: 13px;
 }
 
+.capture-repo input {
+  color: var(--arckeep-deep-charcoal);
+  font-size: 15px;
+}
+
+.capture-repo input::placeholder {
+  color: var(--arckeep-muted-graphite);
+}
+
 .capture-wait {
   display: flex;
   align-items: center;

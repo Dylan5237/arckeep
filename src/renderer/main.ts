@@ -235,18 +235,42 @@ async function applyHotkeyValue(value: string): Promise<void> {
 function renderHotkeyCard(state: AppState): HTMLElement {
   const card = el('section', { class: 'card' }, [
     el('h2', {}, ['全局热键']),
-    el('p', { class: 'hint' }, [`默认 ${DEFAULT_HOTKEY}，用来打开快速捕获。注册失败时会写出被占用的组合，并可在提示旁边直接换一个。`])
+    el('p', { class: 'hint' }, [`默认 ${DEFAULT_HOTKEY}，用来打开快速捕获。保存失败时会留住刚填的组合，并标出当前生效的热键。`])
   ])
   const input = el('input', { type: 'text', id: 'hotkey-input', value: state.hotkey, 'aria-label': '全局热键' })
+  const record = el('button', { type: 'button', id: 'hotkey-record', class: 'ghost' }, ['录制'])
+  let recording = false
+  record.addEventListener('click', () => {
+    recording = true
+    record.textContent = '请按键…'
+    input.focus()
+  })
+  input.addEventListener('keydown', event => {
+    if (!recording) return
+    event.preventDefault()
+    if (event.key === 'Escape' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+      recording = false
+      record.textContent = '录制'
+      return
+    }
+    const combo = acceleratorFromEvent(event)
+    if (!combo) return
+    recording = false
+    record.textContent = '录制'
+    input.value = combo
+  })
   const save = el('button', { type: 'button', id: 'hotkey-save', class: 'primary' }, ['保存热键'])
   save.addEventListener('click', () => { void applyHotkeyValue(input.value) })
-  card.append(el('div', { class: 'row' }, [
+  card.append(el('div', { class: 'row hotkey-row' }, [
     input,
+    record,
     save,
     el('span', { id: 'hotkey-active', class: 'hotkey-active' }, [activeHotkeyLabel(state.activeHotkey)])
   ]))
   if (state.hotkeyWarning) {
-    const warning = hotkeyWarningRow(state.hotkeyWarning)
+    const warning = el('p', { class: 'alert error hotkey-alert', id: 'hotkey-conflict', role: 'alert' }, [
+      state.hotkeyWarning
+    ])
     card.append(warning)
     queueMicrotask(() => {
       warning.scrollIntoView({ block: 'nearest' })
@@ -260,39 +284,6 @@ function renderHotkeyCard(state: AppState): HTMLElement {
   }
   pendingHotkeyFocus = false
   return card
-}
-
-function hotkeyWarningRow(warning: string): HTMLElement {
-  const replacement = el('input', {
-    type: 'text',
-    'aria-label': '新的热键组合',
-    placeholder: 'Ctrl+Alt+K'
-  })
-  const record = el('button', { type: 'button', class: 'ghost' }, ['录制'])
-  let recording = false
-  record.addEventListener('click', () => {
-    recording = true
-    record.textContent = '请按键…'
-    replacement.focus()
-  })
-  replacement.addEventListener('keydown', event => {
-    if (!recording) return
-    event.preventDefault()
-    const combo = acceleratorFromEvent(event)
-    if (!combo) return
-    recording = false
-    record.textContent = '录制'
-    replacement.value = combo
-    void applyHotkeyValue(combo)
-  })
-  const apply = el('button', { type: 'button', class: 'primary' }, ['改用这个'])
-  apply.addEventListener('click', () => { void applyHotkeyValue(replacement.value) })
-  return el('div', { class: 'alert error hotkey-alert', id: 'hotkey-conflict', role: 'alert', tabindex: '-1' }, [
-    el('span', {}, [warning]),
-    replacement,
-    record,
-    apply
-  ])
 }
 
 function paintHotkeyBanner(combo: string | null): void {

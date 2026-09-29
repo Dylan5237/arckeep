@@ -199,7 +199,8 @@ describe('settings persistence', () => {
     expect(state.hotkeyWarning).toBe('Ctrl+Alt+K 已被其他程序占用')
     expect(state.hotkey).toBe('Ctrl+Alt+K')
     expect(state.activeHotkey).toBe(DEFAULT_HOTKEY)
-    expect(state.hotkeyUnavailable).toBe('Ctrl+Alt+K')
+    expect(state.hotkeyUnavailable).toBeNull()
+    expect(service.hotkeyUnavailableCombo()).toBeNull()
   })
 
   it('clears the startup banner once a later hotkey registers', async () => {

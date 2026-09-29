@@ -2,6 +2,7 @@ import type { TodoItem } from './types.js'
 import {
   normalizeRepoTag,
   normalizeTodoId,
+  normalizeTodoSnapshot,
   normalizeTodoText,
   normalizeWaiting
 } from './validate.js'
@@ -110,6 +111,16 @@ function applyDelete(items: Map<string, TodoItem>, event: Record<string, unknown
   }
 }
 
+function applyRestore(items: Map<string, TodoItem>, event: Record<string, unknown>): boolean {
+  try {
+    const snapshot = normalizeTodoSnapshot(event.record)
+    items.set(snapshot.id, snapshot)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function applyEvent(items: Map<string, TodoItem>, event: unknown): boolean {
   if (!isRecord(event) || typeof event.op !== 'string') return false
   if (event.op === 'create') return applyCreate(items, event.record)
@@ -117,6 +128,7 @@ function applyEvent(items: Map<string, TodoItem>, event: unknown): boolean {
   if (event.op === 'complete') return applyCompletion(items, event, true)
   if (event.op === 'uncomplete') return applyCompletion(items, event, false)
   if (event.op === 'delete') return applyDelete(items, event)
+  if (event.op === 'restore') return applyRestore(items, event)
   return false
 }
 

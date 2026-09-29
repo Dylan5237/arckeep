@@ -30,7 +30,7 @@ export interface AppState {
   /** Combo registered with the OS, or null when nothing is live. */
   activeHotkey: string | null
   hotkeyWarning: string | null
-  /** Combo named in the banner. Null hides it. Cleared only by a successful register. */
+  /** Combo named in the banner. Null hides it. Set only when no hotkey is registered. */
   hotkeyUnavailable: string | null
   github: PublicGithubAuth
   waiting: WaitingConfig
@@ -62,6 +62,7 @@ export interface ArckeepApi {
   updateTodo(input: TodoUpdate): Promise<IpcResult<TodoItem>>
   setTodoCompleted(id: string, completed: boolean): Promise<IpcResult<TodoItem>>
   deleteTodo(id: string): Promise<IpcResult<{ id: string }>>
+  restoreTodo(item: TodoItem): Promise<IpcResult<TodoItem>>
   todoRepoOptions(): Promise<string[]>
   closeCapture(mode?: 'dismiss' | 'saved'): Promise<void>
   getCaptureDraft(): Promise<CaptureDraft>

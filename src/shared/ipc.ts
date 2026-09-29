@@ -10,6 +10,7 @@ export const IpcChannel = {
   updateTodo: 'todos:update',
   setTodoCompleted: 'todos:set-completed',
   deleteTodo: 'todos:delete',
+  restoreTodo: 'todos:restore',
   todoRepoOptions: 'todos:repo-options',
   closeCapture: 'capture:close',
   getCaptureDraft: 'capture:get-draft',

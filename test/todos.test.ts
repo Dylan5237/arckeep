@@ -5,9 +5,12 @@ import { describe, expect, it } from 'vitest'
 import { todosFilePath } from '../src/main/paths.js'
 import { TodoStore } from '../src/main/todos/store.js'
 import { foldTodoLines } from '../src/shared/todos/fold.js'
+import { completedGroupTitle, partitionTodos, readCompletedGroupOpen, writeCompletedGroupOpen } from '../src/shared/todos/groups.js'
 import { mergeRepoOptions } from '../src/shared/todos/repos.js'
 import { formatRelativeTime } from '../src/shared/todos/time.js'
+import { beginDeleteUndo, deleteUndoItem } from '../src/shared/todos/undo.js'
 import { normalizeRepoTag, normalizeTodoInput } from '../src/shared/todos/validate.js'
+import type { TodoItem } from '../src/shared/todos/types.js'
 
 function tempFile(): string {
   return todosFilePath(mkdtempSync(path.join(tmpdir(), 'arckeep-todos-')))
@@ -137,6 +140,92 @@ describe('todo persistence', () => {
     store.setCompleted({ id: older.id, completed: true })
     expect(store.listTodos().map(item => item.text)).toEqual(['更晚', '更早'])
     expect(newer.text).toBe('更晚')
+  })
+
+  it('deletes at once and restores the same place, repo, and 等我 timer', () => {
+    const file = tempFile()
+    let clock = new Date('2026-09-01T00:00:00.000Z')
+    const store = new TodoStore({ file, now: () => clock })
+    const first = store.create({ text: '第一条', repo: null, waiting: false })
+    clock = new Date('2026-09-02T00:00:00.000Z')
+    const middle = store.create({ text: '中间', repo: null, waiting: false })
+    clock = new Date('2026-09-03T00:00:00.000Z')
+    const last = store.create({ text: '最后', repo: 'example/demo', waiting: false })
+    clock = new Date('2026-09-04T08:00:00.000Z')
+    const marked = store.update({
+      id: middle.id,
+      text: '中间改过',
+      repo: 'Dylan5237/arckeep',
+      waiting: true
+    })
+    expect(marked.waitingSince).toBe('2026-09-04T08:00:00.000Z')
+    clock = new Date('2026-09-05T00:00:00.000Z')
+    store.setCompleted({ id: last.id, completed: true })
+
+    const before = store.listTodos()
+    expect(before.map(item => item.id)).toEqual([first.id, middle.id, last.id])
+    const beforeBytes = readFileSync(file, 'utf8')
+    expect(() => store.restore({ id: middle.id })).toThrow(/无效/)
+    expect(readFileSync(file, 'utf8')).toBe(beforeBytes)
+
+    store.delete(middle.id)
+    expect(store.listTodos().map(item => item.id)).toEqual([first.id, last.id])
+    expect(store.listWaitingTodos()).toEqual([])
+
+    clock = new Date('2026-09-20T00:00:00.000Z')
+    expect(store.restore(marked)).toEqual(marked)
+    const fresh = new TodoStore({ file })
+    expect(fresh.listTodos()).toEqual(before)
+    expect(fresh.listTodos().findIndex(item => item.id === middle.id)).toBe(1)
+    expect(fresh.listWaitingTodos()).toEqual([{
+      id: middle.id,
+      text: '中间改过',
+      repo: 'Dylan5237/arckeep',
+      createdAt: middle.createdAt,
+      waitingSince: '2026-09-04T08:00:00.000Z'
+    }])
+    const ops = readFileSync(file, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { op: string })
+    expect(ops.map(line => line.op)).toEqual(['create', 'create', 'create', 'update', 'complete', 'delete', 'restore'])
+  })
+})
+
+describe('delete undo and completed group', () => {
+  const sample = (patch: Partial<TodoItem>): TodoItem => ({
+    id: '00000000-0000-4000-8000-000000000001',
+    text: '一条',
+    repo: 'Dylan5237/arckeep',
+    waiting: true,
+    waitingSince: '2026-09-04T08:00:00.000Z',
+    createdAt: '2026-09-02T00:00:00.000Z',
+    updatedAt: '2026-09-04T08:00:00.000Z',
+    completed: false,
+    ...patch
+  })
+
+  it('keeps undo for five seconds, then drops the snapshot', () => {
+    const item = sample({})
+    const pending = beginDeleteUndo(item, 1_000)
+    item.text = '改掉原对象'
+    expect(pending.until).toBe(6_000)
+    expect(deleteUndoItem(pending, 5_999)?.text).toBe('一条')
+    expect(deleteUndoItem(pending, 6_000)).toBeNull()
+    expect(deleteUndoItem(null, 1_000)).toBeNull()
+  })
+
+  it('folds completed todos into a group that stays collapsed until opened', () => {
+    const items = [
+      sample({ id: '00000000-0000-4000-8000-00000000000a', text: '未完成更早', completed: false, createdAt: '2026-09-01T00:00:00.000Z' }),
+      sample({ id: '00000000-0000-4000-8000-00000000000b', text: '已完成', completed: true, waiting: false, waitingSince: null }),
+      sample({ id: '00000000-0000-4000-8000-00000000000c', text: '未完成更晚', completed: false, createdAt: '2026-09-03T00:00:00.000Z' })
+    ]
+    expect(partitionTodos(items).open.map(item => item.text)).toEqual(['未完成更早', '未完成更晚'])
+    expect(partitionTodos(items).done.map(item => item.text)).toEqual(['已完成'])
+    expect(completedGroupTitle(28)).toBe('已完成 · 28')
+    expect(readCompletedGroupOpen(null)).toBe(false)
+    expect(readCompletedGroupOpen('0')).toBe(false)
+    expect(readCompletedGroupOpen('1')).toBe(true)
+    expect(writeCompletedGroupOpen(true)).toBe('1')
+    expect(writeCompletedGroupOpen(false)).toBe('0')
   })
 })
 
