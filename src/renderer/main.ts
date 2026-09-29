@@ -5,27 +5,17 @@ import type { AppState } from '../shared/types'
 import { DEFAULT_HOTKEY } from '../shared/types'
 import { renderOverview } from './overview-page'
 import { renderOverviewSettings } from './overview-settings'
+import { renderToolSettings } from './tool-settings'
+import { renderTools } from './tools-page'
 import { renderWaiting } from './waiting-page'
 import { renderWaitingSettings } from './waiting-settings'
 
 type ViewId = 'inbox' | 'projects' | 'todos' | 'tools' | 'settings'
 
-const PAGES: Record<Exclude<ViewId, 'settings'>, { title: string, body: string }> = {
-  inbox: {
-    title: '等我处理',
-    body: '需要你拍板或回复的事项会集中在这里。这一页先占位，具体能力在后续 Issue。'
-  },
-  projects: {
-    title: '项目总览',
-    body: '关注的仓库会在这里汇总。列表留空时走自动模式。这一页先占位。'
-  },
+const PAGES: Record<'todos', { title: string, body: string }> = {
   todos: {
     title: '待办',
     body: '个人待办会放在这里。这一页先占位。'
-  },
-  tools: {
-    title: '工具架',
-    body: '常用工具入口会放在这里。这一页先占位。'
   }
 }
 
@@ -59,7 +49,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node
 }
 
-function renderPlaceholder(view: Exclude<ViewId, 'settings'>): void {
+function renderPlaceholder(view: 'todos'): void {
   if (!content) return
   const page = PAGES[view]
   content.replaceChildren(
@@ -97,7 +87,8 @@ async function renderSettings(options?: { focusToken?: boolean, focusWatch?: boo
     renderReposCard(state),
     renderHotkeyCard(state),
     renderWaitingSettings(state, renderSettings),
-    renderOverviewSettings(state, renderSettings)
+    renderOverviewSettings(state, renderSettings),
+    await renderToolSettings(state, renderSettings)
   )
   if (options?.focusToken) {
     page.querySelector<HTMLInputElement>('#github-pat')?.focus()
@@ -306,6 +297,7 @@ async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?:
   if (view === 'settings') await renderSettings(options)
   else if (view === 'inbox') await renderWaiting(content, (next, nextOptions) => { void show(next, nextOptions) })
   else if (view === 'projects') await renderOverview(content, (next, nextOptions) => { void show(next, nextOptions) })
+  else if (view === 'tools') await renderTools(content, () => { void show('settings') })
   else renderPlaceholder(view)
 }
 

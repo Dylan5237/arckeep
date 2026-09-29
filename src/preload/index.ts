@@ -22,7 +22,22 @@ const api: ArckeepApi = {
   advanceWaitingDays: days => ipcRenderer.invoke(IpcChannel.advanceWaitingDays, days),
   getOverview: () => ipcRenderer.invoke(IpcChannel.getOverview),
   refreshOverview: () => ipcRenderer.invoke(IpcChannel.refreshOverview),
-  setOverview: config => ipcRenderer.invoke(IpcChannel.setOverview, config)
+  setOverview: config => ipcRenderer.invoke(IpcChannel.setOverview, config),
+  setToolShelf: json => ipcRenderer.invoke(IpcChannel.setToolShelf, json),
+  getToolExample: () => ipcRenderer.invoke(IpcChannel.getToolExample),
+  getToolCatalog: () => ipcRenderer.invoke(IpcChannel.getToolCatalog),
+  importToolShelf: () => ipcRenderer.invoke(IpcChannel.importToolShelf),
+  exportToolShelf: json => ipcRenderer.invoke(IpcChannel.exportToolShelf, json),
+  previewTool: (actionId, params) => ipcRenderer.invoke(IpcChannel.previewTool, actionId, params),
+  runTool: (actionId, params) => ipcRenderer.invoke(IpcChannel.runTool, actionId, params),
+  abortTool: runId => ipcRenderer.invoke(IpcChannel.abortTool, runId),
+  copyText: text => ipcRenderer.invoke(IpcChannel.copyText, text),
+  getToolFixture: () => ipcRenderer.invoke(IpcChannel.getToolFixture),
+  onToolEvent: listener => {
+    const wrapped = (_event: unknown, payload: Parameters<typeof listener>[0]) => listener(payload)
+    ipcRenderer.on(IpcChannel.toolEvent, wrapped)
+    return () => ipcRenderer.removeListener(IpcChannel.toolEvent, wrapped)
+  }
 }
 
 contextBridge.exposeInMainWorld('arckeep', api)

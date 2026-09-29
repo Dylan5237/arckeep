@@ -22,6 +22,8 @@ import { SettingsService } from './settings-service.js'
 import { WaitingService } from './waiting-service.js'
 import { dispatchTestHook, installTrayTestHooks, parseTestHookAction, type TrayActions } from './test-hooks.js'
 import { createSafeStorageBox } from './token-store.js'
+import { registerToolIpc } from './tool-ipc.js'
+import { ToolRunner } from './tool-runner.js'
 import { createUrlGuard, isTrustedBrowserUrl } from './url-trust.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -44,6 +46,11 @@ let isQuitting = false
 let service: SettingsService | null = null
 let waiting: WaitingService | ReturnType<typeof createScreenshotWaiting> | null = null
 let overview: OverviewService | ReturnType<typeof createScreenshotOverview> | null = null
+const toolRunner = new ToolRunner(event => {
+  const win = mainWindow
+  if (!win || win.isDestroyed()) return
+  win.webContents.send(IpcChannel.toolEvent, event)
+})
 
 const devServerOrigin = process.env.ARCKEEP_DEV === '1' ? process.env.VITE_DEV_SERVER_URL ?? null : null
 const rendererDir = path.join(__dirname, '../renderer')
@@ -377,6 +384,13 @@ if (!gotLock) {
       })
     }
     registerIpc(service)
+    registerToolIpc({
+      guard: event => requireSender(event, mainWindow?.webContents ?? null),
+      getWindow: () => mainWindow,
+      settings: service,
+      runner: toolRunner,
+      screenshotScene
+    })
     mainWindow = createWindow()
     try {
       createTray()
@@ -393,6 +407,7 @@ if (!gotLock) {
 const handleBeforeQuit = createGracefulShutdownHandler({
   quit: () => app.quit(),
   shutdown: () => {
+    toolRunner.abortAll()
     globalShortcut.unregisterAll()
     tray?.destroy()
     tray = null

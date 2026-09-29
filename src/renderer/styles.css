@@ -489,7 +489,8 @@ main:has(.waiting) {
   padding: 12px 16px 16px;
 }
 
-.page.waiting h1 {
+.page.waiting h1,
+.page.tools h1 {
   font-size: 22px;
   margin-bottom: 4px;
 }
@@ -589,6 +590,10 @@ main:has(.overview) {
   margin-bottom: 4px;
 }
 
+.page.tools .lede {
+  margin-bottom: 12px;
+}
+
 @media (max-width: 860px) {
   .app { grid-template-columns: 84px minmax(0, 1fr); }
   .nav { align-items: stretch; padding: 16px 8px; overflow: hidden; }
@@ -604,4 +609,115 @@ main:has(.overview) {
     white-space: normal;
   }
   .rule-row { grid-template-columns: 1fr; }
+  .tool-top { align-items: flex-start; }
+}
+
+.tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tool-card {
+  background: var(--arckeep-white);
+  border: 1px solid var(--arckeep-soft-stone);
+  border-radius: 12px;
+  padding: 8px 12px;
+}
+
+.tool-card h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.tool-card p {
+  margin: 2px 0 6px;
+  color: var(--arckeep-muted-graphite);
+  font-size: 13px;
+}
+
+.tool-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.chip-tool { background: var(--arckeep-soft-stone); color: var(--arckeep-deep-charcoal); }
+.chip-open-url { background: #D9E4F2; color: #1E3A5F; }
+.chip-open-folder { background: #E4E6D4; color: #3E4128; }
+.chip-run-command { background: #F3E4C8; color: #6A4A16; }
+.chip-template { background: #E3E1EA; color: #3D3A55; }
+
+.tool-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tool-json {
+  min-height: 16rem;
+  font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.tool-pre {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--arckeep-warm-ivory);
+  border-radius: 8px;
+  padding: 10px;
+  font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+  font-size: 13px;
+}
+
+.tool-live {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.tool-stderr {
+  color: #8C3A2A;
+}
+
+.tool-output-card h2 {
+  margin-top: 8px;
+}
+
+button.danger {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #8C3A2A;
+  color: var(--arckeep-warm-ivory);
+  cursor: pointer;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(28, 27, 24, 0.35);
+}
+
+.modal {
+  width: min(640px, 100%);
+  background: var(--arckeep-white);
+  border: 1px solid var(--arckeep-soft-stone);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.modal h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
 }

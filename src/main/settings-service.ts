@@ -3,6 +3,7 @@ import type { OverviewConfig } from '../shared/overview/types.js'
 import { parseWaitingConfig } from '../shared/waiting/rules.js'
 import type { WaitingConfig } from '../shared/waiting/types.js'
 import type { AppState, IpcResult } from '../shared/types.js'
+import { validateToolShelfText } from './tool-validate.js'
 import {
   readGhAuthToken,
   resolveGithubAuth,
@@ -61,7 +62,8 @@ export class SettingsService {
       hotkeyWarning: this.hotkeyWarning,
       github,
       waiting: this.settings.waiting,
-      overview: this.settings.overview
+      overview: this.settings.overview,
+      toolShelfJson: this.settings.toolShelfJson
     }
   }
 
@@ -74,6 +76,15 @@ export class SettingsService {
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : '项目总览的规则无效' }
     }
+  }
+
+  setToolShelfJson(input: unknown): IpcResult<{ toolShelfJson: string }> {
+    if (typeof input !== 'string') return { ok: false, error: '工具架配置必须是 JSON 文本' }
+    const validated = validateToolShelfText(input)
+    if (!validated.ok) return { ok: false, error: validated.error }
+    this.settings.toolShelfJson = input
+    this.persist()
+    return { ok: true, data: { toolShelfJson: input } }
   }
 
   setWaiting(input: unknown): IpcResult<{ waiting: WaitingConfig }> {
