@@ -41,7 +41,7 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
   const card = el('section', { class: 'card' }, [
     el('h2', {}, ['等我处理']),
     el('p', { class: 'hint' }, [
-      '关键词和标签决定哪些 open Issue 算「要人动手」。同一段文字里的动作信号优先于已解决信号；只有整条都结束、后面没有待办时才算已解决。代码、引用和「需求 / 验收标准 / 背景 / 设计 / 规格」下面的匹配不算。状态文档正则示例：等 ?Dylan|AWAITING ACCEPT|HUMAN_REQUIRED|needs-dylan'
+      '主列表只收明确请求、状态头、review、标签、指派且有请求，以及连续无动静的 PR。仅提及和正文里散落的关键词放在「可能相关」。代码围栏、需求、路线图、变更史、人员表和步骤表不参与判断。状态文档正则示例：等 ?Dylan|AWAITING ACCEPT|HUMAN_REQUIRED|needs-dylan'
     ])
   ])
   const sources: WaitingSources = { ...config.sources }
@@ -90,6 +90,14 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
   actors.value = config.otherActors.join('\n')
   const selfSteps = el('textarea', { 'aria-label': '自己未完成的步骤' })
   selfSteps.value = config.selfStepPhrases.join('\n')
+  const verbs = el('textarea', { 'aria-label': '请求动词' })
+  verbs.value = config.requestVerbs.join('\n')
+  const actions = el('textarea', { 'aria-label': '请求动作' })
+  actions.value = config.requestActions.join('\n')
+  const ackTokens = el('textarea', { 'aria-label': 'ACK 词' })
+  ackTokens.value = config.ackTokens.join('\n')
+  const parked = el('textarea', { 'aria-label': '搁置标记' })
+  parked.value = config.parkedMarkers.join('\n')
   const rulesBox = el('div', { class: 'rule-list' })
   const rules: StatusDocRule[] = config.statusDocRules.map(rule => ({ ...rule }))
   const drawRules = () => {
@@ -139,6 +147,10 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
       specMarkers: lines(specs.value),
       otherActors: lines(actors.value),
       selfStepPhrases: lines(selfSteps.value),
+      requestVerbs: lines(verbs.value),
+      requestActions: lines(actions.value),
+      ackTokens: lines(ackTokens.value),
+      parkedMarkers: lines(parked.value),
       showIgnored: config.showIgnored
     }
     void window.arckeep.setWaiting(next).then(async result => {
@@ -163,7 +175,7 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
     el('p', { class: 'hint' }, ['和角色称呼出现在同一条评论里才生效。例如：明示接受或拒收、请拍板、请.{0,12}(?:确认|拍板|拒收)。']),
     roleAsks,
     el('h3', {}, ['状态头']),
-    el('p', { class: 'hint' }, ['忽略大小写和两边的符号。BLOCKED 只在指向你、或没有别的阻塞对象时算。WAITING ON 必须指向你或上面的角色。']),
+    el('p', { class: 'hint' }, ['只认行首或标题里的原文，区分大小写。BLOCKED 只在指向你、或没有别的阻塞对象时算。WAITING ON 必须指向你或上面的角色。句子中间的小写 blocked 不算。']),
     headers,
     el('h3', {}, ['需求类标记']),
     el('p', { class: 'hint' }, ['标题或标签命中这些词时，正文里描述功能行为的句子不算。评论或正文状态区里的明确请求仍然算。']),
@@ -172,7 +184,18 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
     actors,
     el('h3', {}, ['自己未完成的步骤']),
     selfSteps,
+    el('h3', {}, ['请求动词和动作']),
+    el('p', { class: 'hint' }, ['同一句里先出现动词、再出现动作，才是明确请求。最新一条不是你写的评论里，这样的请求即使没点名也算。若这句 @ 了别人，则不算。']),
+    verbs,
+    actions,
+    el('h3', {}, ['ACK']),
+    el('p', { class: 'hint' }, ['单独出现的 ACK 不算。同一句里要有请求动词，并且点到你或上面的角色，例如「需…ACK」。']),
+    ackTokens,
+    el('h3', {}, ['搁置仓库']),
+    el('p', { class: 'hint' }, ['仓库描述或 topic 命中这些词时，默认不放进列表，和已忽略的仓库同样处理。']),
+    parked,
     el('h3', {}, ['人工动作标签']),
+    el('p', { class: 'hint' }, ['命中的标签即使没有评论也列入主列表。needs-* 这样以星号结尾的是前缀。']),
     labels,
     el('h3', {}, ['已解决信号']),
     resolved,

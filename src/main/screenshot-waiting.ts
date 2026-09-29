@@ -21,7 +21,7 @@ function base(partial: Partial<WaitingSnapshot>): WaitingSnapshot {
 }
 
 export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapshot {
-  if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover' || scene === 'waiting-ignore') {
+  if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover' || scene === 'waiting-ignore' || scene === 'waiting-related' || scene === 'waiting-related-open') {
     const rows = sampleWaitingRows().sort((left, right) => right.waitingDays - left.waitingDays || left.title.localeCompare(right.title))
     return base({ rows, hiddenCount: 4 })
   }
@@ -58,6 +58,7 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
       parentNumber: 40,
       parent: `https://github.com/${repo}/issues/40`,
       childCount: 0,
+      tier: 'strong',
       ignored: false
     })
     return base({
@@ -78,6 +79,7 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
           parentNumber: null,
           parent: null,
           childCount: 2,
+          tier: 'strong',
           ignored: false
         },
         child(41, '核对导出的列名', 4),
@@ -100,6 +102,10 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
       hiddenRepos: ['stranger/public'],
       todosAvailable: true
     })
+  }
+  if (scene === 'waiting-maybe-only') {
+    const rows = sampleWaitingRows().filter(row => row.tier === 'weak')
+    return base({ rows, hiddenCount: 0 })
   }
   if (scene === 'waiting-empty') return base({ hiddenCount: 0, rows: [] })
   if (scene === 'waiting-no-token') return base({ auth: 'missing', refreshedAt: null, hiddenCount: 0 })

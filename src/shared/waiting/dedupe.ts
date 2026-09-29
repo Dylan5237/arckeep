@@ -72,6 +72,9 @@ export function dedupeDrafts(drafts: readonly WaitingDraft[], now: Date): Waitin
     if (existing.number == null && draft.number != null) existing.number = draft.number
     if (!existing.repo && draft.repo) existing.repo = draft.repo
     if (existing.parentNumber == null && draft.parentNumber != null) existing.parentNumber = draft.parentNumber
+    if (draft.tier === 'strong') existing.tier = 'strong'
+    existing.parked = existing.parked || draft.parked
+    if (draft.tier === 'strong' && existing.signal.excerpt === existing.signal.rule) existing.signal = draft.signal
   }
   for (const draft of merged.values()) {
     applyLongestWait(draft, now)

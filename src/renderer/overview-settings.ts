@@ -68,7 +68,7 @@ export function renderOverviewSettings(state: AppState, rerender: () => Promise<
   card.append(
     el('h3', {}, ['停滞天数']),
     el('p', { class: 'hint' }, [
-      `默认 ${DEFAULT_STALE_DAYS} 天，只判活跃列表里的仓库。默认分支上的最后一次提交，以及 Issue / PR 的创建、更新和评论，两边都满了这么多天才标成停滞；有一边还在这段时间里就不算。行上的「停滞 X 天」按较新的那一边计算。陈旧分组里的仓库不再标停滞。刚创建、还没有任何提交或 Issue/PR 活动的空仓不算停滞。`
+      `默认 ${DEFAULT_STALE_DAYS} 天，只判活跃列表里的仓库。默认分支上的最后一次提交，以及 Issue / PR 的创建、更新和评论，两边的静止时间都要超过这么多天才标成停滞；刚好这么多天不算。有一边还没超过就不算。行上的「停滞 X 天」按较新的那一边计算。陈旧分组里的仓库不再标停滞。刚创建、还没有任何提交或 Issue/PR 活动的空仓不算停滞。`
     ]),
     staleDays,
     el('h3', {}, ['review 等待天数']),

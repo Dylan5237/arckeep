@@ -380,7 +380,10 @@ export async function presentScreenshot(options: {
     || scene === 'waiting-no-token'
     || scene === 'waiting-invalid-token'
     || scene === 'waiting-loading'
-    || scene === 'waiting-rate-limit'
+    ||     scene === 'waiting-rate-limit'
+    || scene === 'waiting-related'
+    || scene === 'waiting-related-open'
+    || scene === 'waiting-maybe-only'
   ) {
     const expected = scene === 'waiting' || scene === 'waiting-narrow'
       ? '验收北区截图'
@@ -398,8 +401,31 @@ export async function presentScreenshot(options: {
                   ? 'GitHub 认证无效或已过期'
                   : scene === 'waiting-loading'
                     ? '正在刷新'
-                    : '速率限制'
+                    : scene === 'waiting-maybe-only'
+                      ? '没有明确等你的事 · 另有 6 条可能相关'
+                      : scene === 'waiting-related' || scene === 'waiting-related-open'
+                        ? '可能相关 · 6'
+                        : '速率限制'
     await waitUntil(contents, includesText(expected), expected)
+    if (scene === 'waiting-related' || scene === 'waiting-related-open' || scene === 'waiting-maybe-only') {
+      await contents.executeJavaScript(`
+        const details = document.querySelector('details.maybe-related')
+        if (!(details instanceof HTMLDetailsElement)) throw new Error('maybe section missing')
+        const summary = details.querySelector('summary')?.textContent ?? ''
+        if (!/^可能相关 · \\d+$/.test(summary.trim())) throw new Error('maybe header missing count: ' + summary)
+        details.open = ${scene === 'waiting-related-open' ? 'true' : 'false'}
+        if (${scene === 'waiting-maybe-only' ? 'true' : 'false'}) {
+          const text = document.body.innerText
+          if (text.includes('全部处理完了')) throw new Error('all-done copy shown beside weak rows')
+          if ([...document.querySelectorAll('.waiting-groups')].some(group => !details.contains(group))) {
+            throw new Error('main list should be empty')
+          }
+        }
+        details.scrollIntoView({ block: ${scene === 'waiting-maybe-only' ? "'nearest'" : "'start'"} })
+        true
+      `)
+      await new Promise(resolve => setTimeout(resolve, 80))
+    }
     movePointer(main, 24, 80)
     await new Promise(resolve => setTimeout(resolve, 120))
     if (scene !== 'waiting-empty' && scene !== 'waiting-no-token' && scene !== 'waiting-invalid-token' && scene !== 'waiting-loading') {

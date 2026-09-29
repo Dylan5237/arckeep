@@ -37,6 +37,20 @@ const BAND_LABEL = {
   low: '近 3 天'
 } as const
 
+/** Collapsed 「可能相关」 header. The count is visible without opening the section. */
+export function maybeRelatedLabel(count: number): string {
+  return `可能相关 · ${count}`
+}
+
+/**
+ * Empty-state line for the main list.
+ * An all-clear line is only for when the weak section is empty too.
+ */
+export function waitingEmptyCopy(maybeCount: number): string {
+  if (maybeCount > 0) return `没有明确等你的事 · 另有 ${maybeCount} 条可能相关`
+  return '没有等你处理的事项'
+}
+
 function externalIcon(): SVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
   svg.setAttribute('viewBox', '0 0 16 16')
@@ -65,10 +79,12 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
   toggleIgnored: (show: boolean) => void
   open: (url: string) => void
 }): void {
-  const oldest = snapshot.rows.reduce((max, row) => Math.max(max, row.waitingDays), 0)
-  const summary = snapshot.rows.length === 0
+  const mainRows = snapshot.rows.filter(row => row.tier !== 'weak')
+  const maybeRows = snapshot.rows.filter(row => row.tier === 'weak')
+  const oldest = mainRows.reduce((max, row) => Math.max(max, row.waitingDays), 0)
+  const summary = mainRows.length === 0
     ? '打开这一页就会刷新。'
-    : `${snapshot.rows.length} 件待处理 · 最久的一件已经等了 ${oldest} 天`
+    : `${mainRows.length} 件待处理 · 最久的一件已经等了 ${oldest} 天`
   const refreshed = snapshot.refreshedAt
     ? relativeLabel(snapshot.refreshedAt, new Date())
     : '尚未刷新'
@@ -124,13 +140,17 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
   }
   if (snapshot.refreshing && snapshot.rows.length === 0) {
     page.append(el('p', { class: 'waiting-loading', role: 'status' }, ['正在刷新…']))
-  } else if (!snapshot.refreshing && snapshot.rows.length === 0 && snapshot.auth === 'ok') {
-    page.append(el('p', { class: 'waiting-empty' }, ['没有等你处理的事项']))
+  } else if (!snapshot.refreshing && mainRows.length === 0 && maybeRows.length === 0 && snapshot.auth === 'ok') {
+    page.append(el('p', { class: 'waiting-empty' }, [waitingEmptyCopy(0)]))
   } else {
-    const groups = renderGroups(snapshot.rows, handlers)
-    bindExclusiveRowActions(groups, '.waiting-row')
-    page.append(groups)
+    if (mainRows.length === 0 && snapshot.auth === 'ok' && !snapshot.refreshing) {
+      page.append(el('p', { class: 'waiting-empty' }, [waitingEmptyCopy(maybeRows.length)]))
+    } else if (mainRows.length > 0) {
+      page.append(renderGroups(mainRows, handlers))
+    }
+    if (maybeRows.length > 0) page.append(renderMaybe(maybeRows, handlers))
   }
+  bindExclusiveRowActions(page, '.waiting-row')
   host.replaceChildren(page)
 }
 
@@ -147,6 +167,21 @@ function renderHiddenRepos(repos: readonly string[], unhideRepo: (repo: string) 
     ]))
   }
   return section
+}
+
+function renderMaybe(rows: readonly WaitingRow[], handlers: {
+  snooze: (id: string, days: 1 | 3 | 7) => void
+  ignore: (id: string) => void
+  restore: (id: string) => void
+  hideRepo: (repo: string) => void
+  open: (url: string) => void
+  todos: () => void
+}): HTMLElement {
+  const details = el('details', { class: 'maybe-related' })
+  details.append(el('summary', {}, [maybeRelatedLabel(rows.length)]))
+  details.append(el('p', { class: 'hint' }, ['只有提及，或正文里散落的关键词。不计入上面的待处理件数。']))
+  details.append(renderGroups(rows, handlers))
+  return details
 }
 
 function renderGroups(rows: readonly WaitingRow[], handlers: {

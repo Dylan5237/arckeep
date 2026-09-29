@@ -23,7 +23,8 @@ export type CiState = 'success' | 'failure' | 'pending' | 'none' | 'unknown'
 export interface OverviewConfig {
   /**
    * Days before 停滞. Both the default-branch commit and the latest issue/PR
-   * activity must be at least this old. The chip uses the newer of the two.
+   * activity must be strictly older than this. Exactly this many days is not
+   * 停滞. The chip uses the newer of the two.
    */
   staleDays: number
   /** Days an open non-draft pull request can wait for review before 卡住. */

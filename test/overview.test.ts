@@ -88,13 +88,13 @@ describe('overview warnings', () => {
     const stalled = classifyOverview([facts({
       name: 'example/quiet',
       url: 'https://github.com/example/quiet',
-      pushedAt: ago(14),
-      lastCommitAt: ago(14)
+      pushedAt: ago(15),
+      lastCommitAt: ago(15)
     })], rules, NOW)[0]
     expect(stalled?.warnings[0]).toMatchObject({
       kind: '停滞',
-      label: '停滞 14 天',
-      days: 14,
+      label: '停滞 15 天',
+      days: 15,
       hint: '默认分支提交和 Issue/PR 活动都超过 14 天',
       targets: [{ url: 'https://github.com/example/quiet' }]
     })
@@ -369,9 +369,20 @@ describe('overview warnings', () => {
 
     expect(kinds(aged(6))).not.toContain('停滞')
     expect(aged(6).group).toBe('active')
-    expect(aged(7).warnings.find(item => item.kind === '停滞')).toMatchObject({ label: '停滞 7 天', days: 7 })
+    expect(kinds(aged(7))).not.toContain('停滞')
+    expect(aged(7).group).toBe('active')
     expect(aged(8).warnings.find(item => item.kind === '停滞')?.days).toBe(8)
     expect(aged(8).group).toBe('active')
+
+    const atAge = (ms: number) => new Date(NOW.getTime() - ms).toISOString()
+    const stalledAt = (ms: number) => classifyOverview([facts({
+      pushedAt: atAge(ms),
+      lastCommitAt: atAge(ms),
+      lastIssueActivityAt: atAge(ms)
+    })], rules, NOW)[0]!
+    expect(kinds(stalledAt(7 * DAY))).not.toContain('停滞')
+    expect(kinds(stalledAt(7 * DAY + 1000))).toContain('停滞')
+    expect(stalledAt(8 * DAY).warnings.find(item => item.kind === '停滞')?.days).toBe(8)
 
     const recentIssue = aged(40, { lastIssueActivityAt: ago(3), name: 'example/talking', url: 'https://github.com/example/talking' })
     expect(recentIssue.group).toBe('active')

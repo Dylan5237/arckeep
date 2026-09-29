@@ -6,6 +6,7 @@ import type { DismissalMap, DismissalRecord, WaitingDraft, WaitingRow } from './
 export interface DismissalState {
   items: DismissalMap
   hiddenRepos: string[]
+  revealedParked: string[]
 }
 
 export function emptyDismissals(): DismissalMap {
@@ -103,7 +104,8 @@ export function partitionDismissals(
       parentNumber: draft.parentNumber,
       parent: draft.parent,
       childCount: 0,
-      signalText: draft.signal.excerpt || draft.signal.rule
+      signalText: draft.signal.excerpt || draft.signal.rule,
+      tier: draft.tier
     })
   }
   const listed = annotateIssueFamily(rows)
@@ -114,18 +116,39 @@ export function partitionDismissals(
   }
 }
 
-export function readDismissalState(raw: unknown): DismissalState {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { items: {}, hiddenRepos: [] }
-  const record = raw as Record<string, unknown>
-  if (record.version === 2 && record.items && typeof record.items === 'object' && !Array.isArray(record.items)) {
-    const hiddenRepos = Array.isArray(record.hiddenRepos)
-      ? record.hiddenRepos.filter((repo): repo is string => typeof repo === 'string' && repo.includes('/'))
-      : []
-    return { items: record.items as DismissalMap, hiddenRepos }
-  }
-  return { items: raw as DismissalMap, hiddenRepos: [] }
+function repoNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((repo): repo is string => typeof repo === 'string' && repo.includes('/'))
 }
 
-export function writeDismissalState(state: DismissalState): { version: 2, items: DismissalMap, hiddenRepos: string[] } {
-  return { version: 2, items: state.items, hiddenRepos: [...state.hiddenRepos] }
+export function readDismissalState(raw: unknown): DismissalState {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { items: {}, hiddenRepos: [], revealedParked: [] }
+  const record = raw as Record<string, unknown>
+  if (record.version === 2 && record.items && typeof record.items === 'object' && !Array.isArray(record.items)) {
+    return {
+      items: record.items as DismissalMap,
+      hiddenRepos: repoNames(record.hiddenRepos),
+      revealedParked: repoNames(record.revealedParked)
+    }
+  }
+  return { items: raw as DismissalMap, hiddenRepos: [], revealedParked: [] }
+}
+
+export function writeDismissalState(state: Omit<DismissalState, 'revealedParked'> & { revealedParked?: string[] }): { version: 2, items: DismissalMap, hiddenRepos: string[], revealedParked: string[] } {
+  return {
+    version: 2,
+    items: state.items,
+    hiddenRepos: [...state.hiddenRepos],
+    revealedParked: [...(state.revealedParked ?? [])]
+  }
+}
+
+export function effectiveHiddenRepos(userHidden: readonly string[], parked: readonly string[], revealed: readonly string[]): string[] {
+  const shown = new Set(revealed.map(repo => repo.toLowerCase()))
+  const names = new Map<string, string>()
+  for (const repo of userHidden) names.set(repo.toLowerCase(), repo)
+  for (const repo of parked) {
+    if (!shown.has(repo.toLowerCase())) names.set(repo.toLowerCase(), repo)
+  }
+  return [...names.values()]
 }

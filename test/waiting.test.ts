@@ -218,7 +218,7 @@ describe('human action signals', () => {
       kind: 'issue',
       number: 8,
       title: 'Screenshots',
-      body: '请 Dylan 看一下截图',
+      body: '请确认截图',
       createdAt: '2026-09-01T00:00:00.000Z'
     }), rules, NOW)
     expect(hit?.reasons).toEqual(['要人动手'])
@@ -244,7 +244,8 @@ describe('human action signals', () => {
       body: '等Dylan',
       comments: [{ body: '继续看实现', createdAt: '2026-09-20T00:00:00.000Z' }]
     }), rules, NOW)
-    expect(staleSignal).toBeNull()
+    expect(staleSignal?.tier).toBe('weak')
+    expect(staleSignal?.reasons).toEqual(['要人动手'])
 
     const labelStillOn = classifyRecord(record({
       kind: 'issue',
@@ -916,7 +917,9 @@ describe('tokens and search terms', () => {
       '请确认',
       '截图'
     ]))
-    expect(defaults.humanLabels).toEqual(expect.arrayContaining(['needs-human', 'needs-dylan']))
+    expect(defaults.humanLabels).toEqual(expect.arrayContaining(['pending', 'waiting', 'needs-*', 'blocked', '等待']))
+    expect(defaults.humanKeywords).not.toContain('\\bACK\\b')
+    expect(defaults.parkedMarkers).toEqual(expect.arrayContaining(['parked', '搁置']))
     expect(defaults.resolvedSignals).toEqual(expect.arrayContaining(['已验收', '已完成', '\\bPASS\\b']))
     expect(defaults.maxScopeRepos).toBe(400)
     expect(() => parseWaitingConfig({ maxScopeRepos: 0 })).toThrow('仓库数量上限')

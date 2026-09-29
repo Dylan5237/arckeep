@@ -22,7 +22,10 @@ const scenes = [
   ['waiting-ignore', 'waiting-ignore.png'],
   ['waiting-watch', 'waiting-watch.png'],
   ['waiting-hidden', 'waiting-hidden.png'],
-  ['waiting-family', 'waiting-family.png']
+  ['waiting-family', 'waiting-family.png'],
+  ['waiting-related', 'waiting-related.png'],
+  ['waiting-related-open', 'waiting-related-open.png'],
+  ['waiting-maybe-only', 'waiting-maybe-only.png']
 ]
 
 for (const [scene, filename] of scenes) {
