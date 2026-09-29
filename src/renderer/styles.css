@@ -226,16 +226,16 @@ button.ghost {
   border-color: #b08968;
 }
 
-.hotkey-alert {
-  display: flex;
+.hotkey-row {
   flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
 }
 
-.hotkey-alert span {
-  flex: 1 1 14rem;
+.hotkey-row input {
+  flex: 1 1 12rem;
+}
+
+.hotkey-alert {
+  margin-top: 8px;
 }
 
 .hotkey-active {
@@ -394,6 +394,43 @@ button.ghost {
 .empty-todos {
   margin: 12px 0 0;
   color: var(--arckeep-muted-graphite);
+}
+
+.todo-done {
+  margin-top: 8px;
+}
+
+.todo-done summary {
+  cursor: pointer;
+  padding: 10px 8px;
+  color: var(--arckeep-muted-graphite);
+}
+
+.todo-undo {
+  position: fixed;
+  z-index: 6;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 14px;
+  background: var(--arckeep-deep-charcoal);
+  color: var(--arckeep-warm-ivory);
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(35, 35, 35, 0.18);
+}
+
+.todo-undo button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .modal-backdrop {

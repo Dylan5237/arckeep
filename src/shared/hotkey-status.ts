@@ -21,8 +21,10 @@ export interface HotkeyRuntime {
 
 /**
  * Startup failure, a failed save that keeps the previous combo, and a
- * successful register. The banner stays until a register succeeds; it does
- * not expire on its own. A failed save keeps the typed combo in `field`.
+ * successful register. The banner names a combo only when nothing is
+ * registered; a failed save that leaves the previous combo live hides it.
+ * The banner does not expire on its own. A failed save keeps the typed
+ * combo in `field`.
  */
 export function hotkeyRuntimeAfterApply(
   current: HotkeyRuntime,
@@ -38,7 +40,7 @@ export function hotkeyRuntimeAfterApply(
   return {
     field: conflict ?? (typed || current.field),
     active,
-    banner: conflict ?? current.banner,
+    banner: active ? null : (conflict ?? current.banner),
     warning: applied.warning
   }
 }

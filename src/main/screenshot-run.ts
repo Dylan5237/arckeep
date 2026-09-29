@@ -86,7 +86,11 @@ export async function presentScreenshot(options: {
     contents = toast.webContents
     await waitUntil(contents, includesText('已记下'), '已记下')
   } else if (scene === 'todos' || scene === 'todos-narrow') {
-    await waitUntil(contents, includesText('共 40 条'), '共 40 条')
+    await waitUntil(contents, `
+      document.body.innerText.includes('共 40 条')
+      && document.body.innerText.includes('已完成 · 28')
+      && document.querySelector('[data-action="completed-group"]')?.open === false
+    `, '已完成分组')
     await contents.executeJavaScript(`
       document.querySelector('.todo-row')?.classList.add('is-hover')
       true
@@ -141,8 +145,11 @@ export async function presentScreenshot(options: {
         && input.value === 'Ctrl+Alt+K'
         && document.querySelector('#hotkey-active')?.textContent === '当前生效：Ctrl+Alt+Space'
         && conflict.innerText.includes('Ctrl+Alt+K 已被其他程序占用')
-        && banner.hidden === false
-        && banner.innerText.includes('快速捕获热键 Ctrl+Alt+K 被其他程序占用，现在按它不会有反应'))
+        && document.querySelector('#hotkey-record')?.textContent === '录制'
+        && document.querySelectorAll('#hotkey-conflict input').length === 0
+        && !document.body.innerText.includes('改用这个')
+        && banner.hidden === true
+        && !document.body.innerText.includes('现在按它不会有反应'))
     })()`, 'inline hotkey conflict')
   } else if (scene === 'todos-delete') {
     await waitUntil(contents, includesText('共 40 条'), '共 40 条')
@@ -150,7 +157,12 @@ export async function presentScreenshot(options: {
       document.querySelector('[data-action="delete"]').click()
       true
     `)
-    await waitUntil(contents, includesText('删除这条待办？'), '删除这条待办？')
+    await waitUntil(contents, `
+      document.body.innerText.includes('已删除')
+      && document.querySelector('[data-action="undo-delete"]')?.textContent === '撤销'
+      && document.querySelector('.modal-backdrop') === null
+      && !document.body.innerText.includes('删除这条待办')
+    `, '已删除 · 撤销')
   } else if (toolScreenshotExpectation(scene)) {
     await waitUntil(contents, includesText(toolScreenshotExpectation(scene) ?? ''), scene)
   } else if (scene === 'waiting-hover') {

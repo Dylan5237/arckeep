@@ -1,4 +1,12 @@
+import {
+  COMPLETED_GROUP_STORAGE_KEY,
+  completedGroupTitle,
+  partitionTodos,
+  readCompletedGroupOpen,
+  writeCompletedGroupOpen
+} from '../shared/todos/groups'
 import { formatRelativeTime } from '../shared/todos/time'
+import { beginDeleteUndo, deleteUndoItem, type DeleteUndo } from '../shared/todos/undo'
 import type { TodoItem } from '../shared/types'
 
 type RepoFilter = 'all' | 'none' | string
@@ -26,6 +34,24 @@ function localStamp(iso: string): string {
 }
 
 let unsubscribe: (() => void) | null = null
+let pendingUndo: DeleteUndo | null = null
+let undoTimer: number | null = null
+
+function rememberCompletedOpen(open: boolean): void {
+  try {
+    localStorage.setItem(COMPLETED_GROUP_STORAGE_KEY, writeCompletedGroupOpen(open))
+  } catch {
+    // The group still toggles for this render if storage is blocked.
+  }
+}
+
+function storedCompletedOpen(): boolean {
+  try {
+    return readCompletedGroupOpen(localStorage.getItem(COMPLETED_GROUP_STORAGE_KEY))
+  } catch {
+    return false
+  }
+}
 
 export async function renderTodos(content: HTMLElement): Promise<() => void> {
   unsubscribe?.()
@@ -41,6 +67,7 @@ export async function renderTodos(content: HTMLElement): Promise<() => void> {
   let editingId: string | null = null
 
   const draw = async (): Promise<void> => {
+    if (!page.isConnected) return
     let items: TodoItem[] = []
     let repos: string[] = []
     try {
@@ -54,7 +81,7 @@ export async function renderTodos(content: HTMLElement): Promise<() => void> {
       ]))
       return
     }
-    host.replaceChildren(renderBoard(items, repos, filter, {
+    host.replaceChildren(renderBoard(items, repos, filter, deleteUndoItem(pendingUndo, Date.now()), {
       onFilter: value => {
         filter = value
         editingId = null
@@ -72,12 +99,33 @@ export async function renderTodos(content: HTMLElement): Promise<() => void> {
       onChanged: () => {
         editingId = null
         void draw()
+      },
+      onDeleted: item => {
+        pendingUndo = beginDeleteUndo(item, Date.now())
+        if (undoTimer !== null) window.clearTimeout(undoTimer)
+        undoTimer = window.setTimeout(() => {
+          pendingUndo = null
+          undoTimer = null
+          void draw()
+        }, pendingUndo.until - Date.now())
+        editingId = null
+        void draw()
+      },
+      onUndo: item => {
+        void window.arckeep.restoreTodo(item).then(result => {
+          if (!result.ok || !page.isConnected) return
+          pendingUndo = null
+          if (undoTimer !== null) window.clearTimeout(undoTimer)
+          undoTimer = null
+          editingId = null
+          void draw()
+        })
       }
     }))
   }
 
   unsubscribe = window.arckeep.onTodosChanged(() => {
-    if (!page.isConnected || editingId || document.querySelector('.modal-backdrop')) return
+    if (!page.isConnected || editingId) return
     void draw()
   })
   await draw()
@@ -91,12 +139,15 @@ function renderBoard(
   items: TodoItem[],
   repos: string[],
   filter: RepoFilter,
+  undoItem: TodoItem | null,
   actions: {
     onFilter: (value: RepoFilter) => void
     editingId: string | null
     onEdit: (id: string) => void
     onCancelEdit: () => void
     onChanged: () => void
+    onDeleted: (item: TodoItem) => void
+    onUndo: (item: TodoItem) => void
   }
 ): DocumentFragment {
   const fragment = document.createDocumentFragment()
@@ -121,21 +172,64 @@ function renderBoard(
     select
   ]))
 
+  const appendUndo = (): void => {
+    if (undoItem) fragment.append(renderUndoBar(undoItem, actions.onUndo))
+  }
   if (items.length === 0) {
     fragment.append(el('p', { class: 'empty-todos' }, ['还没有待办。按全局热键打开快速捕获。']))
+    appendUndo()
     return fragment
   }
   if (visible.length === 0) {
     fragment.append(el('p', { class: 'empty-todos' }, ['这个仓库下没有待办。']))
+    appendUndo()
     return fragment
   }
 
+  const { open, done } = partitionTodos(visible)
   const list = el('div', { class: 'todo-list' })
-  for (const item of visible) {
+  for (const item of open) {
     list.append(renderRow(item, repos, actions.editingId === item.id, actions))
   }
   fragment.append(list)
+  if (done.length > 0) fragment.append(renderCompletedGroup(done, repos, actions))
+  appendUndo()
   return fragment
+}
+
+function renderCompletedGroup(
+  done: TodoItem[],
+  repos: string[],
+  actions: {
+    editingId: string | null
+    onEdit: (id: string) => void
+    onCancelEdit: () => void
+    onChanged: () => void
+    onDeleted: (item: TodoItem) => void
+  }
+): HTMLElement {
+  const list = el('div', { class: 'todo-list' })
+  for (const item of done) {
+    list.append(renderRow(item, repos, actions.editingId === item.id, actions))
+  }
+  const group = el('details', { class: 'todo-done', 'data-action': 'completed-group' }, [
+    el('summary', {}, [completedGroupTitle(done.length)]),
+    list
+  ])
+  group.open = storedCompletedOpen()
+  group.addEventListener('toggle', () => {
+    rememberCompletedOpen(group.open)
+  })
+  return group
+}
+
+function renderUndoBar(item: TodoItem, onUndo: (item: TodoItem) => void): HTMLElement {
+  const undo = el('button', { type: 'button', 'data-action': 'undo-delete' }, ['撤销'])
+  undo.addEventListener('click', () => onUndo(item))
+  return el('div', { class: 'todo-undo', role: 'status' }, [
+    el('span', {}, ['已删除 · ']),
+    undo
+  ])
 }
 
 function filterOptions(items: TodoItem[], repos: string[]): Array<{ value: string, label: string }> {
@@ -164,6 +258,7 @@ function renderRow(
     onEdit: (id: string) => void
     onCancelEdit: () => void
     onChanged: () => void
+    onDeleted: (item: TodoItem) => void
   }
 ): HTMLElement {
   const checkbox = el('input', { type: 'checkbox', class: 'todo-check', 'aria-label': item.completed ? '标为未完成' : '标为完成' })
@@ -181,7 +276,12 @@ function renderRow(
   const edit = el('button', { type: 'button', 'data-action': 'edit' }, ['编辑'])
   edit.addEventListener('click', () => actions.onEdit(item.id))
   const remove = el('button', { type: 'button', class: 'danger', 'data-action': 'delete' }, ['删除'])
-  remove.addEventListener('click', () => openDeleteDialog(item, actions.onChanged))
+  remove.addEventListener('click', () => {
+    void window.arckeep.deleteTodo(item.id).then(result => {
+      if (!result.ok) return
+      actions.onDeleted(item)
+    })
+  })
 
   const side = el('div', { class: 'todo-side' }, [
     el('time', { class: 'todo-time', datetime: item.createdAt, title: localStamp(item.createdAt) }, [
@@ -260,34 +360,4 @@ function renderEditor(
     error,
     el('div', { class: 'todo-edit-actions' }, [save, cancel])
   ])
-}
-
-function openDeleteDialog(item: TodoItem, onChanged: () => void): void {
-  const cancel = el('button', { type: 'button', class: 'ghost' }, ['取消'])
-  const confirm = el('button', { type: 'button', class: 'primary danger-fill' }, ['删除'])
-  const dialog = el('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': '删除待办' }, [
-    el('h2', {}, ['删除这条待办？']),
-    el('p', { class: 'todo-text' }, [item.text]),
-    el('p', { class: 'hint' }, ['删除后这条待办会从列表里消失。']),
-    el('div', { class: 'actions' }, [cancel, confirm])
-  ])
-  const backdrop = el('div', { class: 'modal-backdrop' }, [dialog])
-  const close = () => backdrop.remove()
-  cancel.addEventListener('click', close)
-  backdrop.addEventListener('click', event => {
-    if (event.target === backdrop) close()
-  })
-  confirm.addEventListener('click', () => {
-    confirm.setAttribute('disabled', 'true')
-    void window.arckeep.deleteTodo(item.id).then(result => {
-      if (!result.ok) {
-        confirm.removeAttribute('disabled')
-        return
-      }
-      close()
-      onChanged()
-    })
-  })
-  document.body.append(backdrop)
-  cancel.focus()
 }

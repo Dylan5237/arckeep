@@ -1,4 +1,4 @@
-import type { TodoInput, TodoUpdate } from './types.js'
+import type { TodoInput, TodoItem, TodoUpdate } from './types.js'
 
 const REPO_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -61,6 +61,36 @@ export function normalizeTodoCompletion(input: unknown): { id: string, completed
   if (typeof input.completed !== 'boolean') throw new Error('完成状态无效')
   return {
     id: normalizeTodoId(input.id),
+    completed: input.completed
+  }
+}
+
+function normalizeIso(input: unknown, label: string): string {
+  if (typeof input !== 'string' || input.length === 0 || input.length > 40 || Number.isNaN(Date.parse(input))) {
+    throw new Error(`${label}无效`)
+  }
+  return new Date(input).toISOString()
+}
+
+/** Full row used to put a deleted todo back where it was. */
+export function normalizeTodoSnapshot(input: unknown): TodoItem {
+  if (!isRecord(input)) throw new Error('待办无效')
+  const waiting = normalizeWaiting(input.waiting)
+  if (typeof input.completed !== 'boolean') throw new Error('完成状态无效')
+  let waitingSince: string | null = null
+  if (waiting) {
+    waitingSince = normalizeIso(input.waitingSince, '等我计时')
+  } else if (input.waitingSince != null) {
+    throw new Error('等我计时无效')
+  }
+  return {
+    id: normalizeTodoId(input.id),
+    text: normalizeTodoText(input.text),
+    repo: normalizeRepoTag(input.repo),
+    waiting,
+    waitingSince,
+    createdAt: normalizeIso(input.createdAt, '创建时间'),
+    updatedAt: normalizeIso(input.updatedAt, '更新时间'),
     completed: input.completed
   }
 }
