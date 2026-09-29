@@ -2,44 +2,48 @@
   "version": 1,
   "actions": [
     {
-      "id": "open-arckeep",
-      "title": "打开 Arckeep 仓库",
-      "description": "在浏览器中打开仓库页面。所有者和仓库名都可以改。",
+      "id": "open-repo",
+      "title": "打开仓库",
+      "description": "从已知仓库里选一个打开。有 GitHub 名时打开仓库页面，只有本地路径时打开文件夹。",
+      "confirmLabel": "打开 {{repo}}",
       "type": "open-url",
-      "url": "https://github.com/{{owner}}/{{repo}}",
+      "url": "https://github.com/{{repo}}",
       "params": [
-        { "key": "owner", "label": "所有者", "required": true, "default": "Dylan5237" },
-        { "key": "repo", "label": "仓库", "required": true, "default": "arckeep" }
+        { "key": "repo", "label": "仓库", "required": true, "input": "repo" }
       ]
     },
     {
       "id": "open-folder-editor",
       "title": "在编辑器中打开文件夹",
       "description": "编辑器只作为程序启动，参数是文件夹路径，不经过 shell。",
+      "confirmLabel": "用编辑器打开 {{folder}}",
       "type": "open-folder",
       "editor": "code",
       "path": "{{folder}}",
       "params": [
-        { "key": "folder", "label": "文件夹", "required": true, "default": "C:\\work\\demo" }
+        { "key": "folder", "label": "文件夹", "required": true, "input": "directory", "default": "C:\\work\\demo" }
       ]
     },
     {
-      "id": "apo-init-dry-run",
-      "title": "apo 项目初始化（演练）",
-      "description": "运行 apo init --dry-run。占位符会按所选 shell 加引号，不会变成额外命令。",
+      "id": "apo-init",
+      "title": "apo 项目初始化",
+      "description": "初始化一个 apo 项目。",
+      "confirmLabel": "在 {{cwd}} 初始化 {{name}}",
       "type": "run-command",
       "shell": "powershell",
       "cwd": "{{cwd}}",
-      "command": "apo init --dry-run --name {{name}}",
+      "previewCommand": "apo init --dry-run --name {{name}}",
+      "command": "apo init --name {{name}}",
       "params": [
-        { "key": "cwd", "label": "工作目录", "required": true, "default": "C:\\work\\demo" },
+        { "key": "cwd", "label": "工作目录", "required": true, "input": "directory", "default": "C:\\work\\demo" },
         { "key": "name", "label": "项目名", "required": true, "default": "demo" }
       ]
     },
     {
       "id": "dispatch-note",
       "title": "派工说明",
-      "description": "按参数生成一段派工说明，确认后复制到剪贴板。",
+      "description": "按参数生成一段派工说明，一键复制到剪贴板。",
+      "confirmLabel": "复制派工说明",
       "type": "template",
       "text": "派工说明\n项目：{{project}}\n任务：{{task}}\n截止：{{due}}\n请按上面的范围处理，完成后回复结果。",
       "params": [

@@ -235,6 +235,8 @@ export async function presentScreenshot(options: {
     }
   } else if (toolScreenshotExpectation(scene)) {
     await waitUntil(contents, includesText(toolScreenshotExpectation(scene) ?? ''), scene)
+    const leaked = await contents.executeJavaScript(`document.body.innerText.includes('LASTEXITCODE')`)
+    if (leaked) throw new Error(`screenshot scene ${scene} showed a shell exit wrapper`)
   } else if (scene === 'waiting-hover' || scene === 'waiting-ignore') {
     await waitUntil(contents, includesText('验收北区截图'), '验收北区截图')
     await pointAtWaitingRow(main, scene === 'waiting-hover' ? 8 : 0, scene === 'waiting-ignore')

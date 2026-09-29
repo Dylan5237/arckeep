@@ -597,6 +597,8 @@ if (!gotLock) {
       getWindow: () => mainWindow,
       settings: service,
       runner: toolRunner,
+      repos: waiting,
+      todoRepos: () => (todos?.listTodos() ?? []).flatMap(item => item.repo ? [item.repo] : []),
       screenshotScene
     })
     mainWindow = createWindow()

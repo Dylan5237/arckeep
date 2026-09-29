@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { clipboard, dialog, shell, type BrowserWindow } from 'electron'
+import type { KnownRepo } from '../shared/tools/repos.js'
 import type { ActionPreview, ToolRunEvent } from '../shared/tools/types.js'
 import type { IpcResult } from '../shared/types.js'
 import { planShell } from './tool-launch.js'
@@ -38,6 +39,7 @@ export async function confirmToolAction(options: {
   actionId: unknown
   params: unknown
   baseCwd?: string
+  knownRepos?: readonly KnownRepo[]
 }): Promise<IpcResult<{ kind: 'run', runId: string } | { kind: 'open-url' } | { kind: 'open-folder' } | { kind: 'template' }>> {
   let actionId: string
   let params: Record<string, string>
@@ -53,7 +55,8 @@ export async function confirmToolAction(options: {
       options.settings.getSettings().toolShelfJson,
       actionId,
       params,
-      options.baseCwd ?? process.cwd()
+      options.baseCwd ?? process.cwd(),
+      options.knownRepos ?? []
     )
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : '无法预览' }
@@ -79,12 +82,27 @@ export async function confirmToolAction(options: {
     if (preview.shell === 'powershell' && process.platform !== 'win32') {
       throw new Error('PowerShell 只能在 Windows 上运行')
     }
+    // preview.text is the confirmed command. preview.dryRun is display-only.
     const plan = planShell(preview.shell, preview.text)
     const runId = options.runner.start(plan, preview.cwd)
     return { ok: true, data: { kind: 'run', runId } }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : '执行失败' }
   }
+}
+
+export async function pickToolFolder(window: BrowserWindow | null): Promise<
+  IpcResult<{ cancelled: true } | { cancelled: false, path: string }>
+> {
+  const dialogOptions = {
+    title: '选择文件夹',
+    properties: ['openDirectory'] as Array<'openDirectory'>
+  }
+  const result = window
+    ? await dialog.showOpenDialog(window, dialogOptions)
+    : await dialog.showOpenDialog(dialogOptions)
+  if (result.canceled || result.filePaths.length === 0) return { ok: true, data: { cancelled: true } }
+  return { ok: true, data: { cancelled: false, path: result.filePaths[0] } }
 }
 
 export async function importToolShelfFile(window: BrowserWindow | null): Promise<

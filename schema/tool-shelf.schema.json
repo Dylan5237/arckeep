@@ -22,7 +22,8 @@
         "key": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,40}$" },
         "label": { "type": "string", "minLength": 1, "maxLength": 80 },
         "default": { "type": "string", "maxLength": 4000 },
-        "required": { "type": "boolean" }
+        "required": { "type": "boolean" },
+        "input": { "enum": ["line", "multiline", "directory", "repo"] }
       }
     },
     "action": {
@@ -33,6 +34,7 @@
         "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,60}$" },
         "title": { "type": "string", "minLength": 1, "maxLength": 80 },
         "description": { "type": "string", "maxLength": 400 },
+        "confirmLabel": { "type": "string", "minLength": 1, "maxLength": 200 },
         "type": { "enum": ["open-url", "open-folder", "run-command", "template"] },
         "params": {
           "type": "array",
@@ -45,6 +47,7 @@
         "shell": { "enum": ["cmd", "powershell", "git-bash"] },
         "cwd": { "type": "string", "maxLength": 4000 },
         "command": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "previewCommand": { "type": "string", "minLength": 1, "maxLength": 4000 },
         "text": { "type": "string", "minLength": 1, "maxLength": 8000 }
       },
       "allOf": [
@@ -61,6 +64,7 @@
               "shell": false,
               "cwd": false,
               "command": false,
+              "previewCommand": false,
               "text": false
             }
           }
@@ -77,6 +81,7 @@
               "shell": false,
               "cwd": false,
               "command": false,
+              "previewCommand": false,
               "text": false
             }
           }
@@ -109,7 +114,8 @@
               "editor": false,
               "shell": false,
               "cwd": false,
-              "command": false
+              "command": false,
+              "previewCommand": false
             }
           }
         }

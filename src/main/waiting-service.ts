@@ -136,6 +136,42 @@ export class WaitingService {
     return this.snapshot
   }
 
+  observedGithubRepos(): string[] {
+    const names = new Set<string>()
+    const groups = [
+      this.memory.assignee,
+      this.memory.reviewRequested,
+      this.memory.mentions,
+      this.memory.openPrs,
+      this.memory.humanIssues
+    ]
+    for (const group of groups) {
+      for (const record of group) {
+        if (record.repo) names.add(record.repo)
+      }
+    }
+    for (const doc of this.memory.statusDocs) {
+      if (doc.repo) names.add(doc.repo)
+    }
+    for (const branch of this.memory.branches) {
+      if (branch.repo) names.add(branch.repo)
+    }
+    return [...names]
+  }
+
+  observedLocalLinks(): Array<{ github: string, path: string }> {
+    const seen = new Set<string>()
+    const links: Array<{ github: string, path: string }> = []
+    for (const branch of this.memory.branches) {
+      if (!branch.repo || !branch.dir) continue
+      const key = `${branch.repo}\0${branch.dir}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      links.push({ github: branch.repo, path: branch.dir })
+    }
+    return links
+  }
+
   async refresh(): Promise<WaitingSnapshot> {
     const stored = this.settings.getSettings()
     const env = this.deps.env ?? process.env
