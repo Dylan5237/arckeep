@@ -102,6 +102,13 @@ namespace ArckeepVerify {
 }
 '@
 
+function Assert-SendInputOk([uint32]$sent, [string]$context) {
+  if ($sent -eq 0) {
+    $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+    throw "SendInput 报告 0 个事件被插入（$context），GetLastError=$err —— 说明这次 SendInput 调用本身在 OS 层面没有真正注入任何输入（可能是没有 attach 到交互式输入桌面 / 权限问题），不是被测应用的问题。"
+  }
+}
+
 function Send-KeyEvent([int]$vk, [bool]$up) {
   $evt = New-Object ArckeepVerify.Native+INPUT
   $evt.type = [ArckeepVerify.Native]::INPUT_KEYBOARD
@@ -112,7 +119,8 @@ function Send-KeyEvent([int]$vk, [bool]$up) {
   $evt.U.ki.time = 0
   $evt.U.ki.dwExtraInfo = [IntPtr]::Zero
   $arr = [ArckeepVerify.Native+INPUT[]]@($evt)
-  [ArckeepVerify.Native]::SendInput(1, $arr, [System.Runtime.InteropServices.Marshal]::SizeOf([type][ArckeepVerify.Native+INPUT])) | Out-Null
+  $sent = [ArckeepVerify.Native]::SendInput(1, $arr, [System.Runtime.InteropServices.Marshal]::SizeOf([type][ArckeepVerify.Native+INPUT]))
+  Assert-SendInputOk $sent "Send-KeyEvent vk=$vk up=$up"
 }
 
 function Send-UnicodeChar([char]$ch, [bool]$up) {
@@ -127,7 +135,8 @@ function Send-UnicodeChar([char]$ch, [bool]$up) {
   $evt.U.ki.time = 0
   $evt.U.ki.dwExtraInfo = [IntPtr]::Zero
   $arr = [ArckeepVerify.Native+INPUT[]]@($evt)
-  [ArckeepVerify.Native]::SendInput(1, $arr, [System.Runtime.InteropServices.Marshal]::SizeOf([type][ArckeepVerify.Native+INPUT])) | Out-Null
+  $sent = [ArckeepVerify.Native]::SendInput(1, $arr, [System.Runtime.InteropServices.Marshal]::SizeOf([type][ArckeepVerify.Native+INPUT]))
+  Assert-SendInputOk $sent "Send-UnicodeChar ch=$([int]$ch) up=$up"
 }
 
 $VK = @{
@@ -189,16 +198,16 @@ switch ($Action) {
     $hwnd = [ArckeepVerify.Native]::GetForegroundWindow()
     $sb = New-Object System.Text.StringBuilder 512
     [ArckeepVerify.Native]::GetWindowText($hwnd, $sb, 512) | Out-Null
-    $pid = 0
-    [ArckeepVerify.Native]::GetWindowThreadProcessId($hwnd, [ref]$pid) | Out-Null
+    $targetPid = 0
+    [ArckeepVerify.Native]::GetWindowThreadProcessId($hwnd, [ref]$targetPid) | Out-Null
     $procName = 'unknown'
-    try { $procName = (Get-Process -Id $pid).ProcessName } catch {}
+    try { $procName = (Get-Process -Id $targetPid).ProcessName } catch {}
     $rect = New-Object ArckeepVerify.Native+RECT
     [ArckeepVerify.Native]::GetWindowRect($hwnd, [ref]$rect) | Out-Null
     Write-Output (@{
       hwnd = $hwnd.ToInt64()
       title = $sb.ToString()
-      processId = $pid
+      processId = $targetPid
       processName = $procName
       rect = @{ left = $rect.Left; top = $rect.Top; right = $rect.Right; bottom = $rect.Bottom }
     } | ConvertTo-Json -Compress)
@@ -229,10 +238,12 @@ switch ($Action) {
     $up.U.mi = New-Object ArckeepVerify.Native+MOUSEINPUT
     $up.U.mi.dwFlags = [ArckeepVerify.Native]::MOUSEEVENTF_LEFTUP
     $arr = [ArckeepVerify.Native+INPUT[]]@($down)
-    [ArckeepVerify.Native]::SendInput(1, $arr, [System.Runtime.InteropServices.Marshal]::SizeOf([type][ArckeepVerify.Native+INPUT])) | Out-Null
+    $sentDown = [ArckeepVerify.Native]::SendInput(1, $arr, [System.Runtime.InteropServices.Marshal]::SizeOf([type][ArckeepVerify.Native+INPUT]))
+    Assert-SendInputOk $sentDown 'ClickAt mousedown'
     Start-Sleep -Milliseconds 30
     $arr2 = [ArckeepVerify.Native+INPUT[]]@($up)
-    [ArckeepVerify.Native]::SendInput(1, $arr2, [System.Runtime.InteropServices.Marshal]::SizeOf([type][ArckeepVerify.Native+INPUT])) | Out-Null
+    $sentUp = [ArckeepVerify.Native]::SendInput(1, $arr2, [System.Runtime.InteropServices.Marshal]::SizeOf([type][ArckeepVerify.Native+INPUT]))
+    Assert-SendInputOk $sentUp 'ClickAt mouseup'
     Write-Output (@{ ok = $true; x = $X; y = $Y } | ConvertTo-Json -Compress)
   }
   'Occupy' {
