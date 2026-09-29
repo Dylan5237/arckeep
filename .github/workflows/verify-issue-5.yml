@@ -1,0 +1,169 @@
+name: Verify Issue 5 (independent acceptance, fe6b855)
+
+# 独立验收专用 workflow。只在 verify/issue-5-fe6b855 分支上跑，不改产品代码，
+# 也不会在别的分支/PR 上触发，不影响正常 CI 之外的 Actions 分钟统计。
+on:
+  push:
+    branches: [verify/issue-5-fe6b855]
+    paths:
+      - 'verify/issue-5/**'
+      - '.github/workflows/verify-issue-5.yml'
+  workflow_dispatch:
+    inputs:
+      main_run_id:
+        description: '优先使用的 main push CI run id（产出 Windows 产物）'
+        default: '36511823583'
+      expected_head_sha:
+        description: '被测 SHA（Issue #5「工具架」PR #15 + 评审修复 PR #17 + 二轮评审修复 PR #22 合并后的 main）'
+        default: 'fe6b85508c67cb9a72cc15dedcbe2f4f50a2b431'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: verify-issue-5-fe6b855
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: windows-latest 独立验收
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout verify/issue-5-fe6b855
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: 确认产品源码没有被这个分支改动过
+        shell: pwsh
+        run: |
+          $expected = "${{ github.event.inputs.expected_head_sha || 'fe6b85508c67cb9a72cc15dedcbe2f4f50a2b431' }}"
+          git fetch origin $expected --depth=1 2>$null
+          $diff = git diff $expected -- . ':!verify' ':!.github/workflows/verify-issue-5.yml'
+          if ($diff) {
+            Write-Error "产品代码相对被测 SHA $expected 有改动，违反验收硬性规则：`n$diff"
+            exit 1
+          }
+          Write-Output "确认：除 verify/** 和本 workflow 文件外，与被测 SHA $expected 完全一致"
+
+      - name: Install root deps (for unit tests)
+        run: npm ci
+
+      - name: 跑产品自带单元测试（给 Item 5「仓库有覆盖这一点的单测」引用用）
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path verify/issue-5/evidence | Out-Null
+          npm test 2>&1 | Tee-Object -FilePath verify/issue-5/evidence/unit-tests-full.txt
+          Select-String -Path verify/issue-5/evidence/unit-tests-full.txt -Pattern 'tool-quote\.test\.ts|tool-runner\.test\.ts|quoteCmdArg|quotePowerShellArg|quoteBashArg|injection|escap' -Context 0,1 |
+            Out-File -FilePath verify/issue-5/evidence/unit-tests-quoting.txt -Encoding utf8
+
+      - name: Install verify harness deps
+        working-directory: verify/issue-5
+        run: npm ci
+
+      - name: 找到要用的 CI run 并下载 Windows 产物
+        id: artifact
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $expected = "${{ github.event.inputs.expected_head_sha || 'fe6b85508c67cb9a72cc15dedcbe2f4f50a2b431' }}"
+          $mainRunId = "${{ github.event.inputs.main_run_id || '36511823583' }}"
+          $repo = "${{ github.repository }}"
+
+          $runInfo = gh api "repos/$repo/actions/runs/$mainRunId" | ConvertFrom-Json
+          if ($runInfo.head_sha -ne $expected -or $runInfo.status -ne 'completed' -or $runInfo.conclusion -ne 'success') {
+            Write-Error "main run $mainRunId 状态不符合预期（head_sha=$($runInfo.head_sha) status=$($runInfo.status) conclusion=$($runInfo.conclusion)），按硬性规则停止，不绕过。"
+            exit 1
+          }
+          $headSha = $runInfo.head_sha
+
+          $json = gh api "repos/$repo/actions/runs/$mainRunId/artifacts" | ConvertFrom-Json
+          $artifact = $json.artifacts | Where-Object { $_.name -eq 'arckeep-win-unpacked' -and -not $_.expired }
+          if (-not $artifact) {
+            Write-Error "run $mainRunId 上找不到未过期的 arckeep-win-unpacked artifact，按硬性规则停止（不绕过权限/产物缺失问题）。"
+            exit 1
+          }
+
+          $outer = "artifact-outer.zip"
+          gh api "repos/$repo/actions/artifacts/$($artifact.id)/zip" > $outer
+          if ($LASTEXITCODE -ne 0) { Write-Error "下载 artifact 失败（gh api .../zip），按硬性规则停止，不绕过。"; exit 1 }
+
+          Expand-Archive -Path $outer -DestinationPath artifact-outer -Force
+          $innerZip = Get-ChildItem -Path artifact-outer -Filter "arckeep-win-unpacked.zip" -Recurse | Select-Object -First 1
+          if (-not $innerZip) { Write-Error "outer artifact 里没有找到 arckeep-win-unpacked.zip"; exit 1 }
+          Expand-Archive -Path $innerZip.FullName -DestinationPath artifact-inner -Force
+
+          $exe = Get-ChildItem -Path artifact-inner -Filter "Arckeep.exe" -Recurse | Select-Object -First 1
+          if (-not $exe) { Write-Error "没有找到 win-unpacked/Arckeep.exe"; exit 1 }
+
+          $exeHash = (Get-FileHash -Path $exe.FullName -Algorithm SHA256).Hash.ToLower()
+          $zipHash = (Get-FileHash -Path $innerZip.FullName -Algorithm SHA256).Hash.ToLower()
+
+          $info = [ordered]@{
+            usedRunId = $mainRunId
+            headSha = $headSha
+            expectedSha = $expected
+            artifactId = $artifact.id
+            artifactName = $artifact.name
+            exePath = $exe.FullName
+            exeSha256 = $exeHash
+            innerZipSha256 = $zipHash
+          }
+          $info | ConvertTo-Json | Out-File -FilePath verify/issue-5/evidence/artifact-source.json -Encoding utf8
+          Write-Output "exePath=$($exe.FullName)"
+          Write-Output "exeSha256=$exeHash"
+          "exe_path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          "exe_sha256=$exeHash" >> $env:GITHUB_OUTPUT
+
+      - name: 去掉真实 GitHub token 环境变量（防御性二次确认，硬性规则第 4 条）
+        shell: pwsh
+        run: |
+          Remove-Item Env:\GH_TOKEN -ErrorAction SilentlyContinue
+          Remove-Item Env:\GITHUB_TOKEN -ErrorAction SilentlyContinue
+          Write-Output "GH_TOKEN / GITHUB_TOKEN 已从后续步骤环境中移除"
+
+      - name: 跑验收脚本（Playwright + 真实界面操作）
+        working-directory: verify/issue-5
+        shell: pwsh
+        env:
+          ARCKEEP_EXE_PATH: ${{ steps.artifact.outputs.exe_path }}
+        run: |
+          node run.mjs
+          Write-Output "run.mjs exit code: $LASTEXITCODE"
+          exit 0
+
+      - name: 汇总结论（写进 job summary）
+        if: always()
+        shell: pwsh
+        run: |
+          $resultsPath = "verify/issue-5/evidence/results.json"
+          if (Test-Path $resultsPath) {
+            $results = Get-Content $resultsPath -Raw | ConvertFrom-Json
+            "## Issue #5 工具架验收结论汇总（被测 SHA fe6b855）" >> $env:GITHUB_STEP_SUMMARY
+            "" >> $env:GITHUB_STEP_SUMMARY
+            "| 检查项 | 结论 |" >> $env:GITHUB_STEP_SUMMARY
+            "| --- | --- |" >> $env:GITHUB_STEP_SUMMARY
+            foreach ($prop in $results.PSObject.Properties) {
+              "| $($prop.Name) | $($prop.Value.verdict) |" >> $env:GITHUB_STEP_SUMMARY
+            }
+          } else {
+            "results.json 不存在，验收脚本可能异常终止" >> $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: Upload 验收证据 artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-5-fe6b855-verify-evidence
+          path: |
+            verify/issue-5/evidence/**
+          if-no-files-found: warn
+          retention-days: 30
