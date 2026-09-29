@@ -7,6 +7,7 @@ import {
   normalizeTodoCompletion,
   normalizeTodoId,
   normalizeTodoInput,
+  normalizeTodoSnapshot,
   normalizeTodoUpdate
 } from '../../shared/todos/validate.js'
 
@@ -20,7 +21,7 @@ export interface TodoStoreOptions {
  * Append-only todo log.
  *
  * `todos.jsonl` under Electron userData (`%APPDATA%\Arckeep\` on Windows) is
- * the source of truth. Reads fold create/update/complete/uncomplete/delete
+ * the source of truth. Reads fold create/update/complete/uncomplete/delete/restore
  * events. A corrupt line is skipped and the file is never rewritten on load.
  *
  * `listWaitingTodos()` returns incomplete「等我」items.
@@ -120,6 +121,13 @@ export class TodoStore {
     this.requireItem(todoId)
     this.append({ op: 'delete', id: todoId, at: this.now().toISOString() })
     return { id: todoId }
+  }
+
+  /** Puts a deleted row back with the same id, order, repo, and 等我 timer. */
+  restore(input: unknown): TodoItem {
+    const snapshot = normalizeTodoSnapshot(input)
+    this.append({ op: 'restore', record: snapshot })
+    return this.requireItem(snapshot.id)
   }
 
   private requireItem(id: string): TodoItem {

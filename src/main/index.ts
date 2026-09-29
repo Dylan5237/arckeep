@@ -459,6 +459,16 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
       return ipcError(error, '待办无效')
     }
   })
+  ipcMain.handle(IpcChannel.restoreTodo, (event, input: unknown) => {
+    guard(event)
+    try {
+      const restored = store.restore(input)
+      notifyTodosChanged()
+      return { ok: true, data: restored }
+    } catch (error) {
+      return ipcError(error, '待办无效')
+    }
+  })
   ipcMain.handle(IpcChannel.getCaptureDraft, event => {
     guard(event)
     return loadCaptureDraft(draftFile())

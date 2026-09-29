@@ -46,7 +46,7 @@ describe('hotkey availability', () => {
     expect(saveFailed).toMatchObject({
       field: 'Ctrl+Alt+K',
       active: DEFAULT_HOTKEY,
-      banner: 'Ctrl+Alt+K',
+      banner: null,
       warning: 'Ctrl+Alt+K 已被其他程序占用'
     })
     expect(activeHotkeyLabel(saveFailed.active)).toBe('当前生效：Ctrl+Alt+Space')
@@ -61,6 +61,25 @@ describe('hotkey availability', () => {
       active: 'Ctrl+Shift+K',
       banner: null,
       warning: null
+    })
+  })
+
+  it('shows the banner only when the failed save leaves nothing registered', () => {
+    const blocked: HotkeyRuntime = {
+      field: DEFAULT_HOTKEY,
+      active: null,
+      banner: DEFAULT_HOTKEY,
+      warning: `${DEFAULT_HOTKEY} 已被其他程序占用`
+    }
+    expect(hotkeyRuntimeAfterApply(blocked, {
+      ok: false,
+      hotkey: DEFAULT_HOTKEY,
+      warning: 'Ctrl+Alt+K 已被其他程序占用'
+    }, 'Ctrl+Alt+K')).toMatchObject({
+      field: 'Ctrl+Alt+K',
+      active: null,
+      banner: 'Ctrl+Alt+K',
+      warning: 'Ctrl+Alt+K 已被其他程序占用'
     })
   })
 
