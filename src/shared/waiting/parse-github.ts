@@ -32,6 +32,7 @@ export function blankRecord(partial: Pick<GithubRecord, 'kind' | 'repo' | 'numbe
     reviewRequestedAt: null,
     mentionedAt: null,
     lastPushedAt: null,
+    lastReviewAt: null,
     labelEvents: [],
     fromAssignee: false,
     fromReview: false,
@@ -179,6 +180,16 @@ function lastPush(node: Record<string, unknown>): string | null {
   return pushed || null
 }
 
+function lastReviewAtOf(node: Record<string, unknown>): string | null {
+  let at: string | null = null
+  for (const review of connectionNodes(node.reviews).filter(isRecord)) {
+    const submitted = text(review.submittedAt) || text(review.createdAt)
+    if (!submitted) continue
+    if (!at || Date.parse(submitted) > Date.parse(at)) at = submitted
+  }
+  return at
+}
+
 export interface ParseFlags {
   login: string
   fromAssignee?: boolean
@@ -227,6 +238,7 @@ export function parseGithubNode(node: unknown, flags: ParseFlags): GithubRecord 
     reviewRequestedAt: reviewRequestedAtFor(node, flags.login),
     mentionedAt: flags.fromMention ? findMentionTime(body, createdAt, comments, flags.login) : null,
     lastPushedAt: lastPush(node),
+    lastReviewAt: lastReviewAtOf(node),
     labelEvents: labelEventsOf(node),
     fromAssignee: flags.fromAssignee === true,
     fromReview: flags.fromReview === true,

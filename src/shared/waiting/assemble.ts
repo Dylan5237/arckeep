@@ -1,4 +1,5 @@
 import { draftFromReasons, classifyRecord } from './classify.js'
+import { laterIso } from './days.js'
 import { dedupeDrafts, issueUrlKey, sortDrafts } from './dedupe.js'
 import { annotateIssueFamily } from './sub-issues.js'
 import { WAITING_REASONS, type GithubRecord, type LocalBranchHit, type RepoAccess, type StatusDocHit, type TodoWaitingItem, type WaitingConfig, type WaitingDraft, type WaitingJsonRow } from './types.js'
@@ -129,7 +130,8 @@ export function mergeRecords(records: readonly GithubRecord[]): GithubRecord[] {
     existing.assignedAt = existing.assignedAt ?? record.assignedAt
     existing.reviewRequestedAt = existing.reviewRequestedAt ?? record.reviewRequestedAt
     existing.mentionedAt = existing.mentionedAt ?? record.mentionedAt
-    existing.lastPushedAt = existing.lastPushedAt ?? record.lastPushedAt
+    existing.lastPushedAt = laterIso(existing.lastPushedAt, record.lastPushedAt)
+    existing.lastReviewAt = laterIso(existing.lastReviewAt, record.lastReviewAt)
     existing.parentNumber = existing.parentNumber ?? record.parentNumber
     if (!existing.body && record.body) existing.body = record.body
     if (record.comments.length > existing.comments.length) existing.comments = record.comments.map(comment => ({ ...comment }))

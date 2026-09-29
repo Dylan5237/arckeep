@@ -102,7 +102,8 @@ export function partitionDismissals(
       ignored: deferred,
       parentNumber: draft.parentNumber,
       parent: draft.parent,
-      childCount: 0
+      childCount: 0,
+      signalText: draft.signal.excerpt || draft.signal.rule
     })
   }
   const listed = annotateIssueFamily(rows)
