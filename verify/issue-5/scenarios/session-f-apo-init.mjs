@@ -14,7 +14,7 @@ import * as lib from '../lib.mjs'
 
 const {
   setResult, mergeNotes, launchApp, mainWindowPage, quitApp, killStrayArckeep,
-  shot, sleep, freshAppData, saveToolShelfJson, gotoTools, openCardByTitle,
+  shot, sleep, freshAppData, saveToolShelfJson, gotoToolsOrRelaunch, openCardByTitle,
   mkdtemp, waitFor, appendEvidenceJson, findNewPidByName,
   decodePowershellEncodedCommand, __dirname
 } = lib
@@ -48,12 +48,18 @@ export async function run() {
   const appData = freshAppData('apo-init')
   // 把假 apo 放到 PATH 最前面，只影响这一个测试进程，不影响其它 session、不改产品代码。
   const pathWithStub = `${apoStubDir}${path.delimiter}${process.env.PATH ?? ''}`
-  const app = await launchApp({ label: 'F-apo-init', appData, envExtra: { PATH: pathWithStub } })
-  const page = await mainWindowPage(app)
+  const envExtra = { PATH: pathWithStub }
+  let app = await launchApp({ label: 'F-apo-init', appData, envExtra })
+  let page = await mainWindowPage(app)
   await saveToolShelfJson(page, CONFIG)
+  // 如果真的卡住回不到工具架列表，重开一个全新的应用进程（同样要带上假 apo 的 PATH）。
+  // 见 lib.mjs 的 gotoToolsOrRelaunch 注释。
+  async function goTools() {
+    ;({ app, page } = await gotoToolsOrRelaunch({ app, page, label: 'F-apo-init', config: CONFIG, envExtra }))
+  }
 
   try {
-    await gotoTools(page)
+    await goTools()
     await openCardByTitle(page, 'apo 项目初始化')
     await sleep(150)
     // cwd/name 参数都用 default 预填（cwd 是 directory 类型的单选组，默认值不在已知仓库列表里时

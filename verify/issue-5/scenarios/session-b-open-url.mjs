@@ -6,7 +6,7 @@ import * as lib from '../lib.mjs'
 
 const {
   setResult, launchApp, mainWindowPage, captureWindowPage, quitApp, killStrayArckeep,
-  fullShot, shot, sleep, freshAppData, saveToolShelfJson, gotoTools,
+  fullShot, shot, sleep, freshAppData, saveToolShelfJson, gotoToolsOrRelaunch,
   installOpenExternalSpy, readOpenExternalCalls, callTestHook, appendEvidenceJson
 } = lib
 
@@ -37,17 +37,24 @@ const CONFIG = JSON.stringify({
 export async function run() {
   killStrayArckeep()
   const appData = freshAppData('open-url')
-  const app = await launchApp({ label: 'B-open-url', appData })
-  const page = await mainWindowPage(app)
+  let app = await launchApp({ label: 'B-open-url', appData })
+  let page = await mainWindowPage(app)
   await installOpenExternalSpy(app)
 
   await saveToolShelfJson(page, CONFIG)
+  // 如果真的卡住回不到工具架列表，重开一个全新的应用进程（同时补装 openExternal 观察桩，
+  // 不然新进程就测不到 Item2/P1 依赖的这个桩了）。见 lib.mjs 的 gotoToolsOrRelaunch 注释。
+  async function goTools() {
+    const before = app
+    ;({ app, page } = await gotoToolsOrRelaunch({ app, page, label: 'B-open-url', config: CONFIG }))
+    if (app !== before) await installOpenExternalSpy(app)
+  }
 
   // ------------------------------------------------------------------
   // Item 2：预览显示展开后的 URL，确认后 openExternal 收到的 URL 与预览逐字一致
   // ------------------------------------------------------------------
   try {
-    await gotoTools(page)
+    await goTools()
     await lib.openCardByTitle(page, '打开链接示例')
     // 有参数 → 参数页
     await page.fill('input[aria-label="仓库标识"]', 'octocat/Hello-World')
@@ -117,7 +124,7 @@ export async function run() {
     appendEvidenceJson('p1-capture-diagnostic', { captureErrorText, captureStillOpen, todosAfterCapture })
 
     // 3) 打开仓库 → 参数页应能看到两个来源都在列表里
-    await gotoTools(page)
+    await goTools()
     await lib.openCardByTitle(page, '打开仓库')
     await sleep(200)
     const choiceLabels = await page.locator('.repo-choice-label').allInnerTexts()

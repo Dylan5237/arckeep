@@ -9,7 +9,7 @@ import * as lib from '../lib.mjs'
 
 const {
   setResult, mergeNotes, launchApp, mainWindowPage, quitApp, killStrayArckeep,
-  shot, fullShot, sleep, freshAppData, saveToolShelfJson, gotoTools, openCardByTitle,
+  shot, fullShot, sleep, freshAppData, saveToolShelfJson, gotoToolsOrRelaunch, openCardByTitle,
   mkdtemp, waitFor, appendEvidenceJson, findProcessesByMarker, findNewPidByName,
   checkPidsAlive, uniqueMarker
 } = lib
@@ -126,9 +126,14 @@ async function fillParamByLabel(page, label, value) {
 export async function run() {
   killStrayArckeep()
   const appData = freshAppData('run-command')
-  const app = await launchApp({ label: 'D-run-command', appData })
-  const page = await mainWindowPage(app)
+  let app = await launchApp({ label: 'D-run-command', appData })
+  let page = await mainWindowPage(app)
   await saveToolShelfJson(page, CONFIG)
+  // 用得到的地方都用这个代替裸的 gotoTools(page)：如果真的卡住回不去，就重开一个全新的应用进程，
+  // 不让这一个真机异常连环拖累后面互相独立的检查项（见 lib.mjs 的 gotoToolsOrRelaunch 注释）。
+  async function goTools(timeoutMs) {
+    ;({ app, page } = await gotoToolsOrRelaunch({ app, page, label: 'D-run-command', config: CONFIG }, { timeoutMs }))
+  }
 
   const item4Results = []
   const c2Results = []
@@ -146,7 +151,7 @@ export async function run() {
   for (const sc of shellCases) {
     try {
       // ---- 取消：不执行 ----
-      await gotoTools(page)
+      await goTools()
       await openCardByTitle(page, sc.title)
       await fillParamByLabel(page, '文件名', sc.filename)
       await page.click('button.primary:has-text("预览")')
@@ -167,7 +172,7 @@ export async function run() {
       await shot(page, `31-item4-${sc.label}-after-cancel`, { checkIds: ['4'], description: `${sc.label} 点取消后回到参数页，文件不应存在` })
 
       // ---- 再来一次：确认执行 ----
-      await gotoTools(page)
+      await goTools()
       await openCardByTitle(page, sc.title)
       await fillParamByLabel(page, '文件名', sc.filename)
       await page.click('button.primary:has-text("预览")')
@@ -198,7 +203,7 @@ export async function run() {
   ]
   for (const ec of exitCases) {
     try {
-      await gotoTools(page)
+      await goTools()
       await openCardByTitle(page, ec.title)
       await page.click('button.primary:has-text("预览")')
       await page.waitForSelector('.modal', { timeout: 25000 })
@@ -258,7 +263,7 @@ export async function run() {
     const payloadsToTest = [specificPayloads[sic.label], ...commonPayloads]
     for (const payload of payloadsToTest) {
       try {
-        await gotoTools(page)
+        await goTools()
         await openCardByTitle(page, sic.title)
         await fillParamByLabel(page, '参数', payload)
         await page.click('button.primary:has-text("预览")')
@@ -300,7 +305,7 @@ export async function run() {
   try {
     // cmd：命令行里带唯一标记，直接用 CommandLine.Contains(marker) 找根进程（planShell 对 cmd 是逐字透传 verbatim）
     const marker = `rem ${uniqueMarker('CMD')}`
-    await gotoTools(page)
+    await goTools()
     await openCardByTitle(page, '长命令·cmd')
     await fillParamByLabel(page, '标记', marker)
     await page.click('button.primary:has-text("预览")')
@@ -336,7 +341,7 @@ export async function run() {
 
   try {
     // PowerShell：EncodedCommand 不会在命令行里留下可读标记，改用「点确认前后」按进程名做差集找新起的 powershell/ping 进程
-    await gotoTools(page)
+    await goTools()
     await openCardByTitle(page, '长命令·PowerShell')
     await page.click('button.primary:has-text("预览")')
     await page.waitForSelector('.modal', { timeout: 25000 })
@@ -368,7 +373,7 @@ export async function run() {
   }
 
   try {
-    await gotoTools(page)
+    await goTools()
     await openCardByTitle(page, '长命令·Git Bash')
     await page.click('button.primary:has-text("预览")')
     await page.waitForSelector('.modal', { timeout: 25000 })
@@ -410,7 +415,7 @@ export async function run() {
   // D1：预演摘要（能解析出文件列表）+ 折叠查看命令 + 无法预演标注 + 预演失败挡住确认
   // ==================================================================
   try {
-    await gotoTools(page)
+    await goTools()
     await openCardByTitle(page, '预演摘要示例')
     await page.click('button.primary:has-text("预览")')
     await page.waitForSelector('.modal', { timeout: 25000 })
@@ -453,7 +458,7 @@ export async function run() {
     const d1ExecOk = realFilesCreated && realCommandNoDryRun && foldedMatchesReal
 
     // 预演失败：目标目录不为空，退出码非 0，确认按钮不可用
-    await gotoTools(page)
+    await goTools()
     await openCardByTitle(page, '预演失败示例')
     await page.click('button.primary:has-text("预览")')
     await page.waitForSelector('.modal', { timeout: 25000 })
@@ -487,7 +492,7 @@ export async function run() {
   // D3 + C3：空输出整块隐藏；失败时 stderr 在 stdout 前，颜色红/绿正确
   // ==================================================================
   try {
-    await gotoTools(page)
+    await goTools()
     await openCardByTitle(page, '空输出示例')
     await page.click('button.primary:has-text("预览")')
     await page.waitForSelector('.modal', { timeout: 25000 })
@@ -501,7 +506,7 @@ export async function run() {
     appendEvidenceJson('d3-empty-detail', { statusColorClass, stdoutBlockCount, stderrBlockCount })
     const emptyHiddenOk = stdoutBlockCount === 0 && stderrBlockCount === 0 && statusColorClass.includes('run-ok')
 
-    await gotoTools(page)
+    await goTools()
     await openCardByTitle(page, '失败示例·stderr在前')
     await page.click('button.primary:has-text("预览")')
     await page.waitForSelector('.modal', { timeout: 25000 })

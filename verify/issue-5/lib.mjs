@@ -407,12 +407,16 @@ export async function saveToolShelfJson(page, json) {
 /** 回到工具架的动作列表页。renderTools() 只有 session 停在 loading/shelf/empty/problem 时才会重新拉取
  * 列表，其它状态（running/copied/quiet/params/preview 的残留）单纯点导航栏不会回到列表——
  * 所以要先点掉当前这条动作里「返回工具架」/「关闭」/「取消」之类的收尾按钮，再点导航。
- * 真机上观察到：如果上一条 run-command 动作真的还在跑（.run-status 显示「运行中」），这时候
- * 唯一能点的按钮是「中止」，不在上面这组收尾按钮里——如果不管它，会一直等不到任何收尾按钮，
- * 重试全部落空。这里额外兜底：看到「运行中」且只有「中止」按钮时，每隔至少 2 秒重新点一次
- * 「中止」（直到超时预算用完），把这条判定为「异常卡住的动作」而不是让后面所有 session 都被
- * 拖累连环失败；如果最终仍然回不到列表页，会连带把界面文字 dump 成证据文件方便排查。 */
-export async function gotoTools(page, { timeoutMs = 25000 } = {}) {
+ *
+ * 真机上观察到两类会卡住的情况：
+ * ① 上一条 run-command 动作真的还在跑（.run-status 显示「运行中」），这时候唯一能点的按钮
+ *   是「中止」，不在上面这组收尾按钮里；
+ * ② 即使收尾按钮（比如「返回工具架」）确实存在也点了，回到列表也可能迟迟不生效。
+ * 早期版本在同一轮里「点完收尾按钮又紧接着点一次导航栏」，怀疑这种连续戳两次会让
+ * renderTools() 排起一串互相打断的异步渲染，反而让刚点掉的收尾按钮效果被冲掉——
+ * 所以这里改成每轮只做一个动作（收尾按钮 优先，其次中止，最后才点导航栏），
+ * 点完之后专心等一等再重新检查，不在等待期间再去戳别的按钮。 */
+export async function gotoTools(page, { timeoutMs = 15000 } = {}) {
   const start = Date.now()
   let lastAbortAttemptAt = 0
   while (Date.now() - start < timeoutMs) {
@@ -423,31 +427,31 @@ export async function gotoTools(page, { timeoutMs = 25000 } = {}) {
       page.locator('.modal button:has-text("取消")'),
       page.locator('button:has-text("返回")')
     ]
-    let clicked = false
+    let acted = false
     for (const btn of backButtons) {
       if (await btn.count() > 0) {
         await btn.first().click().catch(() => {})
-        clicked = true
+        acted = true
         break
       }
     }
-    if (!clicked) {
+    if (!acted) {
       const stillRunning = await page.locator('.run-status').innerText().catch(() => '')
       const abortBtn = page.locator('button.danger:has-text("中止")')
-      // 每隔至少 2 秒才重新点一次「中止」（给上一次点击留出真正生效的时间），
-      // 而不是只在整个函数生命周期里尝试一次——真机上观察到单次点击后 500ms
-      // 有时候还没等到状态真正翻转，一次不够就直接放弃会导致后面所有 session 连环被拖累。
-      if (stillRunning.includes('运行中') && await abortBtn.count() > 0 && Date.now() - lastAbortAttemptAt > 2000) {
+      if (stillRunning.includes('运行中') && await abortBtn.count() > 0 && Date.now() - lastAbortAttemptAt > 3000) {
         lastAbortAttemptAt = Date.now()
         await abortBtn.first().click().catch(() => {})
-        clicked = true
+        acted = true
+        await sleep(1500) // 中止真正生效可能要点时间，给它一点安顿空间再继续检查
       }
     }
-    await page.click('[data-view="tools"]').catch(() => {})
-    await sleep(clicked ? 400 : 200)
+    if (!acted) {
+      await page.click('[data-view="tools"]').catch(() => {})
+    }
+    await sleep(500)
   }
   try {
-    await page.waitForSelector('.tool-search', { timeout: 10000 })
+    await page.waitForSelector('.tool-search', { timeout: 5000 })
     await sleep(80)
   } catch (err) {
     // 兜底诊断：把最后的界面状态记下来，方便不必再等一整轮 CI 才能看出卡在哪。
@@ -457,6 +461,28 @@ export async function gotoTools(page, { timeoutMs = 25000 } = {}) {
     const runStatusText = await page.locator('.run-status').innerText().catch(() => '<无 .run-status>')
     appendEvidenceJson(diagName, { domText, runStatusText })
     throw err
+  }
+}
+
+/** gotoTools() 的兜底版本：如果连着上面这些手段都回不去（真机上出现过：点了「返回工具架」，
+ * 界面文字也没变过，怀疑是这一个应用进程本身卡住了，不只是这一条动作卡住），就把这个应用进程
+ * 整个关掉、杀掉残留进程，重开一个全新的应用进程（重新存一遍工具架配置），让后面互相独立的
+ * 检查项能在一个干净的进程里继续跑，而不是被这一个真机异常连环拖累到全部失败。
+ * 用法：`;({ app, page } = await gotoToolsOrRelaunch({ app, page, label, config }))`，
+ * 调用方的 app/page 要声明成 let 才能被这样重新赋值。 */
+export async function gotoToolsOrRelaunch({ app, page, label, config, envExtra }, { timeoutMs = 15000 } = {}) {
+  try {
+    await gotoTools(page, { timeoutMs })
+    return { app, page }
+  } catch (err) {
+    noteObservation(`${label ?? ''} 会话里有个动作导致点导航栏/收尾按钮都回不到工具架列表（怀疑是这一个应用进程本身异常卡住，不只是这一条动作的问题），已如实记录该动作的检查结果为异常；为了不让后面互相独立的检查项被这一个真机异常连环拖累，重开了一个全新的应用进程继续测。原始异常：${err.message || err}`)
+    try { await app.close() } catch { /* ignore */ }
+    killStrayArckeep()
+    const freshData = freshAppData(`${label ?? 'recover'}-relaunch-${Date.now()}`)
+    const newApp = await launchApp({ label: `${label ?? ''}(重开)`, appData: freshData, envExtra })
+    const newPage = await mainWindowPage(newApp)
+    if (config) await saveToolShelfJson(newPage, config)
+    return { app: newApp, page: newPage }
   }
 }
 
