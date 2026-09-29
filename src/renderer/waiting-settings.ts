@@ -41,7 +41,7 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
   const card = el('section', { class: 'card' }, [
     el('h2', {}, ['等我处理']),
     el('p', { class: 'hint' }, [
-      '关键词和标签决定哪些 open Issue 算「要人动手」。同一段文字里的动作信号优先于已解决信号；只有整条都结束、后面没有待办时才算已解决。仅关注的仓库不会把全部 open PR 列进来。状态文档正则示例：等 ?Dylan|AWAITING ACCEPT|HUMAN_REQUIRED|needs-dylan'
+      '关键词和标签决定哪些 open Issue 算「要人动手」。同一段文字里的动作信号优先于已解决信号；只有整条都结束、后面没有待办时才算已解决。代码、引用和「需求 / 验收标准 / 背景 / 设计 / 规格」下面的匹配不算。状态文档正则示例：等 ?Dylan|AWAITING ACCEPT|HUMAN_REQUIRED|needs-dylan'
     ])
   ])
   const sources: WaitingSources = { ...config.sources }
@@ -148,6 +148,9 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
     el('p', { class: 'hint' }, ['自动模式下会发现拥有的和 watching 的仓库。待你审/合默认只覆盖你能推送的仓库。空仓不查 PR。达到上限时这一页会提示。']),
     limit,
     el('h3', {}, ['待你审/合范围']),
+    el('p', { class: 'hint' }, [
+      '仅关注的仓库只保留和你有关的条目，不会把别人的 open PR 整仓列出来。'
+    ]),
     openPrScope,
     el('h3', {}, ['提及']),
     mentionPolicy,

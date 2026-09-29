@@ -29,6 +29,7 @@ export const SCREENSHOT_SCENES = [
   'waiting-rate-limit',
   'waiting-narrow',
   'waiting-hover',
+  'waiting-ignore',
   'waiting-watch',
   'waiting-hidden',
   'waiting-family',
@@ -76,8 +77,9 @@ export function screenshotWindowSize(scene: ScreenshotScene): { width: number, h
     return { width: 1120, height: 860 }
   }
   if (scene === 'tools-invalid') return { width: 1120, height: 980 }
-  if (scene === 'waiting-hover' || scene === 'overview-chip-hover') return { width: 1180, height: 900 }
-  if (scene === 'waiting-watch' || scene === 'waiting-hidden' || scene === 'waiting-family') return { width: 1180, height: 720 }
+  if (scene === 'waiting-hover' || scene === 'waiting-ignore' || scene === 'overview-chip-hover') return { width: 1180, height: 900 }
+  if (scene === 'waiting-hidden') return { width: 1180, height: 980 }
+  if (scene === 'waiting-watch' || scene === 'waiting-family') return { width: 1180, height: 720 }
   if (scene === 'overview-archived') return { width: 1180, height: 820 }
   if (scene === 'waiting' || scene === 'waiting-rate-limit' || scene === 'overview' || scene === 'overview-collapsed') return { width: 1180, height: 1680 }
   if (scene === 'nav' || scene === 'todos-empty') return { width: 1120, height: 760 }

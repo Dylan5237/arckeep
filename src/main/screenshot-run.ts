@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { BrowserWindow, WebContents } from 'electron'
@@ -17,6 +18,62 @@ async function waitUntil(contents: WebContents, predicateSource: string, label: 
 
 function includesText(expected: string): string {
   return `document.body.innerText.includes(${JSON.stringify(expected)})`
+}
+
+function moveOsPointer(screenX: number, screenY: number): void {
+  try {
+    execFileSync('xdotool', ['mousemove', '--sync', String(screenX), String(screenY)], { stdio: 'ignore' })
+  } catch {
+    // Screenshot hosts without xdotool still get the synthetic move below.
+  }
+}
+
+function movePointer(window: BrowserWindow, x: number, y: number): void {
+  if (!window.isVisible()) window.show()
+  window.focus()
+  window.webContents.focus()
+  const bounds = window.getContentBounds()
+  moveOsPointer(bounds.x + x, bounds.y + y)
+  window.webContents.sendInputEvent({ type: 'mouseMove', x, y })
+}
+
+async function pointAtWaitingRow(window: BrowserWindow, index: number, openIgnore: boolean): Promise<void> {
+  const place = async (): Promise<{ x: number, y: number }> => window.webContents.executeJavaScript(`
+    (() => {
+      const rows = [...document.querySelectorAll('.waiting-row')]
+      for (const row of rows) row.classList.remove('show-actions')
+      const row = rows[${index}]
+      if (!row) throw new Error('waiting row was not rendered')
+      const box = row.getBoundingClientRect()
+      if (${openIgnore ? 'true' : 'false'}) {
+        const menu = row.querySelector('details.ignore')
+        if (!(menu instanceof HTMLDetailsElement)) throw new Error('ignore menu was not rendered')
+        menu.open = true
+        const label = [...menu.querySelectorAll('button')].map(button => button.textContent ?? '').join('\\n')
+        if (!label.includes('忽略这一条') || !label.includes('这个仓库')) throw new Error('ignore menu items missing')
+        const wide = [...menu.querySelectorAll('button')].find(button => (button.textContent ?? '').includes('这个仓库'))
+        if (!wide || wide.getClientRects().length !== 1 || wide.scrollWidth > wide.clientWidth + 1) {
+          throw new Error('ignore menu item wrapped')
+        }
+      }
+      return { x: Math.round(box.x + Math.min(160, box.width / 3)), y: Math.round(box.y + box.height / 2) }
+    })()
+  `)
+  await window.webContents.executeJavaScript(`document.querySelectorAll('.waiting-row')[${index}]?.scrollIntoView({ block: 'center' })`)
+  const point = await place()
+  movePointer(window, point.x, point.y)
+  await new Promise(resolve => setTimeout(resolve, 60))
+  const moved = await place()
+  movePointer(window, moved.x, moved.y)
+  await new Promise(resolve => setTimeout(resolve, 60))
+  const visible = await window.webContents.executeJavaScript(`
+    [...document.querySelectorAll('.waiting-row')].filter(row => {
+      if (row.classList.contains('is-ignored')) return false
+      const actions = row.querySelector('.row-actions')
+      return Boolean(actions) && getComputedStyle(actions).opacity !== '0'
+    }).length
+  `)
+  if (visible !== 1) throw new Error(`expected one row of actions, saw ${visible}`)
 }
 
 export async function presentScreenshot(options: {
@@ -180,16 +237,9 @@ export async function presentScreenshot(options: {
     await waitUntil(contents, includesText(toolScreenshotExpectation(scene) ?? ''), scene)
     const leaked = await contents.executeJavaScript(`document.body.innerText.includes('LASTEXITCODE')`)
     if (leaked) throw new Error(`screenshot scene ${scene} showed a shell exit wrapper`)
-  } else if (scene === 'waiting-hover') {
+  } else if (scene === 'waiting-hover' || scene === 'waiting-ignore') {
     await waitUntil(contents, includesText('验收北区截图'), '验收北区截图')
-    await contents.executeJavaScript(`
-      const row = document.querySelector('.waiting-row')
-      if (!row) throw new Error('waiting row was not rendered')
-      row.classList.add('show-actions')
-      const details = row.querySelector('details')
-      if (details) details.open = true
-      true
-    `)
+    await pointAtWaitingRow(main, scene === 'waiting-hover' ? 8 : 0, scene === 'waiting-ignore')
   } else if (
     scene === 'waiting'
     || scene === 'waiting-narrow'
@@ -205,9 +255,9 @@ export async function presentScreenshot(options: {
     const expected = scene === 'waiting' || scene === 'waiting-narrow'
       ? '验收北区截图'
       : scene === 'waiting-watch'
-        ? '不会把别人的 open PR'
+        ? '指派给你的那一条'
         : scene === 'waiting-hidden'
-          ? '已忽略的仓库'
+          ? '另有 4 条已延后或已忽略'
           : scene === 'waiting-family'
             ? '含 2 个子项'
             : scene === 'waiting-empty'
@@ -220,6 +270,36 @@ export async function presentScreenshot(options: {
                     ? '正在刷新'
                     : '速率限制'
     await waitUntil(contents, includesText(expected), expected)
+    movePointer(main, 24, 80)
+    await new Promise(resolve => setTimeout(resolve, 120))
+    if (scene !== 'waiting-empty' && scene !== 'waiting-no-token' && scene !== 'waiting-invalid-token' && scene !== 'waiting-loading') {
+      const stray = async (): Promise<number> => contents.executeJavaScript(`
+        [...document.querySelectorAll('.waiting-row')].filter(row => {
+          if (row.classList.contains('is-ignored')) return false
+          const actions = row.querySelector('.row-actions')
+          return Boolean(actions) && getComputedStyle(actions).opacity !== '0'
+        }).length
+      `)
+      if (await stray() !== 0) {
+        moveOsPointer(0, 0)
+        await new Promise(resolve => setTimeout(resolve, 120))
+      }
+      const still = await stray()
+      if (still !== 0) throw new Error(`actions visible without hover: ${still}`)
+    }
+    if (scene === 'waiting-hidden') {
+      const matched = await contents.executeJavaScript(`
+        (() => {
+          const hint = document.body.innerText.match(/另有 (\\d+) 条已延后或已忽略/)
+          const count = hint ? Number(hint[1]) : -1
+          const faded = document.querySelectorAll('.waiting-row.is-ignored').length
+          const restores = [...document.querySelectorAll('.waiting-row.is-ignored button')].filter(button => button.textContent === '恢复').length
+          const todo = [...document.querySelectorAll('.waiting-row.is-ignored')].some(row => row.textContent.includes('待办') && row.textContent.includes('恢复'))
+          return count === faded && restores === count && count > 0 && todo
+        })()
+      `)
+      if (!matched) throw new Error('ignored rows did not match the hidden count')
+    }
   } else {
     const expected = scene === 'connected'
       ? MOCK_GITHUB_LOGIN

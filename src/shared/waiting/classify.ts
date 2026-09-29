@@ -1,9 +1,10 @@
 import { primaryAction } from './action.js'
 import { earlierIso, laterIso, waitingDays } from './days.js'
+import { explainHumanWait, waitingExcerpt } from './human-text.js'
 import { escapeRegex } from './parse-github.js'
 import { compileUserRegexList } from './rules.js'
 import { evaluateSignals } from './signals.js'
-import { WAITING_REASONS, type GithubRecord, type ReasonDetail, type WaitingConfig, type WaitingDraft } from './types.js'
+import { WAITING_REASONS, type GithubRecord, type ReasonDetail, type WaitingConfig, type WaitingDraft, type WaitingSignal } from './types.js'
 
 export interface ClassifiedReason {
   reason: string
@@ -87,7 +88,8 @@ export function mentionQualifies(record: GithubRecord, config: WaitingConfig, no
   const latest = currentComment(record)
   if (latest && evaluateSignals(latest.body, keywords, []) === 'action') return true
   if (!login && evaluateSignals(currentHumanText(record), keywords, []) === 'action') return true
-  return false
+  const resolved = compileUserRegexList(config.resolvedSignals, '已解决信号')
+  return waitingExcerpt(record.body, record.comments, keywords, resolved) !== null
 }
 
 function foreignFork(record: GithubRecord): boolean {
@@ -106,28 +108,22 @@ export function blanketOpenPr(record: GithubRecord, config: WaitingConfig): bool
   return record.fromOpenPr === true
 }
 
-export function humanSignal(record: GithubRecord, config: WaitingConfig): ClassifiedReason | null {
+export function humanSignal(record: GithubRecord, config: WaitingConfig): (ClassifiedReason & { signal: WaitingSignal }) | null {
   if (record.kind !== 'issue') return null
   const keywords = compileUserRegexList(config.humanKeywords, '人工动作关键词')
   const resolved = compileUserRegexList(config.resolvedSignals, '已解决信号')
-  const text = currentHumanText(record)
-  const verdict = evaluateSignals(text, keywords, resolved)
-  if (verdict === 'resolved') return null
-  const labels = new Set(config.humanLabels.map(label => label.toLowerCase()))
-  const labelHit = record.labels.some(label => labels.has(label.toLowerCase()))
-  const textHit = verdict === 'action'
-  if (!labelHit && !textHit) return null
-
+  const wanted = new Set(config.humanLabels.map(label => label.toLowerCase()))
+  const hit = explainHumanWait(record.body, currentHumanText(record), record.labels, wanted, keywords, resolved)
+  if (!hit) return null
   const comment = currentComment(record)
   let at: string | null = null
   let estimated = false
-  if (textHit && comment) {
+  if (hit.source === 'current' && comment) {
     at = comment.createdAt
-  } else if (textHit) {
+  } else if (hit.source !== 'label') {
     at = record.createdAt
   }
-  if (labelHit) {
-    const wanted = labels
+  if (hit.source === 'label' || hit.rule === '标签') {
     const event = record.labelEvents.find(item => wanted.has(item.name.toLowerCase()))
     const labelAt = event?.at ?? null
     if (!at) {
@@ -142,19 +138,27 @@ export function humanSignal(record: GithubRecord, config: WaitingConfig): Classi
     at = record.updatedAt
     estimated = true
   }
-  return { reason: WAITING_REASONS.human, at, estimated }
+  return {
+    reason: WAITING_REASONS.human,
+    at,
+    estimated,
+    signal: { rule: hit.rule, excerpt: hit.excerpt }
+  }
 }
 
-function authorNeedsAction(record: GithubRecord, config: WaitingConfig): ClassifiedReason | null {
+function authorNeedsAction(record: GithubRecord, config: WaitingConfig): (ClassifiedReason & { signal: WaitingSignal }) | null {
   if (!record.fromAuthor || record.repoAccess !== 'watch') return null
   const keywords = compileUserRegexList(config.humanKeywords, '人工动作关键词')
   const resolved = compileUserRegexList(config.resolvedSignals, '已解决信号')
-  if (evaluateSignals(currentHumanText(record), keywords, resolved) !== 'action') return null
+  const hit = explainHumanWait(record.body, currentHumanText(record), [], new Set(), keywords, resolved)
+  if (!hit || hit.rule === '标签') return null
   const comment = currentComment(record)
+  const fromComment = hit.source === 'current' && comment
   return {
     reason: WAITING_REASONS.human,
-    at: comment?.createdAt ?? record.updatedAt,
-    estimated: !comment
+    at: fromComment ? comment.createdAt : record.createdAt || record.updatedAt,
+    estimated: !fromComment && !record.createdAt,
+    signal: { rule: hit.rule, excerpt: hit.excerpt }
   }
 }
 
@@ -176,8 +180,20 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
   if (config.sources.reviewRequested && record.fromReview && record.kind === 'pr') {
     reasons.push(fallbackUpdated(WAITING_REASONS.review, record, record.reviewRequestedAt))
   }
+  let mentionSignal: WaitingSignal | null = null
   if (config.sources.mentions && mentionQualifies(record, config, now)) {
     reasons.push(fallbackUpdated(WAITING_REASONS.mention, record, record.mentionedAt))
+    const keywords = compileUserRegexList(config.humanKeywords, '人工动作关键词')
+    const resolved = compileUserRegexList(config.resolvedSignals, '已解决信号')
+    const excerpt = waitingExcerpt(record.body, record.comments, keywords, resolved)
+    if (excerpt) {
+      const recentMention = withinRecent(record.mentionedAt, now, config.mentionRecentDays)
+        || record.comments.some(comment => withinRecent(comment.createdAt, now, config.mentionRecentDays))
+      mentionSignal = {
+        rule: recentMention || config.mentionPolicy === 'any' ? '提及' : '过时提及旁仍有等待',
+        excerpt
+      }
+    }
   }
   if (blanketOpenPr(record, config)) {
     const at = laterIso(record.lastPushedAt, record.updatedAt)
@@ -190,6 +206,8 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
   const authored = authorNeedsAction(record, config)
   if (authored && !reasons.some(reason => reason.reason === WAITING_REASONS.human)) reasons.push(authored)
   if (reasons.length === 0) return null
+  const humanReason = reasons.find(reason => reason.reason === WAITING_REASONS.human) as (ClassifiedReason & { signal?: WaitingSignal }) | undefined
+  const signal = humanReason?.signal ?? mentionSignal ?? { rule: reasons[0]?.reason ?? '等待', excerpt: '' }
   return draftFromReasons({
     id: `${record.kind}:${record.repo}#${record.number}`,
     repo: record.repo,
@@ -199,7 +217,8 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
     url: record.url,
     updatedAt: record.updatedAt,
     parentNumber: record.parentNumber,
-    reasons
+    reasons,
+    signal
   }, now)
 }
 
@@ -213,6 +232,7 @@ export function draftFromReasons(input: {
   updatedAt: string
   parentNumber?: number | null
   reasons: ClassifiedReason[]
+  signal?: WaitingSignal
 }, now: Date): WaitingDraft {
   const unique: ClassifiedReason[] = []
   for (const reason of input.reasons) {
@@ -244,7 +264,8 @@ export function draftFromReasons(input: {
     reasonDetails: unique.map(reason => ({ reason: reason.reason, at: reason.at, estimated: reason.estimated })),
     parentNumber: input.parentNumber ?? null,
     parent: null,
-    childCount: 0
+    childCount: 0,
+    signal: input.signal ?? { rule: reasons[0] ?? '等待', excerpt: '' }
   }
 }
 
