@@ -42,6 +42,7 @@ const api: ArckeepApi = {
   hideWaitingRepo: repo => ipcRenderer.invoke(IpcChannel.hideWaitingRepo, repo),
   unhideWaitingRepo: repo => ipcRenderer.invoke(IpcChannel.unhideWaitingRepo, repo),
   setShowIgnored: show => ipcRenderer.invoke(IpcChannel.setShowIgnored, show),
+  setMaybeSectionOpen: open => ipcRenderer.invoke(IpcChannel.setMaybeSectionOpen, open),
   setWaiting: config => ipcRenderer.invoke(IpcChannel.setWaiting, config),
   openExternal: url => ipcRenderer.invoke(IpcChannel.openExternal, url),
   advanceWaitingDays: days => ipcRenderer.invoke(IpcChannel.advanceWaitingDays, days),

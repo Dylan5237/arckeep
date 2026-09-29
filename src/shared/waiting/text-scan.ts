@@ -211,6 +211,30 @@ function patternHits(text: string, patterns: readonly RegExp[]): boolean {
   })
 }
 
+/** The sentence that names the viewer. Empty when the source has no such sentence. */
+export function mentionSentence(record: GithubRecord): string {
+  const login = (record.viewerLogin ?? '').trim()
+  const needles = [login ? `@${login}` : '', login].filter(needle => needle.length > 0)
+  const chunks: string[] = []
+  for (let index = record.comments.length - 1; index >= 0; index -= 1) {
+    const comment = record.comments[index]
+    if (comment?.body) chunks.push(stripFences(comment.body))
+  }
+  if (record.body) chunks.push(stripFences(record.body))
+  for (const chunk of chunks) {
+    for (const sentence of splitSentences(chunk)) {
+      const text = sentence.text.replace(/\s+/g, ' ').trim()
+      if (!text) continue
+      const folded = text.toLowerCase()
+      const named = needles.length > 0
+        ? needles.some(needle => folded.includes(needle.toLowerCase()))
+        : /@[A-Za-z0-9]/.test(text)
+      if (named) return text.slice(0, 160)
+    }
+  }
+  return ''
+}
+
 export function userPatterns(record: GithubRecord, config: WaitingConfig): RegExp[] {
   const compiled = config.roleNames.map(pattern => safeRegex(pattern))
   const login = (record.viewerLogin ?? '').trim()

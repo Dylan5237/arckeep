@@ -261,6 +261,10 @@ export interface WaitingSnapshot {
   hiddenCount: number
   hiddenRepos: string[]
   todosAvailable: boolean
+  /** Saved open state when the main list is empty. Null means the first visit still uses the default. */
+  maybeWhenEmpty: boolean | null
+  /** Saved open state when the main list has rows. Null means the first visit stays collapsed. */
+  maybeWhenListed: boolean | null
 }
 
 export interface DismissalRecord {

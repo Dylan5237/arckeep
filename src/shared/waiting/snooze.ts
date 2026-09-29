@@ -7,6 +7,8 @@ export interface DismissalState {
   items: DismissalMap
   hiddenRepos: string[]
   revealedParked: string[]
+  maybeWhenEmpty: boolean | null
+  maybeWhenListed: boolean | null
 }
 
 export function emptyDismissals(): DismissalMap {
@@ -121,25 +123,38 @@ function repoNames(value: unknown): string[] {
   return value.filter((repo): repo is string => typeof repo === 'string' && repo.includes('/'))
 }
 
+function optionalFlag(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null
+}
+
 export function readDismissalState(raw: unknown): DismissalState {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { items: {}, hiddenRepos: [], revealedParked: [] }
+  const empty = { items: {}, hiddenRepos: [], revealedParked: [], maybeWhenEmpty: null, maybeWhenListed: null }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return empty
   const record = raw as Record<string, unknown>
   if (record.version === 2 && record.items && typeof record.items === 'object' && !Array.isArray(record.items)) {
     return {
       items: record.items as DismissalMap,
       hiddenRepos: repoNames(record.hiddenRepos),
-      revealedParked: repoNames(record.revealedParked)
+      revealedParked: repoNames(record.revealedParked),
+      maybeWhenEmpty: optionalFlag(record.maybeWhenEmpty),
+      maybeWhenListed: optionalFlag(record.maybeWhenListed)
     }
   }
-  return { items: raw as DismissalMap, hiddenRepos: [], revealedParked: [] }
+  return { ...empty, items: raw as DismissalMap }
 }
 
-export function writeDismissalState(state: Omit<DismissalState, 'revealedParked'> & { revealedParked?: string[] }): { version: 2, items: DismissalMap, hiddenRepos: string[], revealedParked: string[] } {
+export function writeDismissalState(state: Omit<DismissalState, 'revealedParked' | 'maybeWhenEmpty' | 'maybeWhenListed'> & {
+  revealedParked?: string[]
+  maybeWhenEmpty?: boolean | null
+  maybeWhenListed?: boolean | null
+}): { version: 2, items: DismissalMap, hiddenRepos: string[], revealedParked: string[], maybeWhenEmpty: boolean | null, maybeWhenListed: boolean | null } {
   return {
     version: 2,
     items: state.items,
     hiddenRepos: [...state.hiddenRepos],
-    revealedParked: [...(state.revealedParked ?? [])]
+    revealedParked: [...(state.revealedParked ?? [])],
+    maybeWhenEmpty: state.maybeWhenEmpty ?? null,
+    maybeWhenListed: state.maybeWhenListed ?? null
   }
 }
 

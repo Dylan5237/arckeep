@@ -1007,8 +1007,9 @@ describe('recall of requests that are still open', () => {
     }), rules, NOW)
     expect(row?.reasons).toEqual(['提及'])
     expect(row?.tier).toBe('weak')
-    expect(row?.signal.rule).toBe('提及')
-    expect(row?.signal.excerpt).toContain('待用户确认后 push')
+    expect(row?.signal.rule).toBe('只是提及')
+    expect(row?.signal.excerpt).toBe('抄送 @ada')
+    expect(row?.signal.excerpt.includes('没有明确请求')).toBe(false)
   })
 })
 

@@ -516,6 +516,10 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
     guard(event)
     return waiting?.setShowIgnored(show) ?? { ok: false, error: '等我处理尚未就绪' }
   })
+  ipcMain.handle(IpcChannel.setMaybeSectionOpen, (event, open: unknown) => {
+    guard(event)
+    return waiting?.setMaybeSectionOpen(open) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
   ipcMain.handle(IpcChannel.setWaiting, (event, config: unknown) => {
     guard(event)
     const saved = settings.setWaiting(config)

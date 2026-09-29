@@ -4,7 +4,7 @@ import { isSpecIssue, waitingExcerpt } from './human-text.js'
 import { escapeRegex } from './parse-github.js'
 import { compileUserRegexList } from './rules.js'
 import { evaluateSignals } from './signals.js'
-import { commentCloses, labelMatches, latestOtherComment, matchedLabel, repoIsParked, strongText, weakKeyword, whenLabel } from './text-scan.js'
+import { commentCloses, labelMatches, latestOtherComment, matchedLabel, mentionSentence, repoIsParked, strongText, weakKeyword, whenLabel } from './text-scan.js'
 import { WAITING_REASONS, type GithubRecord, type ReasonDetail, type WaitingConfig, type WaitingDraft, type WaitingSignal, type WaitingTier } from './types.js'
 
 export interface ClassifiedReason {
@@ -258,17 +258,14 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
   }
   if (tier !== 'strong' && config.sources.mentions && mentionQualifies(record, config, now)) {
     reasons.push(fallbackUpdated(WAITING_REASONS.mention, record, record.mentionedAt))
-    const keywords = compileUserRegexList(config.humanKeywords, '人工动作关键词')
-    const resolved = compileUserRegexList(config.resolvedSignals, '已解决信号')
-    const excerpt = waitingExcerpt(record.body, record.comments, keywords, resolved)
-    signal = signal ?? { rule: '提及', excerpt: excerpt ?? '' }
+    signal = signal ?? { rule: '只是提及', excerpt: mentionSentence(record) }
   }
   const spec = record.kind === 'issue' && isSpecIssue(record.title, record.labels, record.body, config.specMarkers)
   if (tier !== 'strong' && !closed && humanAllowed && !spec) {
     const keyword = weakKeyword(record, config)
     if (keyword) {
       reasons.push(fallbackUpdated(WAITING_REASONS.human, record, record.updatedAt))
-      signal = signal ?? { rule: '动作关键词', excerpt: keyword }
+      if (!signal || signal.rule === '只是提及') signal = { rule: '动作关键词', excerpt: keyword }
     }
   }
   if (assigned && (quiet || optedOpen) && !reasons.some(reason => reason.reason === WAITING_REASONS.assignee)) {

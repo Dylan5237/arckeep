@@ -78,6 +78,7 @@ export interface ArckeepApi {
   hideWaitingRepo(repo: string): Promise<IpcResult<WaitingSnapshot>>
   unhideWaitingRepo(repo: string): Promise<IpcResult<WaitingSnapshot>>
   setShowIgnored(show: boolean): Promise<IpcResult<WaitingSnapshot>>
+  setMaybeSectionOpen(open: boolean): Promise<IpcResult<WaitingSnapshot>>
   setWaiting(config: WaitingConfig): Promise<IpcResult<AppState>>
   openExternal(url: string): Promise<IpcResult<true>>
   advanceWaitingDays(days: number): Promise<IpcResult<WaitingSnapshot>>

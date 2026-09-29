@@ -10,17 +10,34 @@ const ACTION_CLASS: Record<string, string> = {
   '待办': 'act-todo'
 }
 
-/** Weak rows are not work items. They never wear the main-list action chip. */
-export const WEAK_ROW_LABEL = '提及'
+/** Mention-only rows are not a request to act. */
+export const MENTION_ONLY_LABEL = '只是提及'
 
-export function rowActionLabel(row: { tier: 'strong' | 'weak', action: string }): string | null {
-  if (row.tier === 'weak') return WEAK_ROW_LABEL
+export interface MaybeSectionMemory {
+  whenEmpty: boolean | null
+  whenListed: boolean | null
+}
+
+export function rowActionLabel(row: { tier: 'strong' | 'weak', action: string, reasons: readonly string[] }): string | null {
+  if (row.tier === 'weak') {
+    const mentionOnly = row.reasons.includes('提及') && !row.reasons.includes('要人动手')
+    return mentionOnly ? MENTION_ONLY_LABEL : null
+  }
   return row.action || '要你动手'
 }
 
-/** Open only when the main list has nothing else to show. */
-export function maybeSectionStartsOpen(mainCount: number): boolean {
-  return mainCount === 0
+/**
+ * First visit with an empty main list opens the section. First visit with rows leaves it closed.
+ * A saved choice wins after that, including a collapse that must stay collapsed next launch.
+ */
+export function maybeSectionOpen(mainCount: number, memory: MaybeSectionMemory): boolean {
+  if (mainCount === 0) return memory.whenEmpty ?? true
+  return memory.whenListed ?? false
+}
+
+export function rememberMaybeSection(mainCount: number, open: boolean, memory: MaybeSectionMemory): MaybeSectionMemory {
+  if (mainCount === 0) return { ...memory, whenEmpty: open }
+  return { ...memory, whenListed: open }
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -89,6 +106,7 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
   hideRepo: (repo: string) => void
   unhideRepo: (repo: string) => void
   toggleIgnored: (show: boolean) => void
+  rememberMaybe: (open: boolean) => void
   open: (url: string) => void
 }): void {
   const mainRows = snapshot.rows.filter(row => row.tier !== 'weak')
@@ -160,7 +178,16 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
     } else if (mainRows.length > 0) {
       page.append(renderGroups(mainRows, handlers))
     }
-    if (maybeRows.length > 0) page.append(renderMaybe(maybeRows, handlers, maybeSectionStartsOpen(mainRows.length)))
+    if (maybeRows.length > 0) {
+      page.append(renderMaybe(
+        maybeRows,
+        handlers,
+        maybeSectionOpen(mainRows.length, {
+          whenEmpty: snapshot.maybeWhenEmpty,
+          whenListed: snapshot.maybeWhenListed
+        })
+      ))
+    }
   }
   host.replaceChildren(page)
 }
@@ -187,9 +214,13 @@ function renderMaybe(rows: readonly WaitingRow[], handlers: {
   hideRepo: (repo: string) => void
   open: (url: string) => void
   todos: () => void
+  rememberMaybe: (open: boolean) => void
 }, startsOpen: boolean): HTMLElement {
   const details = el('details', { class: 'maybe-related' })
   details.open = startsOpen
+  details.addEventListener('toggle', () => {
+    if (details.open !== startsOpen) handlers.rememberMaybe(details.open)
+  })
   details.append(el('summary', {}, [maybeRelatedLabel(rows.length)]))
   details.append(el('p', { class: 'hint' }, ['只有提及，或正文里散落的关键词。不计入上面的待处理件数。']))
   const list = el('div', { class: 'maybe-list' })
@@ -326,7 +357,9 @@ export async function renderWaiting(
     showIgnored: false,
     hiddenCount: 0,
     hiddenRepos: [],
-    todosAvailable: false
+    todosAvailable: false,
+    maybeWhenEmpty: null,
+    maybeWhenListed: null
   }
   const apply = (snapshot: WaitingSnapshot) => {
     paint(host, snapshot, {
@@ -339,6 +372,7 @@ export async function renderWaiting(
       hideRepo: repo => { void act(api => api.hideWaitingRepo(repo)) },
       unhideRepo: repo => { void act(api => api.unhideWaitingRepo(repo)) },
       toggleIgnored: show => { void act(api => api.setShowIgnored(show)) },
+      rememberMaybe: open => { void act(api => api.setMaybeSectionOpen(open)) },
       open: url => { void window.arckeep.openExternal(url) }
     })
   }

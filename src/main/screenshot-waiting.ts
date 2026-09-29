@@ -16,6 +16,8 @@ function base(partial: Partial<WaitingSnapshot>): WaitingSnapshot {
     hiddenCount: 3,
     hiddenRepos: [],
     todosAvailable: false,
+    maybeWhenEmpty: null,
+    maybeWhenListed: null,
     ...partial
   }
 }
@@ -103,9 +105,13 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
       todosAvailable: true
     })
   }
-  if (scene === 'waiting-maybe-only') {
+  if (scene === 'waiting-maybe-only' || scene === 'waiting-maybe-collapsed') {
     const rows = sampleWaitingRows().filter(row => row.tier === 'weak')
-    return base({ rows, hiddenCount: 0 })
+    return base({
+      rows,
+      hiddenCount: 0,
+      maybeWhenEmpty: scene === 'waiting-maybe-collapsed' ? false : null
+    })
   }
   if (scene === 'waiting-empty') return base({ hiddenCount: 0, rows: [] })
   if (scene === 'waiting-no-token') return base({ auth: 'missing', refreshedAt: null, hiddenCount: 0 })
@@ -131,6 +137,7 @@ export function createScreenshotWaiting(scene: ScreenshotScene): {
   hideRepo: (repo?: unknown) => IpcResult<WaitingSnapshot>
   unhideRepo: (repo?: unknown) => IpcResult<WaitingSnapshot>
   setShowIgnored: (value?: unknown) => IpcResult<WaitingSnapshot>
+  setMaybeSectionOpen: (open?: unknown) => IpcResult<WaitingSnapshot>
   advanceDays: (days?: unknown) => IpcResult<WaitingSnapshot>
   observedGithubRepos: () => readonly string[]
   observedLocalLinks: () => readonly { github: string, path: string }[]
@@ -149,6 +156,14 @@ export function createScreenshotWaiting(scene: ScreenshotScene): {
     hideRepo: () => ok(),
     unhideRepo: () => ok(),
     setShowIgnored: () => ok(),
+    setMaybeSectionOpen: open => {
+      if (typeof open !== 'boolean') return { ok: false, error: '展开状态无效' }
+      const mainCount = snapshot.rows.filter(row => row.tier !== 'weak').length
+      const next = mainCount === 0
+        ? { ...snapshot, maybeWhenEmpty: open }
+        : { ...snapshot, maybeWhenListed: open }
+      return { ok: true, data: next }
+    },
     advanceDays: () => ({ ok: false, error: '测试钩子未开启' }),
     observedGithubRepos: () => [],
     observedLocalLinks: () => []

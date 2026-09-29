@@ -74,8 +74,8 @@ export function sampleWaitingRows(): WaitingRow[] {
   ]
   return days.map((waitingDays, index) => {
     const repo = REPOS[index % REPOS.length] ?? 'northwind/ledger'
-    const reasons = REASON_SETS[index % REASON_SETS.length] ?? ['要人动手']
     const tier = index % 9 === 0 ? 'weak' as const : 'strong' as const
+    const reasons = tier === 'weak' ? ['提及'] : (REASON_SETS[index % REASON_SETS.length] ?? ['要人动手'])
     const signalText = tier === 'weak'
       ? (WEAK_EXCERPTS[Math.floor(index / 9) % WEAK_EXCERPTS.length] ?? '@ada 截图在附件里。')
       : reasons.includes('待你审/合')
