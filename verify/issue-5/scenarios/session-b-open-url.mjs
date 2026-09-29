@@ -102,6 +102,11 @@ export async function run() {
   // P1：打开仓库——从已知仓库里选（关注列表 + 待办关联），用 Dylan5237/req-to-page 实测
   // ------------------------------------------------------------------
   try {
+    // Item2 执行完之后，工具架 session 会停在「已打开」这类收尾态（renderTools 不会重新拉取
+    // 列表的那几种状态之一）。P1 后面要经过设置页 → 快速捕获 → 再回工具架，如果不先把
+    // session 状态清回工具架列表，回来后 openCardByTitle 找不到卡片的概率会变高——
+    // 所以先用 goTools() 把状态复位一次，再开始 P1 自己的步骤。
+    await goTools()
     // 1) 关注列表加入 Dylan5237/req-to-page
     await page.click('[data-view="settings"]')
     await page.fill('#watched-repo', 'Dylan5237/req-to-page')

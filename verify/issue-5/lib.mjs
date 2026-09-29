@@ -486,11 +486,68 @@ export async function gotoToolsOrRelaunch({ app, page, label, config, envExtra }
   }
 }
 
-export async function openCardByTitle(page, title) {
+export async function openCardByTitle(page, title, { timeoutMs = 8000 } = {}) {
   const card = page.locator('.tool-card', { hasText: title })
-  await card.first().waitFor({ state: 'visible', timeout: 8000 })
+  try {
+    await card.first().waitFor({ state: 'visible', timeout: timeoutMs })
+  } catch (err) {
+    const allTitles = await page.locator('.tool-card .tool-card-title, .tool-card h3, .tool-card').allInnerTexts().catch(() => ['<读取失败>'])
+    const diagName = `openCardByTitle-timeout-${Date.now()}`
+    appendEvidenceJson(diagName, { wantedTitle: title, visibleCardTexts: allTitles })
+    console.error(`[diag] openCardByTitle('${title}') 超时；当前可见卡片文本已写入 ${diagName}.json：${JSON.stringify(allTitles).slice(0, 500)}`)
+    throw err
+  }
   await card.first().click()
   await sleep(120)
+}
+
+/** 每个「相互独立」的检查点都在一个全新的应用进程里跑：任何一条动作卡死/异常都只影响它自己
+ * 这一个检查点，不会连环拖累同一批次里其它本该互相独立的检查项（真机上观察到的教训，见
+ * gotoToolsOrRelaunch 的注释）。ctx.goTools() 仍然保留卡死重开兜底，只是「重开」现在只影响
+ * 这一个已经独立的检查点自己。 */
+export async function runIsolated(label, config, fn, { envExtra } = {}) {
+  killStrayArckeep()
+  const appData = freshAppData(label)
+  let app = await launchApp({ label, appData, envExtra })
+  let page = await mainWindowPage(app)
+  await saveToolShelfJson(page, config)
+  const ctx = {
+    get app() { return app },
+    get page() { return page },
+    async goTools(timeoutMs) {
+      ;({ app, page } = await gotoToolsOrRelaunch({ app, page, label, config, envExtra }, { timeoutMs }))
+    }
+  }
+  try {
+    return await fn(ctx)
+  } finally {
+    try { await quitApp(app) } catch { /* ignore */ }
+    killStrayArckeep()
+  }
+}
+
+/** 点确认后等到终态（完成/失败/已终止），比通用 waitFor 多做一件事：如果真的等不到终态
+ * （即「卡死在运行中」这类真机异常），在放弃之前先拍一份诊断（DOM 文本 + 按进程名做的 WMI
+ * 快照，能不能在系统层面看到一个真的还活着的宿主进程），方便判断这是「进程真的还在跑」还是
+ * 「进程已经退出但界面没更新」，而不是含糊地报一个超时。 */
+export async function waitRunTerminalOrDiagnoseHang(page, {
+  timeoutMs = 12000, intervalMs = 150, diagName, processNames
+} = {}) {
+  const result = await waitFor(
+    async () => /完成|失败|已终止/.test(await page.locator('.run-status').innerText().catch(() => '')),
+    { timeoutMs, intervalMs }
+  )
+  const statusText = await page.locator('.run-status').innerText().catch(() => '<无 .run-status>')
+  if (result.ok) return { reachedTerminal: true, statusText, elapsedMs: result.elapsedMs }
+  let processSnapshot = null
+  if (processNames) {
+    try { processSnapshot = snapshotPidsByName(processNames) } catch (err) { processSnapshot = { error: String(err) } }
+  }
+  const domText = await pageText(page).catch(() => '<读取失败>')
+  if (diagName) {
+    appendEvidenceJson(diagName, { statusText, elapsedMs: result.elapsedMs, processSnapshot, domText })
+  }
+  return { reachedTerminal: false, statusText, elapsedMs: result.elapsedMs, processSnapshot, domText }
 }
 
 export function pageText(page) {
