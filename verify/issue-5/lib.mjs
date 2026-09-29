@@ -342,8 +342,26 @@ export async function elementRect(page, selector) {
 export async function saveToolShelfJson(page, json) {
   await page.click('[data-view="settings"]')
   const editor = page.locator('#tool-shelf-json')
-  // 给足够宽松的超时：第一次切到设置页（冷启动/JIT 预热）在真机上观察到明显比后面几次慢。
-  await editor.waitFor({ state: 'visible', timeout: 20000 })
+  try {
+    // 给足够宽松的超时：第一次切到设置页（冷启动/JIT 预热）在真机上观察到明显比后面几次慢。
+    await editor.waitFor({ state: 'visible', timeout: 20000 })
+  } catch (err) {
+    // 诊断用：这一步在真机上多次超时，先把当时到底卡在哪个画面留下证据，而不是继续瞎猜。
+    try {
+      const diagName = `zz-diag-settings-timeout-${Date.now()}`
+      await page.screenshot({ path: path.join(EVIDENCE_DIR, `${diagName}.png`) }).catch(() => {})
+      const bodyText = await page.evaluate(() => document.body.innerText).catch(() => '<evaluate 失败>')
+      const bodyHtmlHead = await page.evaluate(() => document.body.innerHTML.slice(0, 4000)).catch(() => '<evaluate 失败>')
+      const title = await page.title().catch(() => '<title 失败>')
+      const url = page.url()
+      fs.writeFileSync(path.join(EVIDENCE_DIR, `${diagName}.json`), JSON.stringify({ title, url, bodyText, bodyHtmlHead }, null, 2), 'utf8')
+      logEvidence(`${diagName}.png`, '诊断：等待设置页 JSON 编辑框超时时，实际画面是什么', [])
+      console.error(`[diag] saveToolShelfJson 超时诊断已写入 ${diagName}.png/.json；title="${title}" url="${url}" bodyText(前200字)="${bodyText.slice(0, 200)}"`)
+    } catch (diagErr) {
+      console.error('[diag] 连诊断截图/dump都失败了：', diagErr)
+    }
+    throw err
+  }
   await editor.click()
   await editor.fill('')
   await editor.fill(json)

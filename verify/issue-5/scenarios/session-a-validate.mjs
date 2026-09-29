@@ -7,7 +7,7 @@ import * as lib from '../lib.mjs'
 const {
   setResult, logEvidence, EVIDENCE_DIR,
   launchApp, mainWindowPage, quitApp, killStrayArckeep,
-  fullShot, shot, sleep, freshAppData, saveToolShelfJson, waitFor,
+  fullShot, shot, sleep, freshAppData, saveToolShelfJson, waitFor, getUserDataDir,
   independentSyntaxLocation, lineOf, writeJson, appendEvidenceJson
 } = lib
 
@@ -199,7 +199,12 @@ export async function run() {
   // 点保存到磁盘真的落盘，中间隔着一次 IPC 异步往返（renderer -> setToolShelf -> 主进程 persist()）。
   // Playwright 的 click() 只保证点击事件本身派发完，不等这个异步回调跑完；在关掉整个 Electron 进程之前，
   // 从 Node 这边直接读磁盘文件，确认「工具架已保存」这次的写入确实已经落地，避免拔进程的时间点比落盘早。
-  const settingsFileBeforeQuit = path.join(appData, 'Arckeep', 'settings.json')
+  //
+  // 注意：Electron 在 Windows 上 app.getPath('appData') 走的是 SHGetFolderPath(CSIDL_APPDATA)（对应
+  // %USERPROFILE%\AppData\Roaming），并不读取给子进程设置的 APPDATA 环境变量——所以这里不能自己拼
+  // <传入的 APPDATA>\Arckeep\settings.json 当作真实路径，必须直接问正在跑的应用自己的 userData 目录。
+  const userDataDirBeforeQuit = await getUserDataDir(app)
+  const settingsFileBeforeQuit = path.join(userDataDirBeforeQuit, 'settings.json')
   const flushed = await waitFor(() => {
     if (!fs.existsSync(settingsFileBeforeQuit)) return false
     try {
@@ -216,7 +221,7 @@ export async function run() {
   // Item 8：重启后配置还在 + 配置文件实际路径
   // ------------------------------------------------------------------
   try {
-    const settingsFile = path.join(appData, 'Arckeep', 'settings.json')
+    const settingsFile = settingsFileBeforeQuit
     const existsBeforeRestart = fs.existsSync(settingsFile)
     let rawSettings = null
     if (existsBeforeRestart) rawSettings = fs.readFileSync(settingsFile, 'utf8')
@@ -226,6 +231,8 @@ export async function run() {
 
     app = await launchApp({ label: 'A-restart', appData })
     page = await mainWindowPage(app)
+    const userDataDirAfterRestart = await getUserDataDir(app)
+    const sameUserDataDir = userDataDirAfterRestart === userDataDirBeforeQuit
     await lib.gotoTools(page)
     const cardVisibleAfterRestart = await page.locator('.tool-card', { hasText: '持久化检查·打开链接' }).count() > 0
     await shot(page, '05-restart-shelf', { checkIds: ['8'], description: '重启应用后，工具架配置原样保留' })
@@ -235,15 +242,18 @@ export async function run() {
     const editorRoundTrips = editorValueAfterRestart === VALID_JSON
     appendEvidenceJson('item8-settings-file-path', {
       settingsFile,
+      userDataDirBeforeQuit,
+      userDataDirAfterRestart,
+      sameUserDataDir,
       existsBeforeRestart,
       jsonRoundTrips,
       editorRoundTrips
     })
 
-    setResult('8', existsBeforeRestart && jsonRoundTrips && cardVisibleAfterRestart && editorRoundTrips ? 'PASS' : 'FAIL', {
+    setResult('8', existsBeforeRestart && jsonRoundTrips && cardVisibleAfterRestart && editorRoundTrips && sameUserDataDir ? 'PASS' : 'FAIL', {
       evidence: ['04-valid-saved-in-shelf.png', '05-restart-shelf.png', '06-restart-settings-json.png', 'item8-settings-file-path.json'],
-      steps: `保存合法 JSON 后退出应用（test hook quit）；直接在磁盘上读 <APPDATA>\\Arckeep\\settings.json（本机路径 ${settingsFile}），核对 toolShelfJson 字段与保存前逐字一致；用同一个 APPDATA 重新启动应用，核对工具架列表和设置页编辑框内容都原样保留。`,
-      notes: `退出应用前，直接读磁盘轮询确认合法 JSON 已经落盘（避免进程退出时间点比 IPC 异步写入更早导致的竞态）=${flushed.ok}（用时 ${flushed.elapsedMs}ms）；settings.json 路径=${settingsFile}；重启前文件存在=${existsBeforeRestart}；文件里的 toolShelfJson 与保存值逐字一致=${jsonRoundTrips}；重启后工具架卡片可见=${cardVisibleAfterRestart}；重启后设置页编辑框内容一致=${editorRoundTrips}`
+      steps: `保存合法 JSON 后退出应用（test hook quit）；退出前用 window.arckeep 所在主进程的 app.getPath('userData') 问到真实的配置目录，直接在磁盘上读 <真实 userData 目录>\\settings.json（本机路径 ${settingsFile}），核对 toolShelfJson 字段与保存前逐字一致；重新启动应用（同一个进程环境），核对第二次启动问到的 userData 目录与第一次相同、工具架列表和设置页编辑框内容都原样保留。`,
+      notes: `退出应用前，直接读磁盘轮询确认合法 JSON 已经落盘（避免进程退出时间点比 IPC 异步写入更早导致的竞态）=${flushed.ok}（用时 ${flushed.elapsedMs}ms）；真实 settings.json 路径=${settingsFile}；两次启动问到的 userData 目录一致=${sameUserDataDir}；重启前文件存在=${existsBeforeRestart}；文件里的 toolShelfJson 与保存值逐字一致=${jsonRoundTrips}；重启后工具架卡片可见=${cardVisibleAfterRestart}；重启后设置页编辑框内容一致=${editorRoundTrips}`
     })
   } catch (err) {
     setResult('8', 'BLOCKED', { notes: `重启持久化场景异常：${err.stack || err}` })
