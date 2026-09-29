@@ -2,22 +2,18 @@ name: Verify Issue 3 (项目总览 独立验收)
 
 # Independent acceptance run for Arckeep Issue #3 ("项目总览"). This workflow is
 # maintained on the verify/issue-3 branch only; it never touches product code and is
-# never merged. Manual dispatch only, so it never fires on every push to this branch.
+# never merged. GitHub only lists workflow_dispatch-triggerable workflows once the file
+# exists on the repository's default branch, which we must not touch, so this instead
+# triggers on push to verify/issue-3 itself (each push to this branch is one workflow
+# run; hard rule #4 caps this acceptance branch at 8 pushes total).
 on:
-  workflow_dispatch:
-    inputs:
-      artifact_run_id:
-        description: 'CI run id to pull the win-unpacked Windows artifact from (defaults to the main-push run for dddb958)'
-        required: false
-        default: '36507787608'
-      fallback_run_id:
-        description: 'Fallback CI run id (PR #13) if the primary run has no usable artifact'
-        required: false
-        default: '36507384325'
-      target_sha:
-        description: 'Commit SHA under test'
-        required: false
-        default: 'dddb9582adba35fc56a5e6f9d50aa4b351fdf24e'
+  push:
+    branches: [verify/issue-3]
+
+env:
+  ARTIFACT_RUN_ID: '36507787608'
+  FALLBACK_RUN_ID: '36507384325'
+  TARGET_SHA: 'dddb9582adba35fc56a5e6f9d50aa4b351fdf24e'
 
 # Hard rule #3: exactly one GitHub auth mechanism is permitted for this whole workflow —
 # the ephemeral, workflow-scoped GITHUB_TOKEN below. No PAT, no other secret is declared
@@ -49,9 +45,9 @@ jobs:
       - name: Record run metadata
         shell: pwsh
         run: |
-          "target_sha=${{ github.event.inputs.target_sha }}" | Out-File -FilePath run-meta.txt -Append
-          "artifact_run_id=${{ github.event.inputs.artifact_run_id }}" | Out-File -FilePath run-meta.txt -Append
-          "fallback_run_id=${{ github.event.inputs.fallback_run_id }}" | Out-File -FilePath run-meta.txt -Append
+          "target_sha=${{ env.TARGET_SHA }}" | Out-File -FilePath run-meta.txt -Append
+          "artifact_run_id=${{ env.ARTIFACT_RUN_ID }}" | Out-File -FilePath run-meta.txt -Append
+          "fallback_run_id=${{ env.FALLBACK_RUN_ID }}" | Out-File -FilePath run-meta.txt -Append
           "run_url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" | Out-File -FilePath run-meta.txt -Append
           Get-Content run-meta.txt
 
@@ -79,7 +75,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Continue'
-          gh run download ${{ github.event.inputs.artifact_run_id }} -R ${{ github.repository }} -n arckeep-win-unpacked -D dist-primary 2>gh-download-primary.err
+          gh run download ${{ env.ARTIFACT_RUN_ID }} -R ${{ github.repository }} -n arckeep-win-unpacked -D dist-primary 2>gh-download-primary.err
           $code = $LASTEXITCODE
           "primary_exit=$code" | Out-File -FilePath run-meta.txt -Append
           if ($code -ne 0) {
@@ -95,10 +91,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Continue'
-          $artifacts = gh api "repos/${{ github.repository }}/actions/runs/${{ github.event.inputs.artifact_run_id }}/artifacts" | ConvertFrom-Json
+          $artifacts = gh api "repos/${{ github.repository }}/actions/runs/${{ env.ARTIFACT_RUN_ID }}/artifacts" | ConvertFrom-Json
           $art = $artifacts.artifacts | Where-Object { $_.name -eq 'arckeep-win-unpacked' } | Select-Object -First 1
           if ($null -eq $art) {
-            Write-Host "No arckeep-win-unpacked artifact found on run ${{ github.event.inputs.artifact_run_id }}."
+            Write-Host "No arckeep-win-unpacked artifact found on run ${{ env.ARTIFACT_RUN_ID }}."
             "primary_rest_ok=false" | Out-File -FilePath run-meta.txt -Append
           } else {
             New-Item -ItemType Directory -Force -Path dist-primary | Out-Null
@@ -120,14 +116,14 @@ jobs:
             "used_fallback=false" | Out-File -FilePath run-meta.txt -Append
             Write-Host "Primary artifact present; no fallback needed."
           } else {
-            Write-Host "Primary artifact missing/unusable; falling back to PR #13 run ${{ github.event.inputs.fallback_run_id }}."
+            Write-Host "Primary artifact missing/unusable; falling back to PR #13 run ${{ env.FALLBACK_RUN_ID }}."
             "used_fallback=true" | Out-File -FilePath run-meta.txt -Append
-            gh run download ${{ github.event.inputs.fallback_run_id }} -R ${{ github.repository }} -n arckeep-win-unpacked -D dist-fallback 2>gh-download-fallback.err
+            gh run download ${{ env.FALLBACK_RUN_ID }} -R ${{ github.repository }} -n arckeep-win-unpacked -D dist-fallback 2>gh-download-fallback.err
             $code = $LASTEXITCODE
             if ($code -ne 0) {
               Write-Host "Fallback gh run download also failed (exit $code); raw stderr:"
               Get-Content gh-download-fallback.err -ErrorAction SilentlyContinue
-              $artifacts = gh api "repos/${{ github.repository }}/actions/runs/${{ github.event.inputs.fallback_run_id }}/artifacts" | ConvertFrom-Json
+              $artifacts = gh api "repos/${{ github.repository }}/actions/runs/${{ env.FALLBACK_RUN_ID }}/artifacts" | ConvertFrom-Json
               $art = $artifacts.artifacts | Where-Object { $_.name -eq 'arckeep-win-unpacked' } | Select-Object -First 1
               if ($null -ne $art) {
                 New-Item -ItemType Directory -Force -Path dist-fallback | Out-Null
@@ -137,9 +133,9 @@ jobs:
             }
             # Verify tree equality between the fallback run's head and the target SHA,
             # per the task's fallback-provenance requirement.
-            $prHeadSha = gh api "repos/${{ github.repository }}/actions/runs/${{ github.event.inputs.fallback_run_id }}" --jq .head_sha
+            $prHeadSha = gh api "repos/${{ github.repository }}/actions/runs/${{ env.FALLBACK_RUN_ID }}" --jq .head_sha
             "fallback_head_sha=$prHeadSha" | Out-File -FilePath run-meta.txt -Append
-            $treeTarget = git rev-parse "${{ github.event.inputs.target_sha }}^{tree}"
+            $treeTarget = git rev-parse "${{ env.TARGET_SHA }}^{tree}"
             $treeFallback = git rev-parse "$prHeadSha^{tree}" 2>$null
             if ($LASTEXITCODE -ne 0) {
               git fetch origin $prHeadSha --depth=1 2>$null
