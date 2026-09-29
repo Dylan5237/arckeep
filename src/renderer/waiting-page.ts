@@ -222,7 +222,7 @@ function renderMaybe(rows: readonly WaitingRow[], handlers: {
     if (details.open !== startsOpen) handlers.rememberMaybe(details.open)
   })
   details.append(el('summary', {}, [maybeRelatedLabel(rows.length)]))
-  details.append(el('p', { class: 'hint' }, ['只有提及，或正文里散落的关键词。不计入上面的待处理件数。']))
+  details.append(el('p', { class: 'hint' }, ['只有「只是提及」。不计入上面的待处理件数。']))
   const list = el('div', { class: 'maybe-list' })
   for (const row of rows) list.append(renderRow(row, handlers))
   details.append(list)
