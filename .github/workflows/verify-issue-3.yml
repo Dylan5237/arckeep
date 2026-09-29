@@ -146,6 +146,18 @@ jobs:
             "tree_equal=$($treeTarget -eq $treeFallback)" | Out-File -FilePath run-meta.txt -Append
           }
 
+      - name: Extract nested win-unpacked.zip (the CI artifact itself is a zip of win-unpacked)
+        shell: pwsh
+        run: |
+          # actions/upload-artifact for "arckeep-win-unpacked" wraps dist/win-unpacked
+          # in a zip (see .github/workflows/ci.yml's "Zip win-unpacked" step); gh run
+          # download (or the REST-fallback path) only gets us that zip, one level up
+          # from where Arckeep.exe actually lives, so it must be expanded once more.
+          Get-ChildItem -Path . -Recurse -Filter "arckeep-win-unpacked.zip" -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "Expanding $($_.FullName) ..."
+            Expand-Archive -Path $_.FullName -DestinationPath $_.DirectoryName -Force
+          }
+
       - name: Locate exe, compute SHA256
         id: exe
         shell: pwsh
