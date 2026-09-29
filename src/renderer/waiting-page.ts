@@ -251,10 +251,11 @@ function renderRow(row: WaitingRow, handlers: {
   }
   const body = [days, title, chip, meta, actions]
   if (via) body.splice(3, 0, via)
+  const reason = el('p', { class: 'waiting-reason' }, [row.signalText || row.reasons.join(' · ') || '等待'])
   return el('div', {
     class: `waiting-row age-${age}${row.ignored ? ' is-ignored' : ''}`,
     'data-row-id': row.id
-  }, body)
+  }, [...body, reason])
 }
 
 export async function renderWaiting(

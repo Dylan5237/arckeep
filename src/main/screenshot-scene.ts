@@ -45,6 +45,7 @@ export const SCREENSHOT_SCENES = [
   'overview-row-error',
   'overview-narrow',
   'overview-chip-hover',
+  'overview-settings',
   ...TOOL_SCREENSHOT_SCENES
 ] as const
 
@@ -76,7 +77,7 @@ export function screenshotWindowSize(scene: ScreenshotScene): { width: number, h
   if (scene === 'tools-running' || scene === 'tools-success' || scene === 'tools-failed' || scene === 'tools-aborted') {
     return { width: 1120, height: 900 }
   }
-  if (scene === 'tools-preview' || scene === 'tools-params' || scene === 'tools-copied') {
+  if (scene === 'tools-preview' || scene === 'tools-preview-failed' || scene === 'tools-params' || scene === 'tools-copied') {
     return { width: 1120, height: 860 }
   }
   if (scene === 'tools-invalid') return { width: 1120, height: 980 }
@@ -84,6 +85,7 @@ export function screenshotWindowSize(scene: ScreenshotScene): { width: number, h
   if (scene === 'waiting-hidden') return { width: 1180, height: 980 }
   if (scene === 'waiting-watch' || scene === 'waiting-family') return { width: 1180, height: 720 }
   if (scene === 'overview-archived') return { width: 1180, height: 820 }
+  if (scene === 'overview-settings') return { width: 1120, height: 1280 }
   if (scene === 'waiting' || scene === 'waiting-rate-limit' || scene === 'overview' || scene === 'overview-collapsed') return { width: 1180, height: 1680 }
   if (scene === 'nav' || scene === 'todos-empty') return { width: 1120, height: 760 }
   if (scene === 'todos' || scene === 'todos-filter' || scene === 'todos-delete') {
@@ -104,6 +106,7 @@ export function screenshotOpensSettings(scene: ScreenshotScene): boolean {
     || scene === 'connected'
     || scene === 'hotkey-conflict'
     || scene === 'hotkey-save-conflict'
+    || scene === 'overview-settings'
     || scene === 'tools-invalid'
 }
 
@@ -156,6 +159,7 @@ export function screenshotReadyText(scene: ScreenshotScene): string {
   if (scene === 'overview-invalid-token') return 'GitHub 认证无效或已过期'
   if (scene === 'overview-loading') return '正在刷新'
   if (scene === 'overview-row-error') return '仓库不存在或无权访问'
+  if (scene === 'overview-settings') return '没有单独的最近推送窗口'
   return '等我处理'
 }
 

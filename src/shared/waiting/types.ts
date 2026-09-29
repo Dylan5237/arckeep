@@ -59,6 +59,23 @@ export interface WaitingConfig {
   mentionPolicy: MentionPolicy
   /** A mention in a comment newer than this still counts without an action signal. */
   mentionRecentDays: number
+  /**
+   * Own or writable repos: a non-draft open PR with no action signal becomes
+   * 「待你审/合」only after this many whole days without a push, comment, or review.
+   */
+  openPrQuietDays: number
+  /** Names for the user when a comment does not say「用户」or @them. */
+  roleNames: string[]
+  /** Explicit asks that count when the same comment also names a role. */
+  roleAskPhrases: string[]
+  /** Status tokens such as NEEDS USER ACTION. Matched without case or wrapping symbols. */
+  statusHeaders: string[]
+  /** Title or label words that mark a requirement, spec, or feature issue. */
+  specMarkers: string[]
+  /** Step owners that are not the user. Anyone else named in that column counts too. */
+  otherActors: string[]
+  /** Checklist text that means the author still owes the step. */
+  selfStepPhrases: string[]
   showIgnored: boolean
 }
 
@@ -82,6 +99,8 @@ export interface GithubRecord {
   reviewRequestedAt: string | null
   mentionedAt: string | null
   lastPushedAt: string | null
+  /** Latest submitted review on this pull request, if one was loaded. */
+  lastReviewAt: string | null
   labelEvents: { name: string, at: string }[]
   fromAssignee: boolean
   fromReview: boolean
@@ -200,6 +219,8 @@ export interface WaitingRow {
   parentNumber: number | null
   parent: string | number | null
   childCount: number
+  /** One line explaining why this row is here. Same text as the JSON signal excerpt. */
+  signalText: string
 }
 
 export interface SourceError {

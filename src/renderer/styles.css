@@ -545,14 +545,28 @@ textarea {
 
 .waiting-row {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  row-gap: 0;
   min-height: 32px;
   min-width: 0;
-  padding: 0 4px;
+  padding: 4px 4px 5px;
   border-bottom: 1px solid var(--arckeep-soft-stone);
   position: relative;
+}
+
+.waiting-reason {
+  flex: 1 0 100%;
+  margin: 0 0 1px 60px;
+  min-width: 0;
+  color: var(--arckeep-muted-graphite);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .age-group.age-high .waiting-row { background: #F8F1EA; }
@@ -1040,6 +1054,44 @@ textarea.tool-json {
 .modal h3 {
   margin: 10px 0 4px;
   font-size: 14px;
+}
+
+.rehearsal-summary {
+  margin: 8px 0 12px;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.rehearsal-raw {
+  margin-top: 8px;
+}
+
+.rehearsal-mark {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--arckeep-soft-stone);
+  color: var(--arckeep-deep-charcoal);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.tool-command {
+  margin-top: 8px;
+  border-top: 1px solid var(--arckeep-soft-stone);
+  padding-top: 8px;
+}
+
+.tool-command summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.tool-command[open] summary {
+  margin-bottom: 8px;
 }
 
 .chip-tool { background: var(--arckeep-soft-stone); color: var(--arckeep-deep-charcoal); }

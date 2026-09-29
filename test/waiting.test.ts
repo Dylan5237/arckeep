@@ -13,7 +13,7 @@ import { waitingDays } from '../src/shared/waiting/days.js'
 import { localClock, relativeLabel } from '../src/shared/waiting/local-time.js'
 import { dedupeDrafts } from '../src/shared/waiting/dedupe.js'
 import { parseAheadRefLines } from '../src/shared/waiting/local-branch.js'
-import { blankRecord, findMentionTime, parseSearchPayload } from '../src/shared/waiting/parse-github.js'
+import { blankRecord, findMentionTime, parseGithubNode, parseSearchPayload } from '../src/shared/waiting/parse-github.js'
 import { rateLimitFromResponse } from '../src/shared/waiting/rate-limit.js'
 import { defaultWaitingConfig, keywordToSearchTerms, parseWaitingConfig } from '../src/shared/waiting/rules.js'
 import { ignoreDraft, partitionDismissals, snoozeDraft } from '../src/shared/waiting/snooze.js'
@@ -77,7 +77,7 @@ describe('waiting days', () => {
     expect(draft?.daysEstimated).toBe(true)
   })
 
-  it('uses the latest push or update for open pull requests', () => {
+  it('counts quiet time from the latest push, comment, or review, not updatedAt', () => {
     const draft = classifyRecord(record({
       kind: 'pr',
       number: 9,
@@ -85,10 +85,11 @@ describe('waiting days', () => {
       fromOpenPr: true,
       isDraft: false,
       lastPushedAt: '2026-09-10T00:00:00.000Z',
-      updatedAt: '2026-09-25T00:00:00.000Z'
+      updatedAt: '2026-09-27T00:00:00.000Z'
     }), config(), NOW)
     expect(draft?.reasons).toContain('待你审/合')
-    expect(draft?.waitingDays).toBe(3)
+    expect(draft?.signal.rule).toBe('3 天无动静')
+    expect(draft?.waitingDays).toBe(18)
     expect(draft?.daysEstimated).toBe(false)
   })
 })
@@ -143,9 +144,10 @@ describe('source classification', () => {
       title: 'Ready',
       isDraft: false,
       fromOpenPr: true,
-      lastPushedAt: '2026-09-26T00:00:00.000Z'
+      lastPushedAt: '2026-09-20T00:00:00.000Z'
     }), config(), NOW)
     expect(open?.reasons).toEqual(['待你审/合'])
+    expect(open?.signal.rule).toBe('3 天无动静')
   })
 
   it('keeps every source in a repo last pushed 60 days ago, including an empty repo signal', () => {
@@ -945,5 +947,31 @@ describe('tokens and search terms', () => {
     }, { login: 'ada', fromMention: true })
     expect(nodes[0]?.mentionedAt).toBe('2026-09-02T00:00:00.000Z')
     expect(nodes[0]?.kind).toBe('pr')
+  })
+
+  it('reads a pull request push time and the latest submitted review', () => {
+    const parsed = parseGithubNode({
+      __typename: 'PullRequest',
+      number: 4,
+      title: 'Quiet',
+      url: 'https://github.com/example/demo/pull/4',
+      repository: {
+        nameWithOwner: 'example/demo',
+        isFork: false,
+        viewerPermission: 'WRITE',
+        owner: { login: 'ada' }
+      },
+      commits: {
+        nodes: [{ commit: { committedDate: '2026-09-01T00:00:00.000Z', pushedDate: '2026-09-20T00:00:00.000Z' } }]
+      },
+      reviews: {
+        nodes: [
+          { submittedAt: '2026-09-10T00:00:00.000Z' },
+          { submittedAt: '2026-09-22T00:00:00.000Z' }
+        ]
+      }
+    }, { login: 'ada', fromOpenPr: true })
+    expect(parsed?.lastPushedAt).toBe('2026-09-20T00:00:00.000Z')
+    expect(parsed?.lastReviewAt).toBe('2026-09-22T00:00:00.000Z')
   })
 })

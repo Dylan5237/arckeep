@@ -14,6 +14,7 @@ const scenes = [
   ['tools', 'tools-shelf.png'],
   ['tools-params', 'tools-params.png'],
   ['tools-preview', 'tools-preview.png'],
+  ['tools-preview-failed', 'tools-preview-failed.png'],
   ['tools-running', 'tools-running.png'],
   ['tools-success', 'tools-success.png'],
   ['tools-failed', 'tools-failed.png'],

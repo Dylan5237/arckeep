@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { BrowserWindow, WebContents } from 'electron'
 import type { ScreenshotScene } from './screenshot-scene.js'
 import { MOCK_GITHUB_LOGIN, screenshotReadyText } from './screenshot-scene.js'
-import { toolScreenshotExpectation } from './screenshot-tools.js'
+import { toolScreenshotCheck, toolScreenshotExpectation } from './screenshot-tools.js'
 
 async function waitUntil(contents: WebContents, predicateSource: string, label: string): Promise<void> {
   const start = Date.now()
@@ -331,6 +331,27 @@ export async function presentScreenshot(options: {
         true
       `)
     }
+    if (scene === 'overview-settings') {
+      await contents.executeJavaScript(`
+        document.querySelector('#overview-settings')?.scrollIntoView({ block: 'start' })
+        true
+      `)
+      await waitUntil(contents, `(() => {
+        const card = document.querySelector('#overview-settings')
+        if (!card) return false
+        const text = card.innerText
+        const rect = card.getBoundingClientRect()
+        return text.includes('默认 7 天')
+          && text.includes('默认 30 天')
+          && text.includes('没有单独的最近推送窗口')
+          && !text.includes('推送窗口天数')
+          && !card.querySelector('[aria-label*="推送"]')
+          && rect.top >= -2
+          && rect.top < 120
+          && rect.bottom > 400
+          && rect.bottom <= window.innerHeight
+      })()`, 'overview settings')
+    }
     if (scene === 'overview-chip-hover') {
       await contents.executeJavaScript(`
         const chip = document.querySelector('a.chip-link')
@@ -342,6 +363,8 @@ export async function presentScreenshot(options: {
     }
   } else if (toolScreenshotExpectation(scene)) {
     await waitUntil(contents, includesText(toolScreenshotExpectation(scene) ?? ''), scene)
+    const extra = toolScreenshotCheck(scene)
+    if (extra) await waitUntil(contents, extra, `${scene} check`)
     const leaked = await contents.executeJavaScript(`document.body.innerText.includes('LASTEXITCODE')`)
     if (leaked) throw new Error(`screenshot scene ${scene} showed a shell exit wrapper`)
   } else if (scene === 'waiting-hover' || scene === 'waiting-ignore') {

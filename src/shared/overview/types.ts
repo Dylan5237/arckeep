@@ -29,9 +29,11 @@ export interface OverviewConfig {
   /** Days an open non-draft pull request can wait for review before 卡住. */
   reviewWaitDays: number
   /**
-   * Days since the newer of the default-branch commit and issue/PR activity
-   * before a repo leaves the active list for the 陈旧 group. Age equal to this
-   * value stays active; only a greater age is 陈旧.
+   * Days since the newest of the default-branch commit, issue/PR activity,
+   * repository pushedAt, and repository createdAt before a repo leaves the
+   * active list for the 陈旧 group. Missing timestamps are skipped. Age equal
+   * to this value stays active; only a greater age is 陈旧. A repo with no
+   * timestamps at all stays active.
    */
   staleRepoDays: number
   maxScopeRepos: number
@@ -73,6 +75,8 @@ export interface OverviewRepoFacts {
   sizeKb: number | null
   hasDefaultBranchCommit: boolean
   pushedAt: string | null
+  /** Repository createdAt. Used when the repo has never been pushed or edited. */
+  createdAt: string | null
   /** Default-branch commit time. Not a push to some other branch. */
   lastCommitAt: string | null
   /**
