@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { BrowserWindow, WebContents } from 'electron'
 import type { ScreenshotScene } from './screenshot-scene.js'
-import { MOCK_GITHUB_LOGIN } from './screenshot-scene.js'
+import { MOCK_GITHUB_LOGIN, screenshotReadyText } from './screenshot-scene.js'
 import { toolScreenshotExpectation } from './screenshot-tools.js'
 
 async function waitUntil(contents: WebContents, predicateSource: string, label: string): Promise<void> {
@@ -151,6 +151,31 @@ export async function presentScreenshot(options: {
       true
     `)
     await waitUntil(contents, includesText('删除这条待办？'), '删除这条待办？')
+  } else if (scene.startsWith('overview')) {
+    await waitUntil(contents, includesText(screenshotReadyText(scene)), scene)
+    if (scene === 'overview-archived') {
+      await contents.executeJavaScript(`
+        const details = document.querySelector('details.archived-group')
+        if (details) details.open = true
+        true
+      `)
+    }
+    if (scene === 'overview' || scene === 'overview-narrow') {
+      await contents.executeJavaScript(`
+        const details = document.querySelector('details.stale-group')
+        if (details) details.open = true
+        true
+      `)
+    }
+    if (scene === 'overview-chip-hover') {
+      await contents.executeJavaScript(`
+        const chip = document.querySelector('a.chip-link')
+        if (!chip) throw new Error('warning chip was not rendered')
+        chip.classList.add('is-hover')
+        chip.focus()
+        true
+      `)
+    }
   } else if (toolScreenshotExpectation(scene)) {
     await waitUntil(contents, includesText(toolScreenshotExpectation(scene) ?? ''), scene)
   } else if (scene === 'waiting-hover') {

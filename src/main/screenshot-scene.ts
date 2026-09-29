@@ -1,4 +1,4 @@
-import { TOOL_SCREENSHOT_SCENES } from './screenshot-tools.js'
+import { TOOL_SCREENSHOT_SCENES, toolScreenshotExpectation } from './screenshot-tools.js'
 import { SettingsService } from './settings-service.js'
 import type { SecretBox } from './token-store.js'
 
@@ -32,6 +32,16 @@ export const SCREENSHOT_SCENES = [
   'waiting-watch',
   'waiting-hidden',
   'waiting-family',
+  'overview',
+  'overview-collapsed',
+  'overview-archived',
+  'overview-empty',
+  'overview-no-token',
+  'overview-invalid-token',
+  'overview-loading',
+  'overview-row-error',
+  'overview-narrow',
+  'overview-chip-hover',
   ...TOOL_SCREENSHOT_SCENES
 ] as const
 
@@ -56,16 +66,17 @@ export function parseScreenshotScene(value: string | undefined): ScreenshotScene
 }
 
 export function screenshotWindowSize(scene: ScreenshotScene): { width: number, height: number } {
-  if (scene === 'waiting-narrow') return { width: 800, height: 1680 }
+  if (scene === 'waiting-narrow' || scene === 'overview-narrow') return { width: 800, height: 1680 }
   if (scene === 'tools-narrow') return { width: 800, height: 1500 }
   if (scene === 'narrow' || scene === 'todos-narrow') return { width: 800, height: 760 }
   if (scene === 'tools' || scene === 'tools-running' || scene === 'tools-exit' || scene === 'tools-aborted') {
     return { width: 1120, height: 1100 }
   }
   if (scene === 'tools-invalid') return { width: 1120, height: 980 }
-  if (scene === 'waiting-hover') return { width: 1180, height: 900 }
+  if (scene === 'waiting-hover' || scene === 'overview-chip-hover') return { width: 1180, height: 900 }
   if (scene === 'waiting-watch' || scene === 'waiting-hidden' || scene === 'waiting-family') return { width: 1180, height: 720 }
-  if (scene === 'waiting' || scene === 'waiting-rate-limit') return { width: 1180, height: 1680 }
+  if (scene === 'overview-archived') return { width: 1180, height: 820 }
+  if (scene === 'waiting' || scene === 'waiting-rate-limit' || scene === 'overview' || scene === 'overview-collapsed') return { width: 1180, height: 1680 }
   if (scene === 'nav' || scene === 'todos-empty') return { width: 1120, height: 760 }
   if (scene === 'todos' || scene === 'todos-filter' || scene === 'todos-delete') {
     return { width: 1120, height: 1100 }
@@ -104,11 +115,39 @@ export function screenshotShowsMainWindow(scene: ScreenshotScene): boolean {
     && scene !== 'capture-saved'
 }
 
-export function screenshotStartPage(scene: ScreenshotScene): 'inbox' | 'settings' | 'tools' | 'todos' {
+export function screenshotStartPage(scene: ScreenshotScene): 'inbox' | 'projects' | 'settings' | 'tools' | 'todos' {
   if (screenshotOpensSettings(scene)) return 'settings'
+  if (scene.startsWith('overview')) return 'projects'
   if (screenshotOpensTodos(scene)) return 'todos'
   if (scene.startsWith('tools')) return 'tools'
   return 'inbox'
+}
+
+export function screenshotReadyText(scene: ScreenshotScene): string {
+  const toolText = toolScreenshotExpectation(scene)
+  if (toolText) return toolText
+  if (scene === 'connected') return MOCK_GITHUB_LOGIN
+  if (scene === 'invalid-token') return 'HTTP 401'
+  if (scene === 'signed-out') return '未配置'
+  if (scene === 'hotkey-conflict') return '已被其他程序占用'
+  if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover') return '验收北区截图'
+  if (scene === 'waiting-watch') return '不会把别人的 open PR'
+  if (scene === 'waiting-hidden') return '已忽略的仓库'
+  if (scene === 'waiting-family') return '含 2 个子项'
+  if (scene === 'waiting-empty') return '没有等你处理的事项'
+  if (scene === 'waiting-no-token') return '未配置 GitHub 认证'
+  if (scene === 'waiting-invalid-token') return 'GitHub 认证无效或已过期'
+  if (scene === 'waiting-loading') return '正在刷新'
+  if (scene === 'waiting-rate-limit') return '速率限制'
+  if (scene === 'overview' || scene === 'overview-narrow' || scene === 'overview-collapsed') return 'harbor/lumen'
+  if (scene === 'overview-archived') return '已归档'
+  if (scene === 'overview-empty') return '还没有可显示的仓库'
+  if (scene === 'overview-chip-hover') return '卡住：CI 失败'
+  if (scene === 'overview-no-token') return '未配置 GitHub 认证'
+  if (scene === 'overview-invalid-token') return 'GitHub 认证无效或已过期'
+  if (scene === 'overview-loading') return '正在刷新'
+  if (scene === 'overview-row-error') return '仓库不存在或无权访问'
+  return '等我处理'
 }
 
 function fixtureSecretBox(): SecretBox {

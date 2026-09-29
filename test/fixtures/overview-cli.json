@@ -1,0 +1,66 @@
+{
+  "now": "2026-09-28T00:00:00.000Z",
+  "facts": [
+    {
+      "name": "example/stalled",
+      "url": "https://github.com/example/stalled",
+      "isEmpty": false,
+      "sizeKb": 20,
+      "hasDefaultBranchCommit": true,
+      "pushedAt": "2026-09-01T00:00:00.000Z",
+      "lastCommitAt": "2026-09-01T00:00:00.000Z",
+      "openPrCount": 0,
+      "ciState": "failure",
+      "pullRequests": [],
+      "error": null
+    },
+    {
+      "name": "example/stuck",
+      "url": "https://github.com/example/stuck",
+      "isEmpty": false,
+      "sizeKb": 20,
+      "hasDefaultBranchCommit": true,
+      "pushedAt": "2026-09-27T00:00:00.000Z",
+      "lastCommitAt": "2026-09-27T00:00:00.000Z",
+      "openPrCount": 1,
+      "ciState": "pending",
+      "pullRequests": [
+        {
+          "number": 8,
+          "title": "Needs a review",
+          "url": "https://github.com/example/stuck/pull/8",
+          "isDraft": false,
+          "createdAt": "2026-09-20T00:00:00.000Z",
+          "reviewDecision": "REVIEW_REQUIRED",
+          "approvedReviewCount": 0
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "example/archived",
+      "url": "https://github.com/example/archived",
+      "isEmpty": false,
+      "sizeKb": 20,
+      "hasDefaultBranchCommit": true,
+      "pushedAt": "2020-01-01T00:00:00.000Z",
+      "lastCommitAt": "2020-01-01T00:00:00.000Z",
+      "openPrCount": 1,
+      "ciState": "failure",
+      "ciFailureUrl": "https://github.com/example/archived/actions/runs/1",
+      "archived": true,
+      "pullRequests": [
+        {
+          "number": 2,
+          "title": "Old review",
+          "url": "https://github.com/example/archived/pull/2",
+          "isDraft": false,
+          "createdAt": "2020-01-02T00:00:00.000Z",
+          "reviewDecision": "REVIEW_REQUIRED",
+          "approvedReviewCount": 0
+        }
+      ],
+      "error": null
+    }
+  ]
+}
