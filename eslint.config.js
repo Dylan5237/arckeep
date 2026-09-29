@@ -28,7 +28,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ['test/todo-row-actions.test.ts'],
+    files: ['test/todo-row-actions.test.ts', 'test/capture-enter.test.ts'],
     languageOptions: {
       globals: {
         ...globals.browser

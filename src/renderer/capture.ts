@@ -140,6 +140,13 @@ form.addEventListener('submit', event => {
   void save()
 })
 
+form.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || event.isComposing) return
+  if (event.target !== text && event.target !== repo) return
+  event.preventDefault()
+  void save()
+})
+
 text.addEventListener('input', () => {
   placeCaret()
   if (!saving) void persistDraft()
