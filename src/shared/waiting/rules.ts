@@ -47,6 +47,9 @@ export const DEFAULT_MAX_SCOPE_REPOS = 400
 /** Comments newer than this still count as a live mention without an action signal. */
 export const DEFAULT_MENTION_RECENT_DAYS = 14
 
+/** Whole days without a push, comment, or review before a quiet open PR counts. */
+export const DEFAULT_OPEN_PR_QUIET_DAYS = 3
+
 export function defaultWaitingSources(): WaitingSources {
   return {
     assignee: true,
@@ -72,6 +75,7 @@ export function defaultWaitingConfig(): WaitingConfig {
     openPrScope: 'maintain',
     mentionPolicy: 'action-or-recent',
     mentionRecentDays: DEFAULT_MENTION_RECENT_DAYS,
+    openPrQuietDays: DEFAULT_OPEN_PR_QUIET_DAYS,
     showIgnored: false
   }
 }
@@ -119,10 +123,10 @@ function choice<T extends string>(value: unknown, allowed: readonly T[], fallbac
   throw new WaitingConfigError(`${label}无效`)
 }
 
-function dayWindow(value: unknown, fallback: number): number {
+function dayWindow(value: unknown, fallback: number, label: string): number {
   if (value === undefined) return fallback
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 365) {
-    throw new WaitingConfigError('提及的最近天数应为 1 到 365 的整数')
+    throw new WaitingConfigError(`${label}应为 1 到 365 的整数`)
   }
   return value
 }
@@ -203,7 +207,8 @@ export function parseWaitingConfig(input: unknown, options?: { validatePatterns?
     maxScopeRepos: scopeRepoLimit(input.maxScopeRepos, defaults.maxScopeRepos),
     openPrScope: choice<OpenPrScope>(input.openPrScope, ['maintain', 'watching'], defaults.openPrScope, '待你审/合范围'),
     mentionPolicy: choice<MentionPolicy>(input.mentionPolicy, ['action-or-recent', 'any'], defaults.mentionPolicy, '提及规则'),
-    mentionRecentDays: dayWindow(input.mentionRecentDays, defaults.mentionRecentDays),
+    mentionRecentDays: dayWindow(input.mentionRecentDays, defaults.mentionRecentDays, '提及的最近天数'),
+    openPrQuietDays: dayWindow(input.openPrQuietDays, defaults.openPrQuietDays, '待你审/合的无动静天数'),
     showIgnored: bool(input.showIgnored, false)
   }
   if (options?.validatePatterns) validateWaitingPatterns(config)

@@ -55,7 +55,8 @@ const PR_FIELDS = `
   author { login }
   labels(first: 10) { nodes { name } }
   comments(last: 8) { nodes { body createdAt } }
-  commits(last: 1) { nodes { commit { committedDate } } }
+  commits(last: 1) { nodes { commit { pushedDate committedDate } } }
+  reviews(last: 5) { nodes { submittedAt } }
   timelineItems(last: 20, itemTypes: [ASSIGNED_EVENT, REVIEW_REQUESTED_EVENT, LABELED_EVENT]) {
     nodes {
       __typename

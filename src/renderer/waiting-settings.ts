@@ -76,6 +76,8 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
   mentionPolicy.value = config.mentionPolicy
   const mentionDays = el('input', { type: 'number', min: '1', max: '365', 'aria-label': '提及的最近天数' })
   mentionDays.value = String(config.mentionRecentDays)
+  const quietDays = el('input', { type: 'number', min: '1', max: '365', 'aria-label': '待你审/合的无动静天数' })
+  quietDays.value = String(config.openPrQuietDays)
   const rulesBox = el('div', { class: 'rule-list' })
   const rules: StatusDocRule[] = config.statusDocRules.map(rule => ({ ...rule }))
   const drawRules = () => {
@@ -118,6 +120,7 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
       openPrScope: openPrScope.value as OpenPrScope,
       mentionPolicy: mentionPolicy.value as MentionPolicy,
       mentionRecentDays: Number(mentionDays.value),
+      openPrQuietDays: Number(quietDays.value),
       showIgnored: config.showIgnored
     }
     void window.arckeep.setWaiting(next).then(async result => {
@@ -152,6 +155,11 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
       '仅关注的仓库只保留和你有关的条目，不会把别人的 open PR 整仓列出来。'
     ]),
     openPrScope,
+    el('h3', {}, ['无动静天数']),
+    el('p', { class: 'hint' }, [
+      '自己能推送的仓库里，非草稿 open PR 要有等你动手的信号，或者连续这么多天没有新的 push、评论和 review，才算待你审/合。默认 3 天。已经请求你 review 或指派给你的不受这几天影响。'
+    ]),
+    quietDays,
     el('h3', {}, ['提及']),
     mentionPolicy,
     el('p', { class: 'hint' }, ['最近这么多天内的评论里 @你，即使没有动作信号也会留下。']),

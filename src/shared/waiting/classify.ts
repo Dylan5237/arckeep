@@ -1,9 +1,9 @@
 import { primaryAction } from './action.js'
 import { earlierIso, laterIso, waitingDays } from './days.js'
-import { explainHumanWait, waitingExcerpt } from './human-text.js'
+import { actionableProse, explainHumanWait, waitingExcerpt } from './human-text.js'
 import { escapeRegex } from './parse-github.js'
 import { compileUserRegexList } from './rules.js'
-import { evaluateSignals } from './signals.js'
+import { explainAction, evaluateSignals } from './signals.js'
 import { WAITING_REASONS, type GithubRecord, type ReasonDetail, type WaitingConfig, type WaitingDraft, type WaitingSignal } from './types.js'
 
 export interface ClassifiedReason {
@@ -108,6 +108,84 @@ export function blanketOpenPr(record: GithubRecord, config: WaitingConfig): bool
   return record.fromOpenPr === true
 }
 
+/**
+ * Own and writable repos do not list every open pull. A watched repo the user
+ * opted into still lists every non-draft, which is the older explicit choice.
+ */
+function openPrNeedsGate(record: GithubRecord): boolean {
+  return (record.repoAccess ?? 'unknown') !== 'watch'
+}
+
+/** Latest of open, push, issue comment, and submitted review. `updatedAt` is not activity. */
+export function openPrActivityAt(record: GithubRecord): string | null {
+  let at: string | null = record.createdAt || null
+  at = laterIso(at, record.lastPushedAt)
+  for (const comment of record.comments) at = laterIso(at, comment.createdAt || null)
+  return laterIso(at, record.lastReviewAt ?? null)
+}
+
+function latestCommentResolved(record: GithubRecord, keywords: readonly RegExp[], resolved: readonly RegExp[]): boolean {
+  const latest = record.comments[record.comments.length - 1]
+  if (!latest) return false
+  return evaluateSignals(actionableProse(latest.body), keywords, resolved) === 'resolved'
+}
+
+/**
+ * An ask in the title, body, or any comment, using the same action, negation,
+ * and closing-comment judgment as other human waits.
+ */
+function openPrAsk(record: GithubRecord, config: WaitingConfig): { signal: WaitingSignal, at: string | null } | null {
+  const keywords = compileUserRegexList(config.humanKeywords, '人工动作关键词')
+  const resolved = compileUserRegexList(config.resolvedSignals, '已解决信号')
+  if (latestCommentResolved(record, keywords, resolved)) return null
+  const title = explainAction(record.title, keywords, resolved)
+  if (title) return { signal: { rule: title.rule, excerpt: title.excerpt }, at: record.createdAt || null }
+  const body = explainHumanWait(record.body, record.body, [], new Set(), keywords, resolved)
+  if (body) return { signal: { rule: body.rule, excerpt: body.excerpt }, at: record.createdAt || null }
+  for (let index = record.comments.length - 1; index >= 0; index -= 1) {
+    const comment = record.comments[index]
+    if (!comment) continue
+    const hit = explainAction(actionableProse(comment.body), keywords, resolved)
+    if (hit) return { signal: { rule: hit.rule, excerpt: hit.excerpt }, at: comment.createdAt || null }
+  }
+  return null
+}
+
+function quietOpenPrSignal(days: number): WaitingSignal {
+  return { rule: `${days} 天无动静`, excerpt: '' }
+}
+
+function classifyBlanketOpenPr(
+  record: GithubRecord,
+  config: WaitingConfig,
+  now: Date
+): (ClassifiedReason & { signal: WaitingSignal }) | null {
+  if (!blanketOpenPr(record, config)) return null
+  if (!openPrNeedsGate(record)) {
+    const at = laterIso(record.lastPushedAt, record.updatedAt)
+    return { reason: WAITING_REASONS.openPr, at, estimated: false, signal: { rule: WAITING_REASONS.openPr, excerpt: '' } }
+  }
+  const ask = openPrAsk(record, config)
+  if (ask) {
+    return {
+      reason: WAITING_REASONS.openPr,
+      at: ask.at,
+      estimated: !ask.at,
+      signal: ask.signal
+    }
+  }
+  const activity = openPrActivityAt(record)
+  const quietDays = config.openPrQuietDays
+  // Whole days: N days of silence counts. Anything newer is still in progress.
+  if (activity && waitingDays(activity, now) < quietDays) return null
+  return {
+    reason: WAITING_REASONS.openPr,
+    at: activity,
+    estimated: !activity,
+    signal: quietOpenPrSignal(quietDays)
+  }
+}
+
 export function humanSignal(record: GithubRecord, config: WaitingConfig): (ClassifiedReason & { signal: WaitingSignal }) | null {
   if (record.kind !== 'issue') return null
   const keywords = compileUserRegexList(config.humanKeywords, '人工动作关键词')
@@ -195,9 +273,11 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
       }
     }
   }
-  if (blanketOpenPr(record, config)) {
-    const at = laterIso(record.lastPushedAt, record.updatedAt)
-    reasons.push({ reason: WAITING_REASONS.openPr, at, estimated: false })
+  let openPrSignal: WaitingSignal | null = null
+  const openPr = classifyBlanketOpenPr(record, config, now)
+  if (openPr) {
+    reasons.push(openPr)
+    openPrSignal = openPr.signal
   }
   if (config.sources.humanIssues && repoHumanAllowed(record)) {
     const human = humanSignal(record, config)
@@ -207,7 +287,11 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
   if (authored && !reasons.some(reason => reason.reason === WAITING_REASONS.human)) reasons.push(authored)
   if (reasons.length === 0) return null
   const humanReason = reasons.find(reason => reason.reason === WAITING_REASONS.human) as (ClassifiedReason & { signal?: WaitingSignal }) | undefined
-  const signal = humanReason?.signal ?? mentionSignal ?? { rule: reasons[0]?.reason ?? '等待', excerpt: '' }
+  const directAsk = reasons.some(reason => reason.reason === WAITING_REASONS.review || reason.reason === WAITING_REASONS.assignee)
+  const signal = humanReason?.signal
+    ?? mentionSignal
+    ?? (directAsk ? null : openPrSignal)
+    ?? { rule: reasons[0]?.reason ?? '等待', excerpt: '' }
   return draftFromReasons({
     id: `${record.kind}:${record.repo}#${record.number}`,
     repo: record.repo,

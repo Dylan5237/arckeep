@@ -354,6 +354,155 @@ describe('mention policy', () => {
   })
 })
 
+describe('quiet open pulls in writable repos', () => {
+  const day = 86_400_000
+
+  function pull(patch: Partial<GithubRecord> = {}): GithubRecord {
+    return record({
+      kind: 'pr',
+      number: 40,
+      title: 'Keep going',
+      fromOpenPr: true,
+      inScopeRepo: true,
+      repoAccess: 'maintain',
+      isDraft: false,
+      createdAt: new Date(NOW.getTime() - 10 * day).toISOString(),
+      updatedAt: new Date(NOW.getTime() - day).toISOString(),
+      lastPushedAt: new Date(NOW.getTime() - 10 * day).toISOString(),
+      ...patch
+    })
+  }
+
+  it('counts a pull when the title, body, or a comment asks for action', () => {
+    const titled = classifyRecord(pull({
+      title: '请确认导出列',
+      lastPushedAt: new Date(NOW.getTime() - day).toISOString()
+    }), config(), NOW)
+    expect(titled?.reasons).toEqual(['待你审/合'])
+    expect(titled?.signal.rule).toBe('请主人或用户动手')
+    expect(titled?.signal.excerpt).toContain('请确认导出列')
+
+    const body = classifyRecord(pull({
+      body: '需要你看一下失败重试',
+      lastPushedAt: new Date(NOW.getTime() - 2 * day).toISOString()
+    }), config(), NOW)
+    expect(body?.reasons).toEqual(['待你审/合'])
+    expect(body?.signal.excerpt).toContain('需要你看一下失败重试')
+
+    const commented = classifyRecord(pull({
+      comments: [{ body: '等你验收截图', createdAt: new Date(NOW.getTime() - day).toISOString() }]
+    }), config(), NOW)
+    expect(commented?.reasons).toEqual(['待你审/合'])
+    expect(commented?.signal.rule).toBe('请主人或用户动手')
+    expect(commented?.signal.excerpt).toContain('等你验收截图')
+
+    const negated = classifyRecord(pull({
+      title: '不是请确认',
+      body: '没有待验收',
+      lastPushedAt: new Date(NOW.getTime() - 2 * day).toISOString()
+    }), config(), NOW)
+    expect(negated).toBeNull()
+  })
+
+  it('keeps a signal even after a new push, and ignores a resolved closing comment', () => {
+    const stillAsking = classifyRecord(pull({
+      body: '请确认',
+      lastPushedAt: new Date(NOW.getTime() - day).toISOString()
+    }), config(), NOW)
+    expect(stillAsking?.signal.excerpt).toContain('请确认')
+
+    const closed = classifyRecord(pull({
+      body: '请确认',
+      lastPushedAt: new Date(NOW.getTime() - 10 * day).toISOString(),
+      comments: [{ body: '已验收', createdAt: new Date(NOW.getTime() - day).toISOString() }]
+    }), config(), NOW)
+    expect(closed).toBeNull()
+  })
+
+  it('uses the 2, 3, and 4 day edges for a pull with no signal', () => {
+    const age = (days: number) => new Date(NOW.getTime() - days * day).toISOString()
+    expect(classifyRecord(pull({ lastPushedAt: age(2), createdAt: age(2) }), config(), NOW)).toBeNull()
+    const exact = classifyRecord(pull({ lastPushedAt: age(3), createdAt: age(3) }), config(), NOW)
+    expect(exact?.reasons).toEqual(['待你审/合'])
+    expect(exact?.signal).toEqual({ rule: '3 天无动静', excerpt: '' })
+    expect(exact?.waitingDays).toBe(3)
+    const older = classifyRecord(pull({ lastPushedAt: age(4), createdAt: age(4) }), config(), NOW)
+    expect(older?.signal.rule).toBe('3 天无动静')
+    expect(older?.waitingDays).toBe(4)
+    const almost = classifyRecord(pull({
+      lastPushedAt: new Date(NOW.getTime() - 3 * day + 1).toISOString(),
+      createdAt: new Date(NOW.getTime() - 3 * day + 1).toISOString()
+    }), config(), NOW)
+    expect(almost).toBeNull()
+  })
+
+  it('restarts the quiet clock on a new comment or a new push', () => {
+    const old = new Date(NOW.getTime() - 10 * day).toISOString()
+    const fresh = new Date(NOW.getTime() - 2 * day).toISOString()
+    const commentReset = classifyRecord(pull({
+      lastPushedAt: old,
+      createdAt: old,
+      comments: [{ body: '还在改文案', createdAt: fresh }]
+    }), config(), NOW)
+    expect(commentReset).toBeNull()
+
+    const pushReset = classifyRecord(pull({
+      createdAt: old,
+      lastPushedAt: fresh,
+      comments: [{ body: '先这样', createdAt: old }]
+    }), config(), NOW)
+    expect(pushReset).toBeNull()
+
+    const reviewReset = classifyRecord(pull({
+      createdAt: old,
+      lastPushedAt: old,
+      lastReviewAt: fresh
+    }), config(), NOW)
+    expect(reviewReset).toBeNull()
+
+    const staleReview = classifyRecord(pull({
+      createdAt: old,
+      lastPushedAt: old,
+      lastReviewAt: new Date(NOW.getTime() - 4 * day).toISOString()
+    }), config(), NOW)
+    expect(staleReview?.signal.rule).toBe('3 天无动静')
+  })
+
+  it('still lists a review request or an assignment without waiting for the quiet period', () => {
+    const fresh = new Date(NOW.getTime() - day).toISOString()
+    const review = classifyRecord(pull({
+      fromReview: true,
+      reviewRequestedAt: fresh,
+      lastPushedAt: fresh,
+      createdAt: fresh,
+      title: 'Please look'
+    }), config(), NOW)
+    expect(review?.reasons).toEqual(['请求 review'])
+    expect(review?.signal.rule).toBe('请求 review')
+
+    const assigned = classifyRecord(pull({
+      fromAssignee: true,
+      assignedAt: fresh,
+      lastPushedAt: fresh,
+      createdAt: fresh
+    }), config(), NOW)
+    expect(assigned?.reasons).toEqual(['指派'])
+    expect(assigned?.signal.rule).toBe('指派')
+  })
+
+  it('honors a different quiet window', () => {
+    const age = (days: number) => new Date(NOW.getTime() - days * day).toISOString()
+    const rules = config({ openPrQuietDays: 5 })
+    expect(classifyRecord(pull({ lastPushedAt: age(4), createdAt: age(4) }), rules, NOW)).toBeNull()
+    const hit = classifyRecord(pull({ lastPushedAt: age(5), createdAt: age(5) }), rules, NOW)
+    expect(hit?.reasons).toEqual(['待你审/合'])
+    expect(hit?.signal).toEqual({ rule: '5 天无动静', excerpt: '' })
+    expect(parseWaitingConfig({}).openPrQuietDays).toBe(3)
+    expect(parseWaitingConfig({ openPrQuietDays: 5 }).openPrQuietDays).toBe(5)
+    expect(() => parseWaitingConfig({ openPrQuietDays: 0 })).toThrow('待你审/合的无动静天数')
+  })
+})
+
 describe('hidden repositories', () => {
   it('reads an old flat dismissal file and hides a whole repo until include-hidden', async () => {
     const draft = classifyRecord(record({

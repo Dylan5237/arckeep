@@ -59,6 +59,11 @@ export interface WaitingConfig {
   mentionPolicy: MentionPolicy
   /** A mention in a comment newer than this still counts without an action signal. */
   mentionRecentDays: number
+  /**
+   * Own or writable repos: a non-draft open PR with no action signal becomes
+   * 「待你审/合」only after this many whole days without a push, comment, or review.
+   */
+  openPrQuietDays: number
   showIgnored: boolean
 }
 
@@ -82,6 +87,8 @@ export interface GithubRecord {
   reviewRequestedAt: string | null
   mentionedAt: string | null
   lastPushedAt: string | null
+  /** Latest submitted review on this pull request, if one was loaded. */
+  lastReviewAt: string | null
   labelEvents: { name: string, at: string }[]
   fromAssignee: boolean
   fromReview: boolean
