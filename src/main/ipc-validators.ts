@@ -7,6 +7,24 @@ export function requireSender(
   }
 }
 
+/** Accepts the main window or the quick-capture window, and nothing else. */
+export function requireTrustedSender(
+  event: { sender: { id: number } },
+  trusted: ReadonlyArray<{ id: number } | null | undefined>
+): void {
+  if (!trusted.some(candidate => candidate != null && candidate.id === event.sender.id)) {
+    throw new Error('Blocked IPC from an unexpected renderer')
+  }
+}
+
+export {
+  normalizeTodoCompletion,
+  normalizeTodoId,
+  normalizeTodoInput,
+  normalizeTodoUpdate,
+  normalizeRepoTag
+} from '../shared/todos/validate.js'
+
 const REPO_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 
 export function normalizeWatchedRepos(input: unknown): string[] {

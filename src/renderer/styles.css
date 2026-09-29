@@ -28,6 +28,32 @@ button, input {
   min-height: 100vh;
 }
 
+.workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-width: 0;
+}
+
+.hotkey-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #f7f1ea;
+  border-bottom: 1px solid #b08968;
+  color: var(--arckeep-deep-charcoal);
+}
+
+.hotkey-banner[hidden] {
+  display: none;
+}
+
+.hotkey-banner p {
+  margin: 0;
+}
+
 .nav {
   display: flex;
   flex-direction: column;
@@ -84,7 +110,8 @@ button, input {
 }
 
 main {
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 24px 32px 28px;
 }
@@ -205,14 +232,195 @@ button.ghost {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  margin-top: 8px;
 }
 
 .hotkey-alert span {
   flex: 1 1 14rem;
 }
 
+.hotkey-active {
+  color: var(--arckeep-muted-graphite);
+  white-space: nowrap;
+}
+
 .placeholder {
   max-width: 36rem;
+}
+
+.todo-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.todo-count {
+  margin: 0;
+  color: var(--arckeep-muted-graphite);
+}
+
+.todo-toolbar select {
+  border: 1px solid var(--arckeep-soft-stone);
+  background: var(--arckeep-white);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.todo-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.todo-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: start;
+  padding: 8px 8px;
+  border-bottom: 1px solid var(--arckeep-soft-stone);
+  border-radius: 8px;
+}
+
+.todo-row:hover,
+.todo-row:focus-within,
+.todo-row.is-editing {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.todo-check {
+  margin-top: 4px;
+  width: 16px;
+  height: 16px;
+}
+
+.todo-text {
+  margin: 0;
+  word-break: break-word;
+}
+
+.todo-text.done {
+  color: var(--arckeep-muted-graphite);
+  text-decoration: line-through;
+}
+
+.todo-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 2px;
+  min-height: 18px;
+}
+
+.todo-repo,
+.todo-time {
+  color: var(--arckeep-muted-graphite);
+  font-size: 13px;
+}
+
+.todo-meta .chip {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(91, 94, 59, 0.12);
+  color: var(--arckeep-olive);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.todo-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.todo-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+}
+
+.todo-row:hover .todo-actions,
+.todo-row:focus-within .todo-actions,
+.todo-row.is-editing .todo-actions,
+.todo-row.is-hover .todo-actions {
+  opacity: 1;
+}
+
+.todo-actions button {
+  border: 0;
+  background: transparent;
+  color: var(--arckeep-olive);
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.todo-actions button.danger {
+  color: #8a4b32;
+}
+
+.todo-actions button:hover,
+.todo-actions button:focus-visible {
+  background: rgba(91, 94, 59, 0.1);
+}
+
+.todo-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.todo-editor label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+}
+
+.todo-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.todo-error {
+  margin: 0;
+  color: #8a4b32;
+  font-size: 13px;
+}
+
+.empty-todos {
+  margin: 12px 0 0;
+  color: var(--arckeep-muted-graphite);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(35, 35, 35, 0.35);
+  display: grid;
+  place-items: center;
+  z-index: 5;
+}
+
+.modal {
+  width: min(420px, calc(100% - 32px));
+  background: var(--arckeep-white);
+  border: 1px solid var(--arckeep-soft-stone);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.modal h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.danger-fill {
+  background: #8a4b32;
 }
 
 textarea {
@@ -609,6 +817,12 @@ main:has(.overview) {
     white-space: normal;
   }
   .rule-row { grid-template-columns: 1fr; }
+  .page h1 { font-size: 24px; }
+  .todo-row { grid-template-columns: auto minmax(0, 1fr); }
+  .todo-side {
+    grid-column: 2;
+    justify-content: space-between;
+  }
   .tool-top { align-items: flex-start; }
 }
 

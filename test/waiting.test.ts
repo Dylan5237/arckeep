@@ -356,7 +356,7 @@ describe('status documents and local branches', () => {
     expect(rows[0]?.waitingDays).toBe(8)
   })
 
-  it('leaves the todo provider empty until issue 4 exists', async () => {
+  it('keeps an empty fallback when no todo log is wired', async () => {
     expect(pendingTodoProvider.available).toBe(false)
     await expect(pendingTodoProvider.listWaitingOnMe()).resolves.toEqual([])
   })

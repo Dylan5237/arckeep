@@ -1,30 +1,67 @@
-import { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, Menu, Notification, Tray, globalShortcut, ipcMain, nativeImage, safeStorage, shell } from 'electron'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { IpcChannel } from '../shared/ipc.js'
+import { hotkeyUnavailableMessage, shouldNotifyStartupHotkeyFailure, trayMenuEntries, trayToolTip } from '../shared/hotkey-status.js'
+import { mergeRepoOptions } from '../shared/todos/repos.js'
+import { createTodoWaitingProvider } from '../shared/waiting/todo-source.js'
+import { createCaptureWindow, focusCaptureInput, showSavedToast } from './capture-window.js'
 import { createGracefulShutdownHandler } from './graceful-shutdown.js'
-import { requireSender } from './ipc-validators.js'
-import { overviewCachePath, settingsFilePath, userDataDir, waitingCachePath, waitingDismissalPath } from './paths.js'
+import {
+  normalizeTodoCompletion,
+  normalizeTodoId,
+  normalizeTodoInput,
+  normalizeTodoUpdate,
+  requireSender,
+  requireTrustedSender
+} from './ipc-validators.js'
 import { OverviewService } from './overview-service.js'
+import {
+  captureDraftPath,
+  overviewCachePath,
+  settingsFilePath,
+  testHookTodosPath,
+  todosFilePath,
+  userDataDir,
+  waitingCachePath,
+  waitingDismissalPath
+} from './paths.js'
 import {
   createScreenshotSettings,
   parseScreenshotScene,
-  screenshotReadyText,
+  screenshotShowsMainWindow,
   screenshotStartPage,
-  screenshotWindowSize,
-  type ScreenshotScene
+  screenshotWindowSize
 } from './screenshot-scene.js'
 import { createScreenshotOverview } from './screenshot-overview.js'
+import { presentScreenshot } from './screenshot-run.js'
 import { createScreenshotWaiting } from './screenshot-waiting.js'
+import {
+  screenshotCaptureFixture,
+  screenshotSeedsTodos,
+  screenshotTodoLog
+} from './screenshot-todos.js'
 import { SettingsService } from './settings-service.js'
 import { WaitingService } from './waiting-service.js'
-import { dispatchTestHook, installTrayTestHooks, parseTestHookAction, type TrayActions } from './test-hooks.js'
+import {
+  dispatchTestHook,
+  hotkeyFailureRequested,
+  installTrayTestHooks,
+  parseTestHookAction,
+  testHooksEnabled,
+  type TestHookExtras,
+  type TrayActions
+} from './test-hooks.js'
+import { clearCaptureDraft, loadCaptureDraft, saveCaptureDraft } from './todos/draft.js'
+import { TodoStore } from './todos/store.js'
 import { createSafeStorageBox } from './token-store.js'
+import type { HotkeyRegistrar } from './hotkey.js'
 import { registerToolIpc } from './tool-ipc.js'
 import { ToolRunner } from './tool-runner.js'
 import { createUrlGuard, isTrustedBrowserUrl } from './url-trust.js'
+import { hardenedWebPreferences } from './window-prefs.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const screenshotPath = process.env.ARCKEEP_SCREENSHOT
@@ -41,11 +78,15 @@ app.setPath('userData', screenshotPath
   : userDataDir(app.getPath('appData')))
 
 let mainWindow: BrowserWindow | null = null
+let captureWindow: BrowserWindow | null = null
+let savedToast: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 let service: SettingsService | null = null
+let todos: TodoStore | null = null
 let waiting: WaitingService | ReturnType<typeof createScreenshotWaiting> | null = null
 let overview: OverviewService | ReturnType<typeof createScreenshotOverview> | null = null
+let hotkeyNoticeSent = false
 const toolRunner = new ToolRunner(event => {
   const win = mainWindow
   if (!win || win.isDestroyed()) return
@@ -70,10 +111,29 @@ function trayIconPath(): string {
 }
 
 function showMainWindow(): void {
-  if (!mainWindow) return
+  if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
+}
+
+function openHotkeySettings(): void {
+  showMainWindow()
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send(IpcChannel.focusHotkey)
+}
+
+function maybeNotifyStartupHotkeyFailure(windowVisible: boolean): void {
+  const banner = service?.hotkeyUnavailableCombo() ?? null
+  if (!shouldNotifyStartupHotkeyFailure({ banner, windowVisible, alreadySent: hotkeyNoticeSent })) return
+  hotkeyNoticeSent = true
+  if (screenshotPath || !banner) return
+  const notice = new Notification({
+    title: 'Arckeep',
+    body: hotkeyUnavailableMessage(banner)
+  })
+  notice.on('click', () => openHotkeySettings())
+  notice.show()
 }
 
 function quitFromTray(): void {
@@ -93,23 +153,132 @@ function trayActions(): TrayActions {
   }
 }
 
+function testHookExtras(): TestHookExtras {
+  return {
+    openCapture: () => openCaptureWindow(),
+    readTodos: () => todos?.listTodos() ?? [],
+    onTodos: snapshot => {
+      const file = testHookTodosPath(app.getPath('userData'))
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      const payload = JSON.stringify(snapshot)
+      fs.writeFileSync(file, payload)
+      console.log(`ARCKEEP_TODOS ${payload}`)
+    }
+  }
+}
+
+function preloadPath(): string {
+  return path.join(__dirname, '../preload/index.cjs')
+}
+
+function loadRenderer(window: BrowserWindow, page: string, query: Record<string, string> = {}): void {
+  if (devServerOrigin) {
+    const url = new URL(page, devServerOrigin)
+    for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value)
+    void window.loadURL(url.href)
+    return
+  }
+  void window.loadFile(path.join(rendererDir, page), { query })
+}
+
+function draftFile(): string {
+  return captureDraftPath(app.getPath('userData'))
+}
+
+function showSavedConfirmation(): void {
+  if (savedToast && !savedToast.isDestroyed()) savedToast.close()
+  const toast = showSavedToast({
+    preload: preloadPath(),
+    trusted: isTrustedNavigation,
+    holdMs: screenshotPath ? 4000 : undefined,
+    load: target => loadRenderer(target, 'toast.html')
+  })
+  savedToast = toast
+  toast.on('closed', () => {
+    if (savedToast === toast) savedToast = null
+  })
+}
+
+function openCaptureWindow(): BrowserWindow {
+  if (captureWindow && !captureWindow.isDestroyed()) {
+    focusCaptureInput(captureWindow)
+    return captureWindow
+  }
+  const fixture = screenshotPath ? screenshotCaptureFixture(screenshotScene) : null
+  const query: Record<string, string> = {}
+  if (fixture) query.fixture = fixture
+  if (screenshotPath) query.stay = '1'
+  const window = createCaptureWindow({
+    preload: preloadPath(),
+    icon: trayIconPath(),
+    trusted: isTrustedNavigation,
+    ignoreBlur: Boolean(screenshotPath),
+    load: target => {
+      loadRenderer(target, 'capture.html', query)
+    }
+  })
+  window.on('closed', () => {
+    if (captureWindow === window) captureWindow = null
+  })
+  captureWindow = window
+  return window
+}
+
+function publishHotkeyStatus(): void {
+  applyTrayState()
+  if (!mainWindow || mainWindow.isDestroyed() || !service) return
+  mainWindow.webContents.send(IpcChannel.hotkeyStatus, service.hotkeyUnavailableCombo())
+}
+
+function applyTrayState(): void {
+  if (!tray) return
+  const unavailable = service?.hotkeyUnavailableCombo() ?? null
+  tray.setToolTip(trayToolTip(unavailable))
+  const menu = Menu.buildFromTemplate(trayMenuEntries(unavailable).map(entry => ({
+    label: entry.label,
+    enabled: entry.enabled,
+    click: entry.role === 'open'
+      ? () => showMainWindow()
+      : entry.role === 'capture'
+        ? () => openCaptureWindow()
+        : entry.role === 'quit'
+          ? () => quitFromTray()
+          : undefined
+  })))
+  tray.setContextMenu(menu)
+}
+
 function createTray(): void {
   const icon = nativeImage.createFromPath(trayIconPath())
   if (icon.isEmpty()) throw new Error('tray icon is empty')
   tray = new Tray(icon)
-  tray.setToolTip('Arckeep')
-  const menu = Menu.buildFromTemplate([
-    { label: '打开', click: () => showMainWindow() },
-    { label: '退出', click: () => quitFromTray() }
-  ])
-  tray.setContextMenu(menu)
+  applyTrayState()
   tray.on('double-click', () => showMainWindow())
+}
+
+function captureRegistrar(): HotkeyRegistrar {
+  if (!hotkeyFailureRequested(process.env, process.argv)) return globalShortcut
+  return {
+    register: () => false,
+    isRegistered: () => false,
+    unregister: accelerator => {
+      globalShortcut.unregister(accelerator)
+    }
+  }
 }
 
 function installTestHooks(): void {
   installTrayTestHooks(process.env, {
     argv: process.argv,
     actions: trayActions(),
+    extras: {
+      ...testHookExtras(),
+      failHotkey: () => {
+        if (!testHooksEnabled(process.env) || !service) return
+        service.simulateRegistrationFailure()
+        publishHotkeyStatus()
+      }
+    },
     expose(handlers) {
       Object.defineProperty(globalThis, '__ARCKEEP_TEST_HOOKS__', {
         configurable: true,
@@ -119,8 +288,8 @@ function installTestHooks(): void {
     },
     registerIpc(handler) {
       ipcMain.handle(IpcChannel.testHook, (event, action: unknown) => {
-        requireSender(event, mainWindow?.webContents ?? null)
-        handler(action)
+        requireTrustedSender(event, [mainWindow?.webContents, captureWindow?.webContents])
+        return handler(action)
       })
     }
   })
@@ -138,13 +307,7 @@ function createWindow(): BrowserWindow {
     backgroundColor: '#F5F2EA',
     autoHideMenuBar: true,
     icon: trayIconPath(),
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/index.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true
-    }
+    webPreferences: hardenedWebPreferences(preloadPath())
   })
 
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -160,12 +323,43 @@ function createWindow(): BrowserWindow {
     window.hide()
   })
   window.once('ready-to-show', () => {
-    window.show()
+    const showWindow = !screenshotPath || screenshotShowsMainWindow(screenshotScene)
+    if (showWindow) window.show()
+    maybeNotifyStartupHotkeyFailure(showWindow)
   })
 
   if (screenshotPath) {
     window.webContents.once('did-finish-load', () => {
-      void captureScreenshot(window, screenshotPath, screenshotScene).catch(error => {
+      void presentScreenshot({
+        scene: screenshotScene,
+        main: window,
+        openCapture: openCaptureWindow,
+        savedToast: () => savedToast,
+        file: screenshotPath,
+        prepareMain: async contents => {
+          await contents.executeJavaScript(`
+            new Promise((resolve, reject) => {
+              const start = Date.now()
+              const timer = setInterval(() => {
+                const button = [...document.querySelectorAll('button')].find(item => item.textContent === '测试连接')
+                if (button) {
+                  clearInterval(timer)
+                  button.click()
+                  resolve(true)
+                  return
+                }
+                if (Date.now() - start > 5000) {
+                  clearInterval(timer)
+                  reject(new Error('测试连接 button was not rendered'))
+                }
+              }, 50)
+            })
+          `)
+        }
+      }).then(() => {
+        isQuitting = true
+        app.exit(0)
+      }).catch(error => {
         console.error(error)
         app.exit(1)
       })
@@ -173,89 +367,23 @@ function createWindow(): BrowserWindow {
   }
 
   const startPage = screenshotPath ? screenshotStartPage(screenshotScene) : 'inbox'
-  if (devServerOrigin) {
-    const page = startPage === 'inbox' ? devServerOrigin : `${devServerOrigin}?page=${startPage}`
-    void window.loadURL(page)
-  } else {
-    void window.loadFile(path.join(rendererDir, 'index.html'), {
-      query: startPage === 'inbox' ? {} : { page: startPage }
-    })
-  }
+  const query: Record<string, string> = startPage === 'inbox' ? {} : { page: startPage }
+  loadRenderer(window, 'index.html', query)
   return window
 }
 
-async function captureScreenshot(window: BrowserWindow, file: string, scene: ScreenshotScene): Promise<void> {
-  if (scene === 'invalid-token' || scene === 'connected') {
-    await window.webContents.executeJavaScript(`
-      new Promise((resolve, reject) => {
-        const start = Date.now()
-        const timer = setInterval(() => {
-          const button = [...document.querySelectorAll('button')].find(item => item.textContent === '测试连接')
-          if (button) {
-            clearInterval(timer)
-            button.click()
-            resolve(true)
-            return
-          }
-          if (Date.now() - start > 5000) {
-            clearInterval(timer)
-            reject(new Error('测试连接 button was not rendered'))
-          }
-        }, 50)
-      })
-    `)
-  }
-  const expected = screenshotReadyText(scene)
-  const start = Date.now()
-  let seen = false
-  while (Date.now() - start < 5000) {
-    seen = await window.webContents.executeJavaScript(
-      `document.body.innerText.includes(${JSON.stringify(expected)})`
-    )
-    if (seen) break
-    await new Promise(resolve => setTimeout(resolve, 50))
-  }
-  if (!seen) throw new Error(`screenshot scene ${scene} did not show ${expected}`)
-  if (scene === 'overview-archived') {
-    await window.webContents.executeJavaScript(`
-      const details = document.querySelector('details.archived-group')
-      if (details) details.open = true
-    `)
-  }
-  if (scene === 'overview' || scene === 'overview-narrow') {
-    await window.webContents.executeJavaScript(`
-      const details = document.querySelector('details.stale-group')
-      if (details) details.open = true
-    `)
-  }
-  if (scene === 'overview-chip-hover') {
-    await window.webContents.executeJavaScript(`
-      const chip = document.querySelector('a.chip-link')
-      if (!chip) throw new Error('warning chip was not rendered')
-      chip.classList.add('is-hover')
-      chip.focus()
-    `)
-  }
-  if (scene === 'waiting-hover') {
-    await window.webContents.executeJavaScript(`
-      const row = document.querySelector('.waiting-row')
-      if (!row) throw new Error('waiting row was not rendered')
-      row.classList.add('show-actions')
-      const details = row.querySelector('details')
-      if (details) details.open = true
-    `)
-  }
-  await new Promise(resolve => setTimeout(resolve, 150))
-  const image = await window.webContents.capturePage()
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, image.toPNG())
-  isQuitting = true
-  app.exit(0)
+function notifyTodosChanged(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send(IpcChannel.todosChanged)
 }
 
-function registerIpc(settings: SettingsService): void {
+function ipcError(error: unknown, fallback: string): { ok: false, error: string } {
+  return { ok: false, error: error instanceof Error ? error.message : fallback }
+}
+
+function registerIpc(settings: SettingsService, store: TodoStore): void {
   const guard = (event: Electron.IpcMainInvokeEvent) => {
-    requireSender(event, mainWindow?.webContents ?? null)
+    requireTrustedSender(event, [mainWindow?.webContents, captureWindow?.webContents])
   }
   ipcMain.handle(IpcChannel.getState, event => {
     guard(event)
@@ -267,7 +395,9 @@ function registerIpc(settings: SettingsService): void {
   })
   ipcMain.handle(IpcChannel.setHotkey, (event, hotkey: unknown) => {
     guard(event)
-    return settings.setHotkey(hotkey)
+    const result = settings.setHotkey(hotkey)
+    publishHotkeyStatus()
+    return result
   })
   ipcMain.handle(IpcChannel.setPat, (event, token: unknown) => {
     guard(event)
@@ -280,6 +410,69 @@ function registerIpc(settings: SettingsService): void {
   ipcMain.handle(IpcChannel.testGithub, (event, pasted: unknown) => {
     guard(event)
     return settings.testConnection(pasted)
+  })
+  ipcMain.handle(IpcChannel.listTodos, event => {
+    guard(event)
+    return store.listTodos()
+  })
+  ipcMain.handle(IpcChannel.todoRepoOptions, event => {
+    guard(event)
+    return mergeRepoOptions(settings.getSettings().watchedRepos, store.listTodos())
+  })
+  ipcMain.handle(IpcChannel.createTodo, (event, input: unknown) => {
+    guard(event)
+    try {
+      const created = store.create(normalizeTodoInput(input))
+      notifyTodosChanged()
+      return { ok: true, data: created }
+    } catch (error) {
+      return ipcError(error, '待办无效')
+    }
+  })
+  ipcMain.handle(IpcChannel.updateTodo, (event, input: unknown) => {
+    guard(event)
+    try {
+      const updated = store.update(normalizeTodoUpdate(input))
+      notifyTodosChanged()
+      return { ok: true, data: updated }
+    } catch (error) {
+      return ipcError(error, '待办无效')
+    }
+  })
+  ipcMain.handle(IpcChannel.setTodoCompleted, (event, input: unknown) => {
+    guard(event)
+    try {
+      const updated = store.setCompleted(normalizeTodoCompletion(input))
+      notifyTodosChanged()
+      return { ok: true, data: updated }
+    } catch (error) {
+      return ipcError(error, '待办无效')
+    }
+  })
+  ipcMain.handle(IpcChannel.deleteTodo, (event, id: unknown) => {
+    guard(event)
+    try {
+      const removed = store.delete(normalizeTodoId(id))
+      notifyTodosChanged()
+      return { ok: true, data: removed }
+    } catch (error) {
+      return ipcError(error, '待办无效')
+    }
+  })
+  ipcMain.handle(IpcChannel.getCaptureDraft, event => {
+    guard(event)
+    return loadCaptureDraft(draftFile())
+  })
+  ipcMain.handle(IpcChannel.setCaptureDraft, (event, input: unknown) => {
+    guard(event)
+    return saveCaptureDraft(draftFile(), input)
+  })
+  ipcMain.handle(IpcChannel.closeCapture, (event, mode: unknown) => {
+    guard(event)
+    const saved = mode === 'saved'
+    if (saved) clearCaptureDraft(draftFile())
+    if (captureWindow && !captureWindow.isDestroyed()) captureWindow.close()
+    if (saved) showSavedConfirmation()
   })
   ipcMain.handle(IpcChannel.getWaiting, event => {
     guard(event)
@@ -354,12 +547,26 @@ if (!gotLock) {
   app.quit()
 } else {
   app.on('second-instance', (_event, argv) => {
-    if (dispatchTestHook(process.env, parseTestHookAction(argv), trayActions())) return
+    if (dispatchTestHook(process.env, parseTestHookAction(argv), trayActions(), testHookExtras())) return
     showMainWindow()
   })
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null)
+    if (screenshotPath && screenshotScene === 'capture-draft') {
+      saveCaptureDraft(captureDraftPath(app.getPath('userData')), {
+        text: '把没写完的这半句留在',
+        repo: 'example/demo',
+        waiting: true
+      })
+    }
+    if (screenshotPath && screenshotSeedsTodos(screenshotScene)) {
+      const file = todosFilePath(app.getPath('userData'))
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      fs.writeFileSync(file, screenshotTodoLog())
+    }
     const userData = app.getPath('userData')
+    todos = new TodoStore({ file: todosFilePath(userData) })
+    const todoProvider = createTodoWaitingProvider(() => todos?.listWaitingTodos() ?? [])
     if (screenshotPath) {
       service = createScreenshotSettings(screenshotScene, settingsFilePath(userData))
       waiting = createScreenshotWaiting(screenshotScene)
@@ -368,8 +575,8 @@ if (!gotLock) {
       service = new SettingsService({
         file: settingsFilePath(userData),
         secretBox: createSafeStorageBox(safeStorage),
-        registrar: globalShortcut,
-        onHotkey: () => showMainWindow(),
+        registrar: captureRegistrar(),
+        onHotkey: () => openCaptureWindow(),
         log: message => console.error(message)
       })
       service.init()
@@ -377,13 +584,14 @@ if (!gotLock) {
         cache: waitingCachePath(userData),
         dismissals: waitingDismissalPath(userData)
       }, {
+        todos: todoProvider,
         log: message => console.error(message)
       })
       overview = new OverviewService(service, overviewCachePath(userData), {
         log: message => console.error(message)
       })
     }
-    registerIpc(service)
+    registerIpc(service, todos)
     registerToolIpc({
       guard: event => requireSender(event, mainWindow?.webContents ?? null),
       getWindow: () => mainWindow,
