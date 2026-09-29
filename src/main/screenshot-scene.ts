@@ -16,6 +16,9 @@ export const SCREENSHOT_SCENES = [
   'waiting-rate-limit',
   'waiting-narrow',
   'waiting-hover',
+  'waiting-watch',
+  'waiting-hidden',
+  'waiting-family',
   'overview',
   'overview-collapsed',
   'overview-archived',
@@ -50,6 +53,7 @@ export function parseScreenshotScene(value: string | undefined): ScreenshotScene
 export function screenshotWindowSize(scene: ScreenshotScene): { width: number, height: number } {
   if (scene === 'waiting-narrow' || scene === 'overview-narrow') return { width: 800, height: 1680 }
   if (scene === 'waiting-hover') return { width: 1180, height: 900 }
+  if (scene === 'waiting-watch' || scene === 'waiting-hidden' || scene === 'waiting-family') return { width: 1180, height: 720 }
   if (scene === 'narrow') return { width: 800, height: 760 }
   if (scene === 'overview-archived') return { width: 1180, height: 820 }
   if (scene === 'waiting' || scene === 'waiting-rate-limit' || scene === 'overview' || scene === 'overview-collapsed') return { width: 1180, height: 1680 }
@@ -73,6 +77,9 @@ export function screenshotReadyText(scene: ScreenshotScene): string {
   if (scene === 'signed-out') return '未配置'
   if (scene === 'hotkey-conflict') return '已被其他程序占用'
   if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover') return '验收北区截图'
+  if (scene === 'waiting-watch') return '不会把别人的 open PR'
+  if (scene === 'waiting-hidden') return '已忽略的仓库'
+  if (scene === 'waiting-family') return '含 2 个子项'
   if (scene === 'waiting-empty') return '没有等你处理的事项'
   if (scene === 'waiting-no-token') return '未配置 GitHub 认证'
   if (scene === 'waiting-invalid-token') return 'GitHub 认证无效或已过期'

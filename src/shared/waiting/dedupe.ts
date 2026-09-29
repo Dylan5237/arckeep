@@ -1,9 +1,26 @@
+import { primaryAction } from './action.js'
 import { waitingDays } from './days.js'
 import type { WaitingDraft } from './types.js'
 
+/** Same GitHub issue or pull request, ignoring host case, www, and trailing slash. */
+export function issueUrlKey(url: string): string | null {
+  try {
+    const parsed = new URL(url.trim())
+    const host = parsed.host.toLowerCase().replace(/^www\./, '')
+    let path = parsed.pathname.replace(/\/+$/, '')
+    if (!path) return null
+    if (host === 'github.com') path = path.toLowerCase()
+    return `https://${host}${path}`
+  } catch {
+    return null
+  }
+}
+
 function keyOf(draft: WaitingDraft): string {
-  if ((draft.type === 'issue' || draft.type === 'pr') && draft.number !== null) {
-    return `gh:${draft.repo}#${draft.number}`
+  if (draft.type === 'issue' || draft.type === 'pr') {
+    const url = issueUrlKey(draft.url)
+    if (url) return `url:${url}`
+    if (draft.number !== null) return `gh:${draft.repo.toLowerCase()}#${draft.number}`
   }
   return draft.id
 }
@@ -52,9 +69,13 @@ export function dedupeDrafts(drafts: readonly WaitingDraft[], now: Date): Waitin
       existing.number = draft.number
     }
     if (!existing.url) existing.url = draft.url
+    if (existing.number == null && draft.number != null) existing.number = draft.number
+    if (!existing.repo && draft.repo) existing.repo = draft.repo
+    if (existing.parentNumber == null && draft.parentNumber != null) existing.parentNumber = draft.parentNumber
   }
   for (const draft of merged.values()) {
     applyLongestWait(draft, now)
+    draft.action = primaryAction(draft.type, draft.reasons)
   }
   return order.map(key => merged.get(key)).filter((draft): draft is WaitingDraft => Boolean(draft))
 }

@@ -286,6 +286,14 @@ function registerIpc(settings: SettingsService): void {
     guard(event)
     return waiting?.restore(id) ?? { ok: false, error: '等我处理尚未就绪' }
   })
+  ipcMain.handle(IpcChannel.hideWaitingRepo, (event, repo: unknown) => {
+    guard(event)
+    return waiting?.hideRepo(repo) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
+  ipcMain.handle(IpcChannel.unhideWaitingRepo, (event, repo: unknown) => {
+    guard(event)
+    return waiting?.unhideRepo(repo) ?? { ok: false, error: '等我处理尚未就绪' }
+  })
   ipcMain.handle(IpcChannel.setShowIgnored, (event, show: unknown) => {
     guard(event)
     return waiting?.setShowIgnored(show) ?? { ok: false, error: '等我处理尚未就绪' }

@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { partitionDismissals, ignoreDraft, restoreDraft, snoozeDraft } from '../shared/waiting/snooze.js'
+import { partitionDismissals, hideRepo as rememberRepo, ignoreDraft, readDismissalState, restoreDraft, snoozeDraft, unhideRepo as forgetRepo, writeDismissalState } from '../shared/waiting/snooze.js'
 import { createWaitingClock, type WaitingClock } from '../shared/waiting/clock.js'
 import type {
   DismissalMap,
@@ -49,11 +49,11 @@ function loadMemory(file: string): { memory: WaitingMemory, refreshedAt: string 
   }
 }
 
-function loadDismissals(file: string): DismissalMap {
-  const raw = readJson(file)
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
-  return raw as DismissalMap
+function loadDismissals(file: string): { items: DismissalMap, hiddenRepos: string[] } {
+  return readDismissalState(readJson(file))
 }
+
+const REPO_NAME = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 
 function snapshotOf(input: {
   drafts: WaitingDraft[]
@@ -67,8 +67,9 @@ function snapshotOf(input: {
   sourceErrors: WaitingSnapshot['sourceErrors']
   notices: WaitingSnapshot['notices']
   todosAvailable: boolean
+  hiddenRepos: readonly string[]
 }): { snapshot: WaitingSnapshot, dismissals: DismissalMap } {
-  const visible = partitionDismissals(input.drafts, input.dismissals, input.now, input.showIgnored)
+  const visible = partitionDismissals(input.drafts, input.dismissals, input.now, input.showIgnored, input.hiddenRepos)
   return {
     dismissals: visible.map,
     snapshot: {
@@ -81,6 +82,7 @@ function snapshotOf(input: {
       notices: input.notices,
       showIgnored: input.showIgnored,
       hiddenCount: visible.hiddenCount,
+      hiddenRepos: [...input.hiddenRepos],
       todosAvailable: input.todosAvailable
     }
   }
@@ -89,6 +91,7 @@ function snapshotOf(input: {
 export class WaitingService {
   private memory: WaitingMemory
   private dismissals: DismissalMap
+  private hiddenRepos: string[]
   private refreshedAt: string | null
   private drafts: WaitingDraft[] = []
   private snapshot: WaitingSnapshot
@@ -110,7 +113,9 @@ export class WaitingService {
     const cached = loadMemory(files.cache)
     this.memory = cached.memory
     this.refreshedAt = cached.refreshedAt
-    this.dismissals = loadDismissals(files.dismissals)
+    const storedDismissals = loadDismissals(files.dismissals)
+    this.dismissals = storedDismissals.items
+    this.hiddenRepos = storedDismissals.hiddenRepos
     this.clock = deps.clock ?? createWaitingClock()
     this.snapshot = {
       rows: [],
@@ -122,6 +127,7 @@ export class WaitingService {
       notices: [],
       showIgnored: settings.getSettings().waiting.showIgnored,
       hiddenCount: 0,
+      hiddenRepos: [...this.hiddenRepos],
       todosAvailable: (deps.todos ?? pendingTodoProvider).available
     }
   }
@@ -163,7 +169,8 @@ export class WaitingService {
       rateLimitResetAt: result.rateLimitResetAt,
       sourceErrors: result.errors,
       notices: result.notices,
-      todosAvailable: result.todosAvailable
+      todosAvailable: result.todosAvailable,
+      hiddenRepos: this.hiddenRepos
     })
     this.dismissals = painted.dismissals
     this.persistDismissals()
@@ -200,6 +207,18 @@ export class WaitingService {
     return { ok: true, data: this.repaint() }
   }
 
+  hideRepo(repo: unknown): IpcResult<WaitingSnapshot> {
+    if (typeof repo !== 'string' || !REPO_NAME.test(repo)) return { ok: false, error: '仓库名无效' }
+    this.hiddenRepos = rememberRepo(this.hiddenRepos, repo)
+    return { ok: true, data: this.repaint() }
+  }
+
+  unhideRepo(repo: unknown): IpcResult<WaitingSnapshot> {
+    if (typeof repo !== 'string' || !REPO_NAME.test(repo)) return { ok: false, error: '仓库名无效' }
+    this.hiddenRepos = forgetRepo(this.hiddenRepos, repo)
+    return { ok: true, data: this.repaint() }
+  }
+
   setShowIgnored(value: unknown): IpcResult<WaitingSnapshot> {
     if (typeof value !== 'boolean') return { ok: false, error: '显示已忽略的值无效' }
     this.settings.patchShowIgnored(value)
@@ -231,7 +250,8 @@ export class WaitingService {
       rateLimitResetAt: this.snapshot.rateLimitResetAt,
       sourceErrors: this.snapshot.sourceErrors,
       notices: this.snapshot.notices,
-      todosAvailable: this.snapshot.todosAvailable
+      todosAvailable: this.snapshot.todosAvailable,
+      hiddenRepos: this.hiddenRepos
     })
     this.dismissals = painted.dismissals
     this.persistDismissals()
@@ -250,6 +270,6 @@ export class WaitingService {
   }
 
   private persistDismissals(): void {
-    writeJson(this.files.dismissals, this.dismissals)
+    writeJson(this.files.dismissals, writeDismissalState({ items: this.dismissals, hiddenRepos: this.hiddenRepos }))
   }
 }

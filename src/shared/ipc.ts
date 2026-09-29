@@ -11,6 +11,8 @@ export const IpcChannel = {
   snoozeWaiting: 'waiting:snooze',
   ignoreWaiting: 'waiting:ignore',
   restoreWaiting: 'waiting:restore',
+  hideWaitingRepo: 'waiting:hide-repo',
+  unhideWaitingRepo: 'waiting:unhide-repo',
   setShowIgnored: 'waiting:show-ignored',
   setWaiting: 'waiting:set-config',
   openExternal: 'waiting:open-external',

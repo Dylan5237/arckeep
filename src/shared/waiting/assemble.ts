@@ -1,6 +1,13 @@
 import { draftFromReasons, classifyRecord } from './classify.js'
-import { dedupeDrafts, sortDrafts } from './dedupe.js'
-import { WAITING_REASONS, type GithubRecord, type LocalBranchHit, type StatusDocHit, type TodoWaitingItem, type WaitingConfig, type WaitingDraft, type WaitingJsonRow } from './types.js'
+import { dedupeDrafts, issueUrlKey, sortDrafts } from './dedupe.js'
+import { annotateIssueFamily } from './sub-issues.js'
+import { WAITING_REASONS, type GithubRecord, type LocalBranchHit, type RepoAccess, type StatusDocHit, type TodoWaitingItem, type WaitingConfig, type WaitingDraft, type WaitingJsonRow } from './types.js'
+
+function preferAccess(current: RepoAccess | undefined, next: RepoAccess | undefined): RepoAccess {
+  if (current === 'maintain' || next === 'maintain') return 'maintain'
+  if (current === 'watch' || next === 'watch') return 'watch'
+  return 'unknown'
+}
 
 export function draftsFromStatusDocs(hits: readonly StatusDocHit[], now: Date): WaitingDraft[] {
   return hits.map(hit => {
@@ -70,7 +77,7 @@ export function assembleWaiting(input: {
   const docs = input.config.sources.statusDocs ? draftsFromStatusDocs(input.statusDocs, input.now) : []
   const branches = input.config.sources.localBranches ? draftsFromBranches(input.branches, input.now) : []
   const todos = input.config.sources.todos ? draftsFromTodos(input.todos, input.now) : []
-  return sortDrafts(dedupeDrafts([...github, ...docs, ...branches, ...todos], input.now))
+  return annotateIssueFamily(sortDrafts(dedupeDrafts([...github, ...docs, ...branches, ...todos], input.now)))
 }
 
 export function toWaitingJson(drafts: readonly WaitingDraft[]): WaitingJsonRow[] {
@@ -81,15 +88,19 @@ export function toWaitingJson(drafts: readonly WaitingDraft[]): WaitingJsonRow[]
     title: draft.title,
     url: draft.url,
     reasons: [...draft.reasons],
+    action: draft.action,
     waitingDays: draft.waitingDays,
-    daysEstimated: draft.daysEstimated
+    daysEstimated: draft.daysEstimated,
+    parent: draft.parent,
+    childCount: draft.childCount
   }))
 }
 
 export function mergeRecords(records: readonly GithubRecord[]): GithubRecord[] {
   const map = new Map<string, GithubRecord>()
   for (const record of records) {
-    const key = `${record.repo}#${record.number}`
+    const url = issueUrlKey(record.url)
+    const key = url ? `url:${url}` : `${record.repo.toLowerCase()}#${record.number}`
     const existing = map.get(key)
     if (!existing) {
       map.set(key, {
@@ -103,8 +114,14 @@ export function mergeRecords(records: readonly GithubRecord[]): GithubRecord[] {
     existing.fromAssignee = existing.fromAssignee || record.fromAssignee
     existing.fromReview = existing.fromReview || record.fromReview
     existing.fromMention = existing.fromMention || record.fromMention
+    existing.fromAuthor = existing.fromAuthor || record.fromAuthor
     existing.fromOpenPr = existing.fromOpenPr || record.fromOpenPr
     existing.inScopeRepo = existing.inScopeRepo || record.inScopeRepo
+    existing.repoAccess = preferAccess(existing.repoAccess, record.repoAccess)
+    existing.isFork = existing.isFork || record.isFork
+    existing.viewerOwnsRepo = existing.viewerOwnsRepo || record.viewerOwnsRepo
+    if (!existing.authorLogin && record.authorLogin) existing.authorLogin = record.authorLogin
+    if (!existing.viewerLogin && record.viewerLogin) existing.viewerLogin = record.viewerLogin
     existing.assignedAt = existing.assignedAt ?? record.assignedAt
     existing.reviewRequestedAt = existing.reviewRequestedAt ?? record.reviewRequestedAt
     existing.mentionedAt = existing.mentionedAt ?? record.mentionedAt
