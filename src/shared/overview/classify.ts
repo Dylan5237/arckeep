@@ -1,13 +1,17 @@
-import { waitingDays } from '../waiting/days.js'
+import { laterIso, waitingDays } from '../waiting/days.js'
 import type {
   CiState,
   OverviewConfig,
+  OverviewGroup,
   OverviewPullRequest,
   OverviewRepoFacts,
   OverviewRow,
+  OverviewStallBasis,
   OverviewWarning,
   OverviewWarningKind
 } from './types.js'
+
+const PUSH_PERMISSIONS = new Set(['ADMIN', 'MAINTAIN', 'WRITE'])
 
 const WARNING_ORDER: OverviewWarningKind[] = ['卡住', '停滞', '空仓', '陈旧']
 
@@ -27,19 +31,62 @@ export function isEmptyRepo(facts: Pick<OverviewRepoFacts, 'isEmpty' | 'sizeKb' 
   return false
 }
 
-/** Auto mode keeps recent pushes, empty repos, and repos already old enough to be 陈旧. */
+/**
+ * Auto mode lists every repository the viewer can push to. Age only decides the
+ * group. Archived repositories stay out unless requested.
+ * `config` and `now` remain in the signature so callers can keep passing the
+ * same rule clock; they do not drop a repository for sitting between the two windows.
+ */
 export function inAutoScope(
-  repo: { isEmpty: boolean, pushedAt: string | null, archived?: boolean },
-  config: OverviewConfig,
-  now: Date,
+  repo: { isEmpty?: boolean, pushedAt?: string | null, archived?: boolean },
+  _config: OverviewConfig,
+  _now: Date,
   includeArchived = false
 ): boolean {
   if (repo.archived) return includeArchived
-  if (repo.isEmpty) return true
-  if (!repo.pushedAt) return false
-  const age = waitingDays(repo.pushedAt, now)
-  if (age >= config.staleRepoDays) return true
-  return age <= config.autoPushWindowDays
+  return true
+}
+
+/** Push access for auto mode: owner, collaborator, or organization member who can push. */
+export function hasOverviewPushAccess(permission: string | null | undefined): boolean {
+  return typeof permission === 'string' && PUSH_PERMISSIONS.has(permission)
+}
+
+export function stallBasisOf(facts: Pick<OverviewRepoFacts, 'lastCommitAt' | 'lastIssueActivityAt'>): OverviewStallBasis {
+  const lastCommitAt = facts.lastCommitAt
+  const lastIssueActivityAt = facts.lastIssueActivityAt ?? null
+  if (lastCommitAt && lastIssueActivityAt) {
+    const commitMs = Date.parse(lastCommitAt)
+    const issueMs = Date.parse(lastIssueActivityAt)
+    if (Number.isFinite(commitMs) && Number.isFinite(issueMs) && commitMs === issueMs) {
+      return { at: lastCommitAt, source: 'tie', lastCommitAt, lastIssueActivityAt }
+    }
+  }
+  const at = laterIso(lastCommitAt, lastIssueActivityAt)
+  const source = at && lastIssueActivityAt && at === lastIssueActivityAt && at !== lastCommitAt
+    ? 'issue'
+    : at
+      ? 'commit'
+      : 'none'
+  return { at, source, lastCommitAt, lastIssueActivityAt }
+}
+
+/**
+ * Active when the newer of the default-branch commit and issue/PR activity is
+ * within `staleRepoDays` (that exact age still counts as active). Older than
+ * that, the row is 陈旧. Missing activity stays active so a new empty repo is visible.
+ */
+export function overviewGroup(
+  facts: Pick<OverviewRepoFacts, 'archived' | 'error' | 'lastCommitAt' | 'lastIssueActivityAt'>,
+  config: OverviewConfig,
+  now: Date
+): OverviewGroup {
+  if (facts.archived) return 'archived'
+  if (facts.error) return 'active'
+  const at = stallBasisOf(facts).at
+  if (!at) return 'active'
+  if (waitingDays(at, now) > config.staleRepoDays) return 'stale'
+  return 'active'
 }
 
 export function isReviewStuck(pr: OverviewPullRequest, config: OverviewConfig, now: Date): boolean {
@@ -47,10 +94,6 @@ export function isReviewStuck(pr: OverviewPullRequest, config: OverviewConfig, n
   if (pr.approvedReviewCount > 0) return false
   if (pr.reviewDecision === 'APPROVED' || pr.reviewDecision === 'CHANGES_REQUESTED') return false
   return waitingDays(pr.createdAt, now) >= config.reviewWaitDays
-}
-
-function activityAt(facts: OverviewRepoFacts): string | null {
-  return facts.lastCommitAt ?? facts.pushedAt
 }
 
 function isGithubUrl(url: string): boolean {
@@ -79,7 +122,13 @@ function reviewLabel(days: number, extra: number): string {
   return extra > 0 ? `${base}，等 ${extra} 个` : base
 }
 
-export function classifyRepo(facts: OverviewRepoFacts, config: OverviewConfig, now: Date): OverviewRow {
+export function classifyRepo(
+  facts: OverviewRepoFacts,
+  config: OverviewConfig,
+  now: Date
+): OverviewRow {
+  const group = overviewGroup(facts, config, now)
+  const stallBasis = stallBasisOf(facts)
   const base: OverviewRow = {
     name: facts.name,
     url: facts.url,
@@ -87,19 +136,20 @@ export function classifyRepo(facts: OverviewRepoFacts, config: OverviewConfig, n
     openPrCount: facts.openPrCount,
     ciState: facts.error ? 'unknown' : facts.ciState,
     warnings: [],
+    group,
+    stallBasis,
     archived: false,
     error: facts.error
   }
   if (facts.error) return base
   if (facts.archived) {
-    return { ...base, archived: true, warnings: [] }
+    return { ...base, archived: true, group: 'archived', warnings: [] }
   }
 
   const empty = isEmptyRepo(facts)
-  const stale = !empty && Boolean(facts.pushedAt) && waitingDays(facts.pushedAt as string, now) >= config.staleRepoDays
-  const activity = activityAt(facts)
-  const stalledDays = activity ? waitingDays(activity, now) : 0
-  const stalled = !empty && !stale && Boolean(activity) && stalledDays >= config.staleDays
+  const stale = group === 'stale'
+  const stalledDays = stallBasis.at ? waitingDays(stallBasis.at, now) : 0
+  const stalled = group === 'active' && !empty && Boolean(stallBasis.at) && stalledDays >= config.staleDays
   const stuck = facts.pullRequests
     .filter(pr => isReviewStuck(pr, config, now))
     .map(pr => ({ pr, days: waitingDays(pr.createdAt, now) }))
@@ -130,7 +180,7 @@ export function classifyRepo(facts: OverviewRepoFacts, config: OverviewConfig, n
       kind: '停滞',
       label: `停滞 ${stalledDays} 天`,
       days: stalledDays,
-      hint: `超过 ${config.staleDays} 天没有新提交`,
+      hint: `默认分支提交和 Issue/PR 活动都超过 ${config.staleDays} 天`,
       urls: [facts.url]
     }))
   }
@@ -143,13 +193,12 @@ export function classifyRepo(facts: OverviewRepoFacts, config: OverviewConfig, n
       urls: [facts.url]
     }))
   }
-  const staleByPush = Boolean(facts.pushedAt) && waitingDays(facts.pushedAt as string, now) >= config.staleRepoDays
-  if (stale || (empty && staleByPush)) {
+  if (stale && stallBasis.at) {
     warnings.push(warning({
       kind: '陈旧',
       label: '陈旧',
-      days: facts.pushedAt ? waitingDays(facts.pushedAt, now) : null,
-      hint: `超过 ${config.staleRepoDays} 天没有推送`,
+      days: waitingDays(stallBasis.at, now),
+      hint: `提交和 Issue/PR 活动超过 ${config.staleRepoDays} 天`,
       urls: [facts.url]
     }))
   }
@@ -158,7 +207,7 @@ export function classifyRepo(facts: OverviewRepoFacts, config: OverviewConfig, n
 }
 
 export function isStaleGroup(row: OverviewRow): boolean {
-  return row.warnings.some(item => item.kind === '陈旧')
+  return row.group === 'stale'
 }
 
 function severity(row: OverviewRow): number {
@@ -183,7 +232,7 @@ function byName(left: OverviewRow, right: OverviewRow): number {
 const ATTENTION_KINDS = new Set<OverviewWarningKind>(['卡住', '停滞', '空仓'])
 
 export function countsAsAttention(row: OverviewRow): boolean {
-  if (row.archived) return false
+  if (row.archived || row.group === 'stale') return false
   if (row.error) return true
   return row.warnings.some(item => ATTENTION_KINDS.has(item.kind))
 }
@@ -204,11 +253,17 @@ export function selectOverviewRows(rows: readonly OverviewRow[], includeArchived
   return rows.filter(row => !row.archived)
 }
 
+function byCommitThenName(left: OverviewRow, right: OverviewRow): number {
+  const time = timeValue(left.lastCommitAt ?? null) - timeValue(right.lastCommitAt ?? null)
+  if (time !== 0) return time
+  return byName(left, right)
+}
+
 export function sortOverviewRows(rows: readonly OverviewRow[]): OverviewRow[] {
-  const archived = rows.filter(row => row.archived).sort(byName)
-  const rest = rows.filter(row => !row.archived)
-  const active = rest.filter(row => !isStaleGroup(row))
-  const stale = rest.filter(row => isStaleGroup(row))
+  const archived = rows.filter(row => row.group === 'archived' || row.archived).sort(byName)
+  const rest = rows.filter(row => row.group !== 'archived' && !row.archived)
+  const active = rest.filter(row => row.group !== 'stale')
+  const stale = rest.filter(row => row.group === 'stale')
   active.sort((left, right) => {
     const rank = severity(left) - severity(right)
     if (rank !== 0) return rank
@@ -216,11 +271,7 @@ export function sortOverviewRows(rows: readonly OverviewRow[]): OverviewRow[] {
     if (time !== 0) return time
     return byName(left, right)
   })
-  stale.sort((left, right) => {
-    const time = timeValue(left.lastCommitAt ?? null) - timeValue(right.lastCommitAt ?? null)
-    if (time !== 0) return time
-    return byName(left, right)
-  })
+  stale.sort(byCommitThenName)
   return [...active, ...stale, ...archived]
 }
 

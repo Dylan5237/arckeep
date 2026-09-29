@@ -15,6 +15,7 @@ const scenes = [
   ['overview-collapsed', 'overview-collapsed.png'],
   ['overview-archived', 'overview-archived.png'],
   ['overview-empty', 'overview-empty.png'],
+  ['overview-auto-empty', 'overview-auto-empty.png'],
   ['overview-no-token', 'overview-no-token.png'],
   ['overview-invalid-token', 'overview-unauthorized.png'],
   ['overview-loading', 'overview-loading.png'],
