@@ -332,17 +332,27 @@ export async function elementRect(page, selector) {
   }, selector)
 }
 
-/** 打开工具架设置卡片，把整段 JSON 粘进文本框并点保存（真实界面操作：定位到设置、清空、输入、点按钮）。 */
+/** 打开工具架设置卡片，把整段 JSON 粘进文本框并点保存（真实界面操作：定位到设置、清空、输入、点按钮）。
+ * 注意两个真机上观察到的细节：
+ * ① 一个全新启动的 Electron 窗口，第一次切到「设置」页往往比后面几次明显慢（冷启动/JIT 预热），
+ *    第一次导航给 20s，比常规操作用的 8s 更宽松；
+ * ② 保存成功后的「工具架已保存」提示是 renderToolSettings 里点击处理函数自己插入的一个临时 DOM 节点，
+ *    紧接着的 `await rerender()` 会整页重新渲染并把它替换掉——这个提示存在的窗口非常短，
+ *    在 click() 之后必须立刻用 waitForSelector 去抓，不能先 sleep 再查，否则几乎必然错过。 */
 export async function saveToolShelfJson(page, json) {
   await page.click('[data-view="settings"]')
   const editor = page.locator('#tool-shelf-json')
-  await editor.waitFor({ state: 'visible', timeout: 8000 })
+  // 给足够宽松的超时：第一次切到设置页（冷启动/JIT 预热）在真机上观察到明显比后面几次慢。
+  await editor.waitFor({ state: 'visible', timeout: 20000 })
   await editor.click()
   await editor.fill('')
   await editor.fill(json)
   const saveButtons = page.locator('#tool-shelf-card button.primary')
   await saveButtons.first().click()
+  const savedMessageSeen = await page.waitForSelector('#tool-shelf-card .alert:not(.error)', { timeout: 2000 })
+    .then(() => true).catch(() => false)
   await sleep(150)
+  return { savedMessageSeen }
 }
 
 /** 回到工具架的动作列表页。renderTools() 只有 session 停在 loading/shelf/empty/problem 时才会重新拉取

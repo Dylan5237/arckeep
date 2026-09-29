@@ -7,7 +7,7 @@ import * as lib from '../lib.mjs'
 const {
   setResult, logEvidence, EVIDENCE_DIR,
   launchApp, mainWindowPage, quitApp, killStrayArckeep,
-  fullShot, shot, sleep, freshAppData, saveToolShelfJson,
+  fullShot, shot, sleep, freshAppData, saveToolShelfJson, waitFor,
   independentSyntaxLocation, lineOf, writeJson, appendEvidenceJson
 } = lib
 
@@ -74,7 +74,8 @@ const UNKNOWN_TYPE = [
 async function attemptInvalidSave(page, name, jsonText, checkIds, extraChecks) {
   await page.click('[data-view="settings"]')
   const editor = page.locator('#tool-shelf-json')
-  await editor.waitFor({ state: 'visible', timeout: 8000 })
+  // 给足够宽松的超时：第一次切到设置页（冷启动/JIT 预热）在真机上观察到明显比后面几次慢。
+  await editor.waitFor({ state: 'visible', timeout: 20000 })
   await editor.click()
   await editor.fill('')
   await editor.fill(jsonText)
@@ -170,14 +171,18 @@ export async function run() {
   // ------------------------------------------------------------------
   let legitPass = false
   try {
-    await saveToolShelfJson(page, VALID_JSON)
-    const infoBox = page.locator('#tool-shelf-card .alert:not(.error)')
-    const savedOk = await infoBox.count() > 0 && (await infoBox.first().innerText()).includes('已保存')
+    // 「工具架已保存」提示是点击处理函数临时插的一个 DOM 节点，紧接着的 rerender() 会把它整页换掉，
+    // 存在窗口很短，只能在 saveToolShelfJson 内部点击后立刻用 waitForSelector 去抓（见 lib.mjs 注释），
+    // 不能等这里再查——所以这个信号只作为附加证据，不单独拿来判定 legitPass（真正落地的证据是磁盘文件
+    // + 工具架卡片确实出现，这两个是持续可查的，不是转瞬即逝的）。
+    const { savedMessageSeen } = await saveToolShelfJson(page, VALID_JSON)
+    const errorBoxAfterSave = page.locator('#tool-shelf-card .alert.error')
+    const noErrorAfterSave = await errorBoxAfterSave.count() === 0
     await lib.gotoTools(page)
     const cardVisible = await page.locator('.tool-card', { hasText: '持久化检查·打开链接' }).count() > 0
     await shot(page, '04-valid-saved-in-shelf', { checkIds: ['1'], description: '合法 JSON 保存后，工具架里出现新动作' })
-    legitPass = savedOk && cardVisible
-    lib.mergeNotes('1', `| 合法 JSON：保存提示「已保存」=${savedOk}；工具架卡片可见=${cardVisible}`)
+    legitPass = noErrorAfterSave && cardVisible
+    lib.mergeNotes('1', `| 合法 JSON：点击保存后瞬间抓到「已保存」提示=${savedMessageSeen}（辅助证据，不参与判定）；保存后没有报错提示=${noErrorAfterSave}；工具架卡片可见=${cardVisible}`)
   } catch (err) {
     lib.mergeNotes('1', `合法保存场景异常：${err.stack || err}`)
   }
@@ -190,6 +195,20 @@ export async function run() {
     steps: '依次尝试 3 种非法 JSON（缺逗号/类型错/未知 type），确认都被拒绝且报错定位准确；再保存 1 段合法 JSON（含 1 个 open-url 动作），确认保存成功提示 + 工具架列表出现该动作。',
     notes: `缺逗号行列独立复核通过=${missingCommaOk}；类型错行号匹配=${wrongTypeOk}；合法保存后出现在工具架=${legitPass}。${lib.results['1'].notes}`
   })
+
+  // 点保存到磁盘真的落盘，中间隔着一次 IPC 异步往返（renderer -> setToolShelf -> 主进程 persist()）。
+  // Playwright 的 click() 只保证点击事件本身派发完，不等这个异步回调跑完；在关掉整个 Electron 进程之前，
+  // 从 Node 这边直接读磁盘文件，确认「工具架已保存」这次的写入确实已经落地，避免拔进程的时间点比落盘早。
+  const settingsFileBeforeQuit = path.join(appData, 'Arckeep', 'settings.json')
+  const flushed = await waitFor(() => {
+    if (!fs.existsSync(settingsFileBeforeQuit)) return false
+    try {
+      const parsed = JSON.parse(fs.readFileSync(settingsFileBeforeQuit, 'utf8'))
+      return parsed.toolShelfJson === VALID_JSON
+    } catch {
+      return false
+    }
+  }, { timeoutMs: 8000, intervalMs: 100 })
 
   await quitApp(app)
 
@@ -224,7 +243,7 @@ export async function run() {
     setResult('8', existsBeforeRestart && jsonRoundTrips && cardVisibleAfterRestart && editorRoundTrips ? 'PASS' : 'FAIL', {
       evidence: ['04-valid-saved-in-shelf.png', '05-restart-shelf.png', '06-restart-settings-json.png', 'item8-settings-file-path.json'],
       steps: `保存合法 JSON 后退出应用（test hook quit）；直接在磁盘上读 <APPDATA>\\Arckeep\\settings.json（本机路径 ${settingsFile}），核对 toolShelfJson 字段与保存前逐字一致；用同一个 APPDATA 重新启动应用，核对工具架列表和设置页编辑框内容都原样保留。`,
-      notes: `settings.json 路径=${settingsFile}；重启前文件存在=${existsBeforeRestart}；文件里的 toolShelfJson 与保存值逐字一致=${jsonRoundTrips}；重启后工具架卡片可见=${cardVisibleAfterRestart}；重启后设置页编辑框内容一致=${editorRoundTrips}`
+      notes: `退出应用前，直接读磁盘轮询确认合法 JSON 已经落盘（避免进程退出时间点比 IPC 异步写入更早导致的竞态）=${flushed.ok}（用时 ${flushed.elapsedMs}ms）；settings.json 路径=${settingsFile}；重启前文件存在=${existsBeforeRestart}；文件里的 toolShelfJson 与保存值逐字一致=${jsonRoundTrips}；重启后工具架卡片可见=${cardVisibleAfterRestart}；重启后设置页编辑框内容一致=${editorRoundTrips}`
     })
   } catch (err) {
     setResult('8', 'BLOCKED', { notes: `重启持久化场景异常：${err.stack || err}` })
