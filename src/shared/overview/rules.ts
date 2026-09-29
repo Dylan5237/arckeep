@@ -7,10 +7,9 @@ export class OverviewConfigError extends Error {
   }
 }
 
-export const DEFAULT_STALE_DAYS = 14
+export const DEFAULT_STALE_DAYS = 7
 export const DEFAULT_REVIEW_WAIT_DAYS = 3
-export const DEFAULT_STALE_REPO_DAYS = 90
-export const DEFAULT_AUTO_PUSH_WINDOW_DAYS = 30
+export const DEFAULT_STALE_REPO_DAYS = 30
 export const DEFAULT_OVERVIEW_MAX_REPOS = 400
 
 export function defaultOverviewConfig(): OverviewConfig {
@@ -18,7 +17,6 @@ export function defaultOverviewConfig(): OverviewConfig {
     staleDays: DEFAULT_STALE_DAYS,
     reviewWaitDays: DEFAULT_REVIEW_WAIT_DAYS,
     staleRepoDays: DEFAULT_STALE_REPO_DAYS,
-    autoPushWindowDays: DEFAULT_AUTO_PUSH_WINDOW_DAYS,
     maxScopeRepos: DEFAULT_OVERVIEW_MAX_REPOS,
     showArchived: false
   }
@@ -45,7 +43,6 @@ export function parseOverviewConfig(raw: unknown): OverviewConfig {
     staleDays: dayCount(raw.staleDays, defaults.staleDays, '停滞天数', 1, 3650),
     reviewWaitDays: dayCount(raw.reviewWaitDays, defaults.reviewWaitDays, 'review 等待天数', 1, 3650),
     staleRepoDays: dayCount(raw.staleRepoDays, defaults.staleRepoDays, '陈旧天数', 1, 3650),
-    autoPushWindowDays: dayCount(raw.autoPushWindowDays, defaults.autoPushWindowDays, '自动模式推送窗口', 0, 3650),
     maxScopeRepos: dayCount(raw.maxScopeRepos, defaults.maxScopeRepos, '仓库数量上限', 1, 2000),
     showArchived: raw.showArchived === true
   }

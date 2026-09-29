@@ -36,6 +36,7 @@ export const SCREENSHOT_SCENES = [
   'overview-collapsed',
   'overview-archived',
   'overview-empty',
+  'overview-auto-empty',
   'overview-no-token',
   'overview-invalid-token',
   'overview-loading',
@@ -141,7 +142,7 @@ export function screenshotReadyText(scene: ScreenshotScene): string {
   if (scene === 'waiting-rate-limit') return '速率限制'
   if (scene === 'overview' || scene === 'overview-narrow' || scene === 'overview-collapsed') return 'harbor/lumen'
   if (scene === 'overview-archived') return '已归档'
-  if (scene === 'overview-empty') return '还没有可显示的仓库'
+  if (scene === 'overview-empty' || scene === 'overview-auto-empty') return '还没有可显示的仓库'
   if (scene === 'overview-chip-hover') return '卡住：CI 失败'
   if (scene === 'overview-no-token') return '未配置 GitHub 认证'
   if (scene === 'overview-invalid-token') return 'GitHub 认证无效或已过期'

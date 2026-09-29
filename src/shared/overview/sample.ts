@@ -44,6 +44,7 @@ function repo(input: {
     hasDefaultBranchCommit: hasCommit,
     pushedAt: input.days === undefined ? null : ago(input.days),
     lastCommitAt: hasCommit && input.days !== undefined ? ago(input.days) : null,
+    lastIssueActivityAt: null,
     openPrCount: input.openPrCount ?? input.pulls?.length ?? 0,
     ciState: input.ci ?? (empty ? 'none' : 'success'),
     ciFailureUrl: input.ci === 'failure' ? `https://github.com/${full}/actions/runs/100${input.name.length}` : null,

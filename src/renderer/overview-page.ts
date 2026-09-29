@@ -1,4 +1,4 @@
-import { isStaleGroup, overviewCounts } from '../shared/overview/classify'
+import { overviewCounts } from '../shared/overview/classify'
 import { canRemoveFromWatchList, overviewMetaText, visibleWarningChips } from '../shared/overview/present'
 import { localAbsolute, localClock, relativeLabel } from '../shared/waiting/local-time'
 import type { OverviewRow, OverviewSnapshot, OverviewWarning } from '../shared/overview/types'
@@ -46,10 +46,10 @@ function paint(host: HTMLElement, snapshot: OverviewSnapshot, handlers: {
   open: (url: string) => void
   remove: (name: string) => void
 }): void {
-  const archived = snapshot.rows.filter(row => row.archived)
-  const visible = snapshot.rows.filter(row => !row.archived)
-  const active = visible.filter(row => !isStaleGroup(row))
-  const stale = visible.filter(row => isStaleGroup(row))
+  const archived = snapshot.rows.filter(row => row.archived || row.group === 'archived')
+  const visible = snapshot.rows.filter(row => !row.archived && row.group !== 'archived')
+  const active = visible.filter(row => row.group !== 'stale')
+  const stale = visible.filter(row => row.group === 'stale')
   const counts = overviewCounts(snapshot.rows)
   const refreshed = snapshot.refreshedAt
     ? relativeLabel(snapshot.refreshedAt, new Date())
@@ -106,9 +106,11 @@ function paint(host: HTMLElement, snapshot: OverviewSnapshot, handlers: {
       add
     ]))
   } else if (counts.repos > 0 || archived.length > 0) {
-    const list = el('div', { class: 'overview-list' })
-    for (const row of active) list.append(renderRow(row, handlers))
-    page.append(list)
+    if (active.length > 0) {
+      const list = el('div', { class: 'overview-list' })
+      for (const row of active) list.append(renderRow(row, handlers))
+      page.append(list)
+    }
     if (stale.length > 0) page.append(renderStale(stale, handlers))
     if (archived.length > 0) page.append(renderArchived(archived, handlers))
   }

@@ -31,6 +31,13 @@ export function toOverviewJson(rows: readonly OverviewRow[]): OverviewRow[] {
     openPrCount: row.openPrCount,
     ciState: row.ciState,
     archived: row.archived,
+    group: row.group,
+    stallBasis: {
+      at: row.stallBasis.at,
+      source: row.stallBasis.source,
+      lastCommitAt: row.stallBasis.lastCommitAt,
+      lastIssueActivityAt: row.stallBasis.lastIssueActivityAt
+    },
     warnings: row.warnings.map(warning => ({
       kind: warning.kind,
       label: warning.label,

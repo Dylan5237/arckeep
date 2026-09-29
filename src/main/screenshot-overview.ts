@@ -19,7 +19,7 @@ export function screenshotOverviewSnapshot(scene: ScreenshotScene): OverviewSnap
   if (scene === 'overview' || scene === 'overview-narrow' || scene === 'overview-collapsed' || scene === 'overview-chip-hover') {
     return base({ rows: sampleOverviewRows() })
   }
-  if (scene === 'overview-empty') return base({ rows: [] })
+  if (scene === 'overview-empty' || scene === 'overview-auto-empty') return base({ rows: [] })
   if (scene === 'overview-no-token') return base({ auth: 'missing', refreshedAt: null, rows: [] })
   if (scene === 'overview-invalid-token') return base({ auth: 'invalid', refreshedAt: null, rows: [] })
   if (scene === 'overview-loading') return base({ refreshing: true, refreshedAt: null, rows: [] })

@@ -6,12 +6,12 @@ import { OverviewService } from '../src/main/overview-service.js'
 import { overviewCachePath, settingsFilePath } from '../src/main/paths.js'
 import { SettingsService } from '../src/main/settings-service.js'
 import type { SecretBox } from '../src/main/token-store.js'
-import { classifyOverview, inAutoScope, isEmptyRepo, isReviewStuck, overviewCounts, selectOverviewRows } from '../src/shared/overview/classify.js'
+import { classifyOverview, countsAsAttention, hasOverviewPushAccess, inAutoScope, isEmptyRepo, isReviewStuck, overviewCounts, selectOverviewRows } from '../src/shared/overview/classify.js'
 import { canRemoveFromWatchList, overviewMetaText, visibleWarningChips } from '../src/shared/overview/present.js'
 import { defaultOverviewConfig, parseOverviewConfig } from '../src/shared/overview/rules.js'
 import type { OverviewConfig, OverviewPullRequest, OverviewRepoFacts, OverviewRow } from '../src/shared/overview/types.js'
 import { runOverviewCli, toOverviewJson } from '../src/overview/cli.js'
-import { loadOverview, parseRepositoryNode } from '../src/overview/load.js'
+import { loadOverview, parseRepositoryNode, readIssueActivity } from '../src/overview/load.js'
 
 const NOW = new Date('2026-09-28T00:00:00.000Z')
 const DAY = 86_400_000
@@ -33,6 +33,7 @@ function facts(patch: Partial<OverviewRepoFacts> = {}): OverviewRepoFacts {
     hasDefaultBranchCommit: true,
     pushedAt: ago(1),
     lastCommitAt: ago(1),
+    lastIssueActivityAt: null,
     openPrCount: 0,
     ciState: 'success',
     ciFailureUrl: null,
@@ -93,7 +94,7 @@ describe('overview warnings', () => {
       kind: '停滞',
       label: '停滞 14 天',
       days: 14,
-      hint: '超过 14 天没有新提交',
+      hint: '默认分支提交和 Issue/PR 活动都超过 14 天',
       targets: [{ url: 'https://github.com/example/quiet' }]
     })
 
@@ -167,8 +168,9 @@ describe('overview warnings', () => {
     expect(kinds(classifyOverview([facts({ hasDefaultBranchCommit: false, lastCommitAt: null })], rules, NOW)[0]!)).toContain('空仓')
 
     const ancient = classifyOverview([facts({
-      pushedAt: ago(90),
-      lastCommitAt: ago(1)
+      pushedAt: ago(1),
+      lastCommitAt: ago(91),
+      lastIssueActivityAt: ago(91)
     })], rules, NOW)[0]
     expect(kinds(ancient!)).toEqual(['陈旧'])
     expect(kinds(classifyOverview([facts({ pushedAt: ago(89), lastCommitAt: ago(89) })], rules, NOW)[0]!)).toEqual(['停滞'])
@@ -246,16 +248,23 @@ describe('overview warnings', () => {
   })
 
   it('uses the auto-mode push window without naming a repository', () => {
-    const rules = config({ autoPushWindowDays: 30, staleRepoDays: 90 })
-    expect(inAutoScope({ isEmpty: false, pushedAt: ago(30) }, rules, NOW)).toBe(true)
-    expect(inAutoScope({ isEmpty: false, pushedAt: ago(31) }, rules, NOW)).toBe(false)
-    expect(inAutoScope({ isEmpty: false, pushedAt: ago(90) }, rules, NOW)).toBe(true)
+    const rules = config({ staleRepoDays: 30 })
+    expect(inAutoScope({ isEmpty: false, pushedAt: ago(14) }, rules, NOW)).toBe(true)
+    expect(inAutoScope({ isEmpty: false, pushedAt: ago(20) }, rules, NOW)).toBe(true)
+    expect(inAutoScope({ isEmpty: false, pushedAt: ago(31) }, rules, NOW)).toBe(true)
     expect(inAutoScope({ isEmpty: true, pushedAt: null }, rules, NOW)).toBe(true)
-    expect(inAutoScope({ isEmpty: false, pushedAt: null }, rules, NOW)).toBe(false)
+    expect(inAutoScope({ isEmpty: false, pushedAt: null }, rules, NOW)).toBe(true)
     expect(inAutoScope({ isEmpty: false, pushedAt: ago(1), archived: true }, rules, NOW)).toBe(false)
     expect(inAutoScope({ isEmpty: true, pushedAt: null, archived: true }, rules, NOW, true)).toBe(true)
     expect(defaultOverviewConfig().showArchived).toBe(false)
+    expect(defaultOverviewConfig()).toMatchObject({ staleDays: 7, staleRepoDays: 30 })
+    expect(defaultOverviewConfig()).not.toHaveProperty('autoPushWindowDays')
     expect(parseOverviewConfig({ showArchived: true }).showArchived).toBe(true)
+    expect(parseOverviewConfig({ staleDays: 9, staleRepoDays: 45 })).toMatchObject({
+      staleDays: 9,
+      staleRepoDays: 45
+    })
+    expect(parseOverviewConfig({ autoPushWindowDays: 3 })).not.toHaveProperty('autoPushWindowDays')
     const defaults = defaultOverviewConfig()
     expect(JSON.stringify(defaults)).not.toContain('Dylan5237/')
     const source = [
@@ -263,6 +272,15 @@ describe('overview warnings', () => {
       readFileSync(path.join('src', 'overview', 'load.ts'), 'utf8')
     ].join('\n')
     expect(source).not.toContain('Dylan5237/')
+    expect(source).not.toMatch(/watching\s*\(/)
+    expect(source).toContain('OWNER, COLLABORATOR, ORGANIZATION_MEMBER')
+    expect(hasOverviewPushAccess('ADMIN')).toBe(true)
+    expect(hasOverviewPushAccess('MAINTAIN')).toBe(true)
+    expect(hasOverviewPushAccess('WRITE')).toBe(true)
+    expect(hasOverviewPushAccess('TRIAGE')).toBe(false)
+    expect(hasOverviewPushAccess('READ')).toBe(false)
+    expect(hasOverviewPushAccess(null)).toBe(false)
+    expect(hasOverviewPushAccess(undefined)).toBe(false)
     expect(parseOverviewConfig(undefined)).toEqual(defaults)
     expect(() => parseOverviewConfig({ staleDays: 0 })).toThrow('停滞天数')
   })
@@ -321,6 +339,89 @@ describe('overview warnings', () => {
       repos: 6,
       attention: 2
     })
+  })
+
+  it('places 29/30/31 day activity and stalls only active repos at 6/7/8 days', () => {
+    const rules = config()
+    const aged = (days: number, patch: Partial<OverviewRepoFacts> = {}) => classifyOverview([facts({
+      pushedAt: ago(days),
+      lastCommitAt: ago(days),
+      lastIssueActivityAt: ago(days),
+      ...patch
+    })], rules, NOW)[0]!
+
+    expect(aged(29).group).toBe('active')
+    expect(aged(30).group).toBe('active')
+    expect(aged(30).warnings.find(item => item.kind === '停滞')?.days).toBe(30)
+    expect(aged(31).group).toBe('stale')
+    expect(kinds(aged(31))).toEqual(['陈旧'])
+    expect(kinds(aged(31))).not.toContain('停滞')
+
+    expect(kinds(aged(6))).not.toContain('停滞')
+    expect(aged(6).group).toBe('active')
+    expect(aged(7).warnings.find(item => item.kind === '停滞')).toMatchObject({ label: '停滞 7 天', days: 7 })
+    expect(aged(8).warnings.find(item => item.kind === '停滞')?.days).toBe(8)
+    expect(aged(8).group).toBe('active')
+
+    const recentIssue = aged(40, { lastIssueActivityAt: ago(3), name: 'example/talking', url: 'https://github.com/example/talking' })
+    expect(recentIssue.group).toBe('active')
+    expect(kinds(recentIssue)).not.toContain('停滞')
+    expect(recentIssue.stallBasis).toMatchObject({ source: 'issue', at: ago(3) })
+
+    const recentCommit = aged(40, { lastCommitAt: ago(6), lastIssueActivityAt: ago(8) })
+    expect(recentCommit.group).toBe('active')
+    expect(kinds(recentCommit)).not.toContain('停滞')
+    expect(recentCommit.stallBasis.source).toBe('commit')
+
+    const newerIssue = aged(20, { lastIssueActivityAt: ago(12), name: 'example/both', url: 'https://github.com/example/both' })
+    expect(newerIssue.group).toBe('active')
+    expect(newerIssue.warnings.find(item => item.kind === '停滞')).toMatchObject({ label: '停滞 12 天', days: 12 })
+    expect(newerIssue.stallBasis.source).toBe('issue')
+
+    const tie = aged(10, { lastCommitAt: ago(10), lastIssueActivityAt: ago(10) })
+    expect(tie.stallBasis.source).toBe('tie')
+    expect(tie.warnings.find(item => item.kind === '停滞')?.days).toBe(10)
+
+    const staleFailure = aged(31, {
+      name: 'example/stale-ci',
+      url: 'https://github.com/example/stale-ci',
+      ciState: 'failure',
+      ciFailureUrl: 'https://github.com/example/stale-ci/actions/runs/7'
+    })
+    expect(staleFailure.group).toBe('stale')
+    expect(visibleWarningChips(staleFailure).map(item => item.label)).toEqual(['卡住：CI 失败'])
+    expect(countsAsAttention(staleFailure)).toBe(false)
+
+    const staleEmpty = classifyOverview([facts({
+      name: 'example/stale-empty',
+      url: 'https://github.com/example/stale-empty',
+      isEmpty: true,
+      sizeKb: 0,
+      hasDefaultBranchCommit: false,
+      pushedAt: ago(40),
+      lastCommitAt: null,
+      lastIssueActivityAt: ago(40),
+      ciState: 'none'
+    })], rules, NOW)[0]!
+    expect(staleEmpty.group).toBe('stale')
+    expect(visibleWarningChips(staleEmpty).map(item => item.kind)).toEqual(['空仓'])
+    expect(countsAsAttention(staleEmpty)).toBe(false)
+
+    const activeEmpty = classifyOverview([facts({
+      name: 'example/active-empty',
+      url: 'https://github.com/example/active-empty',
+      isEmpty: true,
+      sizeKb: 0,
+      hasDefaultBranchCommit: false,
+      pushedAt: null,
+      lastCommitAt: null,
+      lastIssueActivityAt: null,
+      ciState: 'none'
+    })], rules, NOW)[0]!
+    expect(activeEmpty.group).toBe('active')
+    expect(visibleWarningChips(activeEmpty).map(item => item.label)).toEqual(['空仓'])
+    expect(countsAsAttention(activeEmpty)).toBe(true)
+    expect(overviewCounts([staleFailure, staleEmpty, activeEmpty, aged(29)])).toEqual({ repos: 4, attention: 2 })
   })
 })
 
@@ -457,24 +558,29 @@ describe('overview loading', () => {
     ])
   })
 
-  it('skips the quiet middle of auto mode and still loads empty and 陈旧 repos', async () => {
+  it('keeps every pushable age band and drops watch-only or read-only repos', async () => {
     const seen: string[] = []
-    const node = (name: string, days: number) => ({
+    const queries: string[] = []
+    const ages: Record<string, number> = { owned: 2, collab: 20, member: 40, blank: 0 }
+    const node = (name: string, days: number, empty = false) => ({
       nameWithOwner: name,
       url: `https://github.com/${name}`,
-      isEmpty: false,
-      diskUsage: 8,
-      pushedAt: ago(days),
-      defaultBranchRef: { target: { oid: 'abc', committedDate: ago(days), statusCheckRollup: null } },
-      pullRequests: { totalCount: 0, nodes: [] }
+      isEmpty: empty,
+      diskUsage: empty ? 0 : 8,
+      pushedAt: empty ? null : ago(days),
+      defaultBranchRef: empty ? null : { target: { oid: 'abc', committedDate: ago(days), statusCheckRollup: null } },
+      pullRequests: { totalCount: 0, nodes: [] },
+      issues: { nodes: [] },
+      recentPulls: { nodes: [] }
     })
-    await loadOverview({
+    const result = await loadOverview({
       token: 'test-token',
-      config: config({ autoPushWindowDays: 30, staleRepoDays: 90, maxScopeRepos: 20 }),
+      config: config({ staleRepoDays: 30, staleDays: 7, maxScopeRepos: 20 }),
       watchedRepos: [],
       now: NOW,
       fetchImpl: async (_url, init) => {
         const body = JSON.parse(String(init?.body)) as { query: string, variables: Record<string, string> }
+        queries.push(body.query)
         if (body.query.includes('repositories(')) {
           return jsonResponse({
             data: {
@@ -482,10 +588,13 @@ describe('overview loading', () => {
                 repositories: {
                   pageInfo: { hasNextPage: false, endCursor: null },
                   nodes: [
-                    { nameWithOwner: 'example/recent', isEmpty: false, pushedAt: ago(2) },
-                    { nameWithOwner: 'example/middle', isEmpty: false, pushedAt: ago(40) },
-                    { nameWithOwner: 'example/ancient', isEmpty: false, pushedAt: ago(120) },
-                    { nameWithOwner: 'example/blank', isEmpty: true, pushedAt: null }
+                    { nameWithOwner: 'example/owned', isEmpty: false, pushedAt: ago(2), isArchived: false, viewerPermission: 'ADMIN' },
+                    { nameWithOwner: 'example/collab', isEmpty: false, pushedAt: ago(20), isArchived: false, viewerPermission: 'WRITE' },
+                    { nameWithOwner: 'example/member', isEmpty: false, pushedAt: ago(40), isArchived: false, viewerPermission: 'MAINTAIN' },
+                    { nameWithOwner: 'example/reader', isEmpty: false, pushedAt: ago(1), isArchived: false, viewerPermission: 'READ' },
+                    { nameWithOwner: 'example/triage', isEmpty: false, pushedAt: ago(1), isArchived: false, viewerPermission: 'TRIAGE' },
+                    { nameWithOwner: 'example/blank', isEmpty: true, pushedAt: null, isArchived: false, viewerPermission: 'ADMIN' },
+                    { nameWithOwner: 'example/vault', isEmpty: false, pushedAt: ago(1), isArchived: true, viewerPermission: 'ADMIN' }
                   ]
                 }
               }
@@ -494,24 +603,38 @@ describe('overview loading', () => {
         }
         if (body.query.includes('watching(')) {
           return jsonResponse({
-            data: { viewer: { watching: { pageInfo: { hasNextPage: false }, nodes: [] } } }
+            data: {
+              viewer: {
+                watching: {
+                  pageInfo: { hasNextPage: false },
+                  nodes: [{ nameWithOwner: 'other/only-watch', isEmpty: false, pushedAt: ago(1), isArchived: false, viewerPermission: 'READ' }]
+                }
+              }
+            }
           })
         }
-        for (const [key, value] of Object.entries(body.variables)) {
-          if (key.startsWith('n')) seen.push(value)
-        }
         const names = Object.entries(body.variables).filter(([key]) => key.startsWith('n')).map(([, value]) => value)
+        for (const name of names) seen.push(name)
         const data: Record<string, unknown> = {}
         names.forEach((name, index) => {
-          const full = `example/${name}`
-          data[`r${index}`] = name === 'blank'
-            ? { nameWithOwner: full, url: `https://github.com/${full}`, isEmpty: true, diskUsage: 0, pushedAt: null, defaultBranchRef: null, pullRequests: { totalCount: 0, nodes: [] } }
-            : node(full, name === 'ancient' ? 120 : 2)
+          data[`r${index}`] = node(`example/${name}`, ages[name] ?? 1, name === 'blank')
         })
         return jsonResponse({ data })
       }
     })
-    expect(seen.sort()).toEqual(['ancient', 'blank', 'recent'])
+    expect(queries.some(query => /watching\s*\(/.test(query))).toBe(false)
+    expect(queries.some(query => query.includes('OWNER, COLLABORATOR, ORGANIZATION_MEMBER'))).toBe(true)
+    expect(seen.sort()).toEqual(['blank', 'collab', 'member', 'owned'])
+    expect(result.rows.map(row => [row.name, row.group])).toEqual([
+      ['example/collab', 'active'],
+      ['example/blank', 'active'],
+      ['example/owned', 'active'],
+      ['example/member', 'stale']
+    ])
+    expect(result.rows.some(row => row.name.includes('only-watch') || row.name.includes('reader') || row.name.includes('triage'))).toBe(false)
+    expect(overviewCounts(result.rows)).toEqual({ repos: 4, attention: 2 })
+    expect(result.rows.find(row => row.name === 'example/collab')?.warnings.map(item => item.kind)).toEqual(['停滞'])
+    expect(result.rows.find(row => row.name === 'example/member')?.warnings.map(item => item.kind)).toEqual(['陈旧'])
   })
 
   it('keeps archived repositories out of auto mode unless inclusion is requested', async () => {
@@ -525,18 +648,13 @@ describe('overview loading', () => {
               repositories: {
                 pageInfo: { hasNextPage: false, endCursor: null },
                 nodes: [
-                  { nameWithOwner: 'example/recent', isEmpty: false, pushedAt: ago(2), isArchived: false },
-                  { nameWithOwner: 'example/vault', isEmpty: false, pushedAt: ago(1), isArchived: true },
-                  { nameWithOwner: 'example/moth', isEmpty: true, pushedAt: ago(200), isArchived: true }
+                  { nameWithOwner: 'example/recent', isEmpty: false, pushedAt: ago(2), isArchived: false, viewerPermission: 'ADMIN' },
+                  { nameWithOwner: 'example/vault', isEmpty: false, pushedAt: ago(1), isArchived: true, viewerPermission: 'WRITE' },
+                  { nameWithOwner: 'example/moth', isEmpty: true, pushedAt: ago(200), isArchived: true, viewerPermission: 'MAINTAIN' }
                 ]
               }
             }
           }
-        })
-      }
-      if (body.query.includes('watching(')) {
-        return jsonResponse({
-          data: { viewer: { watching: { pageInfo: { hasNextPage: false }, nodes: [] } } }
         })
       }
       const names = Object.entries(body.variables).filter(([key]) => key.startsWith('n')).map(([, value]) => value)
@@ -560,7 +678,7 @@ describe('overview loading', () => {
     }
     const hidden = await loadOverview({
       token: 'test-token',
-      config: config({ autoPushWindowDays: 30, staleRepoDays: 90 }),
+      config: config({ staleRepoDays: 90 }),
       watchedRepos: [],
       now: NOW,
       fetchImpl
@@ -571,7 +689,7 @@ describe('overview loading', () => {
     seen.length = 0
     const shown = await loadOverview({
       token: 'test-token',
-      config: config({ showArchived: true, autoPushWindowDays: 30, staleRepoDays: 90 }),
+      config: config({ showArchived: true, staleRepoDays: 90 }),
       watchedRepos: [],
       now: NOW,
       includeArchived: true,
@@ -678,8 +796,14 @@ describe('overview cli', () => {
     const withFlag = toOverviewJson([{ ...stuck!, fromWatchList: true }])
     expect(withFlag[0]).not.toHaveProperty('fromWatchList')
     expect(Object.keys(withFlag[0]!).sort()).toEqual([
-      'archived', 'ciState', 'error', 'lastCommitAt', 'name', 'openPrCount', 'url', 'warnings'
+      'archived', 'ciState', 'error', 'group', 'lastCommitAt', 'name', 'openPrCount', 'stallBasis', 'url', 'warnings'
     ])
+    expect(stalled?.group).toBe('active')
+    expect(stalled?.stallBasis).toMatchObject({
+      source: 'commit',
+      at: '2026-09-01T00:00:00.000Z',
+      lastIssueActivityAt: null
+    })
     expect(rows.every(row => !('fromWatchList' in row))).toBe(true)
   })
 
@@ -722,6 +846,42 @@ describe('repository node', () => {
     expect(parsed.hasDefaultBranchCommit).toBe(false)
     expect(parsed.sizeKb).toBe(0)
     expect(kinds(classifyOverview([parsed], config(), NOW)[0]!)).toContain('空仓')
+  })
+
+  it('reads issue and pull comment times as activity, not only the commit', () => {
+    const parsed = parseRepositoryNode({
+      nameWithOwner: 'example/talking',
+      url: 'https://github.com/example/talking',
+      isEmpty: false,
+      diskUsage: 12,
+      pushedAt: ago(20),
+      defaultBranchRef: { target: { oid: 'abc', committedDate: ago(20) } },
+      pullRequests: { totalCount: 0, nodes: [] },
+      issues: {
+        nodes: [{
+          createdAt: ago(40),
+          updatedAt: ago(18),
+          comments: { nodes: [{ createdAt: ago(4) }] }
+        }]
+      },
+      recentPulls: {
+        nodes: [{
+          createdAt: ago(12),
+          updatedAt: ago(9),
+          comments: { nodes: [{ createdAt: ago(9) }] },
+          reviews: { nodes: [{ submittedAt: ago(8) }] }
+        }]
+      }
+    }, 'example/talking')
+    expect(parsed.lastIssueActivityAt).toBe(ago(4))
+    expect(readIssueActivity({
+      issues: { nodes: [{ createdAt: ago(3), updatedAt: ago(3), comments: { nodes: [] } }] },
+      recentPulls: { nodes: [] }
+    })).toBe(ago(3))
+    const row = classifyOverview([parsed], config({ staleDays: 7, staleRepoDays: 30 }), NOW)[0]!
+    expect(kinds(row)).not.toContain('停滞')
+    expect(row.group).toBe('active')
+    expect(row.stallBasis).toMatchObject({ source: 'issue', at: ago(4) })
   })
 
   it('points a failing rollup at the Actions run, not a pull request number', () => {
