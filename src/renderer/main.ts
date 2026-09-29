@@ -3,16 +3,14 @@ import brandSymbol from '../../docs/brand/logo/Arckeep_Symbol_White.svg'
 import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
 import { DEFAULT_HOTKEY } from '../shared/types'
+import { renderToolSettings } from './tool-settings'
+import { renderTools } from './tools-page'
 import { renderWaiting } from './waiting-page'
 import { renderWaitingSettings } from './waiting-settings'
 
 type ViewId = 'inbox' | 'projects' | 'todos' | 'tools' | 'settings'
 
-const PAGES: Record<Exclude<ViewId, 'settings'>, { title: string, body: string }> = {
-  inbox: {
-    title: '等我处理',
-    body: '需要你拍板或回复的事项会集中在这里。这一页先占位，具体能力在后续 Issue。'
-  },
+const PAGES: Record<'projects' | 'todos', { title: string, body: string }> = {
   projects: {
     title: '项目总览',
     body: '关注的仓库会在这里汇总。列表留空时走自动模式。这一页先占位。'
@@ -20,10 +18,6 @@ const PAGES: Record<Exclude<ViewId, 'settings'>, { title: string, body: string }
   todos: {
     title: '待办',
     body: '个人待办会放在这里。这一页先占位。'
-  },
-  tools: {
-    title: '工具架',
-    body: '常用工具入口会放在这里。这一页先占位。'
   }
 }
 
@@ -57,7 +51,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node
 }
 
-function renderPlaceholder(view: Exclude<ViewId, 'settings'>): void {
+function renderPlaceholder(view: 'projects' | 'todos'): void {
   if (!content) return
   const page = PAGES[view]
   content.replaceChildren(
@@ -94,7 +88,8 @@ async function renderSettings(options?: { focusToken?: boolean }): Promise<void>
     renderGithubCard(state),
     renderReposCard(state),
     renderHotkeyCard(state),
-    renderWaitingSettings(state, renderSettings)
+    renderWaitingSettings(state, renderSettings),
+    await renderToolSettings(state, renderSettings)
   )
   if (options?.focusToken) {
     page.querySelector<HTMLInputElement>('#github-pat')?.focus()
@@ -292,6 +287,7 @@ async function show(view: ViewId, options?: { focusToken?: boolean }): Promise<v
   if (!content) return
   if (view === 'settings') await renderSettings(options)
   else if (view === 'inbox') await renderWaiting(content, (next, nextOptions) => { void show(next, nextOptions) })
+  else if (view === 'tools') await renderTools(content, () => { void show('settings') })
   else renderPlaceholder(view)
 }
 
@@ -305,4 +301,4 @@ for (const button of navButtons) {
 }
 
 const initial = new URLSearchParams(location.search).get('page')
-void show(initial === 'settings' ? 'settings' : 'inbox')
+void show(initial === 'settings' ? 'settings' : initial === 'tools' ? 'tools' : 'inbox')
