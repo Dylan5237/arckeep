@@ -9,7 +9,7 @@ const REPOS: Array<string | null> = [
 ]
 
 export function screenshotSeedsTodos(scene: ScreenshotScene): boolean {
-  return scene === 'todos' || scene === 'todos-filter' || scene === 'todos-delete' || scene === 'todos-narrow'
+  return scene === 'todos' || scene === 'todos-filter' || scene === 'todos-delete' || scene === 'todos-narrow' || scene === 'todos-split'
 }
 
 export function screenshotCaptureFixture(scene: ScreenshotScene): 'filled' | null {

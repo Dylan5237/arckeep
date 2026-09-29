@@ -21,6 +21,7 @@ const scenes = [
   ['todos-filter', 'todos-filter.png'],
   ['todos-delete', 'todos-delete.png'],
   ['todos-narrow', 'todos-narrow.png'],
+  ['todos-split', 'todos-split-actions.png'],
   ['waiting', 'waiting-todo.png'],
   ['hotkey-banner', 'hotkey-banner.png'],
   ['hotkey-save-conflict', 'hotkey-save-conflict.png']

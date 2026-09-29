@@ -28,6 +28,14 @@ export default tseslint.config(
     }
   },
   {
+    files: ['test/todo-row-actions.test.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.browser
+      }
+    }
+  },
+  {
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', {
         argsIgnorePattern: '^_',

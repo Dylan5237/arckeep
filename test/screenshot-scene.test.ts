@@ -44,6 +44,8 @@ describe('screenshot fixtures', () => {
     expect(parseScreenshotScene('tools-failed')).toBe('tools-failed')
     expect(parseScreenshotScene('tools-success')).toBe('tools-success')
     expect(parseScreenshotScene('tools-copied')).toBe('tools-copied')
+    expect(parseScreenshotScene('todos-split')).toBe('todos-split')
+    expect(screenshotWindowSize('todos-split')).toEqual({ width: 800, height: 1280 })
   })
 
   it('builds mocked auth states without writing the stand-in secrets as plaintext', async () => {

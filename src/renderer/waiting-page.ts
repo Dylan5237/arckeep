@@ -1,5 +1,6 @@
 import { localAbsolute, localClock, relativeLabel } from '../shared/waiting/local-time'
 import type { WaitingRow, WaitingSnapshot } from '../shared/waiting/types'
+import { bindExclusiveRowActions } from './exclusive-rows'
 
 const PROVENANCE = new Set(['指派', '提及', '请求 review', '状态文档'])
 
@@ -126,7 +127,9 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
   } else if (!snapshot.refreshing && snapshot.rows.length === 0 && snapshot.auth === 'ok') {
     page.append(el('p', { class: 'waiting-empty' }, ['没有等你处理的事项']))
   } else {
-    page.append(renderGroups(snapshot.rows, handlers))
+    const groups = renderGroups(snapshot.rows, handlers)
+    bindExclusiveRowActions(groups, '.waiting-row')
+    page.append(groups)
   }
   host.replaceChildren(page)
 }
@@ -248,7 +251,10 @@ function renderRow(row: WaitingRow, handlers: {
   }
   const body = [days, title, chip, meta, actions]
   if (via) body.splice(3, 0, via)
-  return el('div', { class: `waiting-row age-${age}${row.ignored ? ' is-ignored' : ''}` }, body)
+  return el('div', {
+    class: `waiting-row age-${age}${row.ignored ? ' is-ignored' : ''}`,
+    'data-row-id': row.id
+  }, body)
 }
 
 export async function renderWaiting(
