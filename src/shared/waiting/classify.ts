@@ -186,6 +186,7 @@ function quietPull(record: GithubRecord, config: WaitingConfig, now: Date): (Cla
 export function classifyRecord(record: GithubRecord, config: WaitingConfig, now: Date): WaitingDraft | null {
   const comment = latestComment(record)
   const closed = Boolean(comment?.text && commentCloses(comment.text, config))
+  const passComment = /\bPASS\b/i.test(comment?.text ?? '')
   const assignmentOpen = !closed && !statusIsDoneOrClosed(latestStatusText(record.body), config)
   const text = closed ? null : strongText(record, config)
   const labelName = closed || !config.sources.humanIssues ? null : matchedLabel(record.labels, config.humanLabels)
@@ -194,7 +195,7 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
     : null
   const review = config.sources.reviewRequested && record.fromReview && record.kind === 'pr'
   const assigned = config.sources.assignee && record.fromAssignee
-  const quiet = closed ? null : quietPull(record, config, now)
+  const quiet = closed && !passComment ? null : quietPull(record, config, now)
   const watchedAuthor = !closed
     && record.fromAuthor
     && record.repoAccess === 'watch'

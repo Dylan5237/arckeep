@@ -56,6 +56,53 @@ function isSeparatorRow(line: string): boolean {
   return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell))
 }
 
+function parsedTable(block: readonly string[]): { cells: string[], nextAction: string[] } {
+  const rows = block
+    .filter(line => !isSeparatorRow(line))
+    .map(line => tableHeader(line).split('|').map(cell => cell.trim()))
+  if (rows.length < 2) return { cells: [], nextAction: [] }
+  const header = rows[0] ?? []
+  const nextIndexes = header
+    .map((cell, index) => (/^下一步(?:行动)?$/u.test(cell) || /^next action$/i.test(cell) ? index : -1))
+    .filter(index => index >= 0)
+  const cells: string[] = []
+  const nextAction: string[] = []
+  for (const row of rows.slice(1)) {
+    for (const index of nextIndexes) {
+      const cell = row[index] ?? ''
+      if (cell) nextAction.push(cell)
+    }
+    for (const cell of row) {
+      if (cell) cells.push(cell)
+    }
+  }
+  return { cells, nextAction }
+}
+
+/**
+ * 请…裁决 / 请…确认, and the same shape: 请 or please, then a configured
+ * request verb or action. Used for a 下一步 / Next Action cell.
+ */
+function columnShapedAsk(cell: string, config: WaitingConfig): string | null {
+  if (isNegativeSentence(cell) || isCitationOnly(cell)) return null
+  const opener = /请|\bplease\b/iu.exec(cell)
+  if (!opener || opener.index === undefined || !opener[0]) return null
+  const words = [...new Set([...config.requestVerbs, ...config.requestActions].map(word => word.trim()).filter(Boolean))]
+    .filter(word => word !== '请' && word.toLowerCase() !== 'please')
+  const after = cell.slice(opener.index + opener[0].length, opener.index + opener[0].length + 32)
+  for (const word of words) {
+    const pattern = /^[A-Za-z]+$/.test(word)
+      ? new RegExp(`\\b${escapeLiteral(word)}\\b`, 'iu')
+      : new RegExp(escapeLiteral(word), 'iu')
+    const found = pattern.exec(after)
+    if (!found || found.index === undefined || !found[0]) continue
+    const end = opener.index + opener[0].length + found.index + found[0].length
+    if (isNegatedSignal(cell, opener.index, end)) continue
+    return clipSentence(cell)
+  }
+  return null
+}
+
 function skipTable(lines: readonly string[], index: number): { next: number, text: string, skipped: boolean } {
   const block: string[] = []
   let cursor = index
@@ -144,10 +191,15 @@ export function readableBody(markdown: string, leadingOnly: boolean): string {
   return kept.join('\n').trim()
 }
 
+interface StatusPiece {
+  text: string
+  nextAction: string[]
+}
+
 /** Every status subsection, from its heading through the next heading of the same level. */
-export function statusSectionTexts(markdown: string): string[] {
+function statusPieces(markdown: string): StatusPiece[] {
   const lines = stripFences(markdown).split(/\r?\n/)
-  const sections: string[] = []
+  const sections: StatusPiece[] = []
   let index = 0
   while (index < lines.length) {
     const heading = headingOf(lines[index] ?? '')
@@ -158,13 +210,19 @@ export function statusSectionTexts(markdown: string): string[] {
     const level = heading.level
     index += 1
     const kept: string[] = []
+    const nextAction: string[] = []
     while (index < lines.length) {
       const next = headingOf(lines[index] ?? '')
       if (next && next.level <= level) break
       if (isTableLine(lines[index] ?? '')) {
-        const table = skipTable(lines, index)
-        index = table.next
-        if (table.text) kept.push(table.text)
+        const block: string[] = []
+        while (index < lines.length && isTableLine(lines[index] ?? '')) {
+          block.push(lines[index] ?? '')
+          index += 1
+        }
+        const parsed = parsedTable(block)
+        kept.push(...parsed.cells)
+        nextAction.push(...parsed.nextAction)
         continue
       }
       const visible = bodyLine(lines[index] ?? '')
@@ -172,9 +230,17 @@ export function statusSectionTexts(markdown: string): string[] {
       index += 1
     }
     const text = kept.join('\n').trim()
-    if (text) sections.push(text)
+    if (text) sections.push({ text, nextAction })
   }
   return sections
+}
+
+export function statusSectionTexts(markdown: string): string[] {
+  return statusPieces(markdown).map(piece => piece.text)
+}
+
+export function statusNextActionCells(markdown: string): string[] {
+  return statusPieces(markdown).flatMap(piece => piece.nextAction)
 }
 
 export function latestStatusText(markdown: string): string {
@@ -187,6 +253,7 @@ const CLOSED_STATUS = /(?:closed|done|已关闭)/giu
 /** The latest status subsection says the work is done or closed. No subsection means it is still open. */
 export function statusIsDoneOrClosed(text: string, config: WaitingConfig): boolean {
   if (!text.trim()) return false
+  if (openRemainderAsk(text)) return false
   const resolved = config.resolvedSignals.map(pattern => safeRegex(pattern))
   if (evaluateSignals(text, [], resolved) === 'resolved') return true
   for (const match of text.matchAll(CLOSED_STATUS)) {
@@ -211,8 +278,13 @@ export function latestComment(record: GithubRecord): (ScannedText & { own: boole
   return null
 }
 
+function openRemainderAsk(text: string): boolean {
+  return splitSentences(text).some(sentence => remainderRequest(sentence.text) !== null)
+}
+
 export function commentCloses(text: string, config: WaitingConfig): boolean {
   if (!text.trim()) return false
+  if (openRemainderAsk(text)) return false
   const keywords = config.humanKeywords.map(pattern => safeRegex(pattern))
   const resolved = config.resolvedSignals.map(pattern => safeRegex(pattern))
   return evaluateSignals(text, keywords, resolved) === 'resolved'
@@ -279,7 +351,7 @@ export function mentionSentence(record: GithubRecord): string {
   for (const chunk of chunks) {
     for (const sentence of splitSentences(chunk)) {
       const text = sentence.text.replace(/\s+/g, ' ').trim()
-      if (!text) continue
+      if (!text || isCitationOnly(text) || isNegativeSentence(text)) continue
       const folded = text.toLowerCase()
       const named = needles.length > 0
         ? needles.some(needle => folded.includes(needle.toLowerCase()))
@@ -353,6 +425,7 @@ function clipSentence(sentence: string): string {
  * or the verb itself must sit next to that name.
  */
 export function explicitRequest(sentence: string, config: WaitingConfig, viewer: string, names: readonly RegExp[]): string | null {
+  if (skipDenied(sentence)) return null
   if (mentionsOtherPerson(sentence, viewer)) return null
   if (verbThen(sentence, config.requestVerbs, config.requestActions)) return clipSentence(sentence)
   if (!patternHits(sentence, names)) return null
@@ -379,6 +452,78 @@ export function ackRequest(sentence: string, config: WaitingConfig, names: reado
     }
   }
   return null
+}
+
+const REMAINDER_CUE = /只剩|下一步|\bNext\b/iu
+const REMAINDER_ASK = /接受|\baccept\b|提供截图|provide a screenshot|run it and look|跑一下看看|运行一下看看/giu
+const CHECKLIST_USER_ACTION = /提供截图|provide a screenshot|视觉验收|visual acceptance|run it on (?:your|their) machine|在(?:你|用户)的?机器上跑/iu
+const CITATION_PHRASE = /(?:支持|见|参见|详见|\bsee\b|\bcf\.?)\s+#\d+/iu
+const NEGATIVE_SENTENCE = /不构成|并不构成|不算|不能算|并不代表|does not count|do not count|does not constitute|doesn't constitute|not constitute/iu
+
+function isCheckedTask(sentence: string): boolean {
+  return /^\s*[-*+]\s+\[[xX]\]\s+/u.test(sentence)
+}
+
+function uncheckedTaskText(sentence: string): string | null {
+  const match = /^\s*[-*+]\s+\[ \]\s+(.+)$/u.exec(sentence.trim())
+  const text = match?.[1]?.trim() ?? ''
+  return text || null
+}
+
+/** A sentence whose only content is a cross-reference such as 支持 #N or 见 #N. */
+export function isCitationOnly(sentence: string): boolean {
+  const text = sentence.replace(/\s+/g, ' ').trim()
+  if (!CITATION_PHRASE.test(text)) return false
+  const leftover = text
+    .replace(/@[A-Za-z0-9-]+/g, '')
+    .replace(/(?:支持|见|参见|详见|\bsee\b|\bcf\.?)\s+#\d+/giu, '')
+    .replace(/https?:\/\/\S+/giu, '')
+    .replace(/[\s。.#,，、:：;；!！?？()（）[\]【】"'“”]/gu, '')
+  return leftover.length === 0
+}
+
+/** A sentence that says the thing does not count, does not constitute approval, or otherwise denies the request. */
+export function isNegativeSentence(sentence: string): boolean {
+  return NEGATIVE_SENTENCE.test(sentence)
+}
+
+function skipDenied(sentence: string): boolean {
+  return isCheckedTask(sentence) || isCitationOnly(sentence) || isNegativeSentence(sentence)
+}
+
+/**
+ * Text after or beside PASS that says 只剩 / 下一步 / Next and still asks the
+ * user to accept, provide a screenshot, or run it and look. PASS on that same
+ * item — the cue sits before PASS and not after it — closes the item.
+ */
+function remainderRequest(sentence: string): string | null {
+  if (skipDenied(sentence) || !REMAINDER_CUE.test(sentence)) return null
+  REMAINDER_ASK.lastIndex = 0
+  let ask = false
+  for (const match of sentence.matchAll(REMAINDER_ASK)) {
+    const start = match.index ?? 0
+    if (!match[0] || isNegatedSignal(sentence, start, start + match[0].length)) continue
+    ask = true
+    break
+  }
+  if (!ask) return null
+  const pass = /\bPASS\b/iu.exec(sentence)
+  if (pass && pass.index !== undefined && !isNegatedSignal(sentence, pass.index, pass.index + pass[0].length)) {
+    const after = sentence.slice(pass.index + pass[0].length)
+    const cue = REMAINDER_CUE.exec(after)
+    if (!cue || cue.index === undefined) return null
+    return clipSentence(after.slice(cue.index))
+  }
+  const cue = REMAINDER_CUE.exec(sentence)
+  if (!cue || cue.index === undefined) return null
+  return clipSentence(sentence.slice(cue.index))
+}
+
+function uncheckedTaskRequest(sentence: string, config: WaitingConfig, viewer: string, names: readonly RegExp[]): string | null {
+  const text = uncheckedTaskText(sentence)
+  if (!text || isCitationOnly(text) || isNegativeSentence(text)) return null
+  if (CHECKLIST_USER_ACTION.test(text)) return clipSentence(text)
+  return explicitRequest(text, config, viewer, names)
 }
 
 function headerOnLine(line: string, header: string): { excerpt: string, target: string } | null {
@@ -414,13 +559,20 @@ export function statusHeaderHit(text: string, config: WaitingConfig, names: read
   return null
 }
 
+function sentenceRequest(sentence: string, config: WaitingConfig, viewer: string, names: readonly RegExp[]): string | null {
+  if (skipDenied(sentence)) return null
+  return explicitRequest(sentence, config, viewer, names)
+    ?? remainderRequest(sentence)
+    ?? uncheckedTaskRequest(sentence, config, viewer, names)
+}
+
 function scanPlace(text: string, at: string | null, config: WaitingConfig, viewer: string, names: readonly RegExp[]): TextHit | null {
   const header = statusHeaderHit(text, config, names)
-  if (header) return { rule: '状态头', excerpt: header, at }
+  if (header && !isNegativeSentence(header)) return { rule: '状态头', excerpt: header, at }
   for (const sentence of splitSentences(text)) {
     const ack = ackRequest(sentence.text, config, names)
-    if (ack) return { rule: '需 ACK', excerpt: ack, at }
-    const request = explicitRequest(sentence.text, config, viewer, names)
+    if (ack && !skipDenied(sentence.text)) return { rule: '需 ACK', excerpt: ack, at }
+    const request = sentenceRequest(sentence.text, config, viewer, names)
     if (request) return { rule: '明确请求', excerpt: request, at }
   }
   return null
@@ -428,17 +580,37 @@ function scanPlace(text: string, at: string | null, config: WaitingConfig, viewe
 
 function ownRequest(text: string, at: string | null, config: WaitingConfig, viewer: string, names: readonly RegExp[]): TextHit | null {
   for (const sentence of splitSentences(text)) {
-    const request = explicitRequest(sentence.text, config, viewer, names)
+    const request = sentenceRequest(sentence.text, config, viewer, names)
     if (request) return { rule: '明确请求', excerpt: request, at, own: true }
   }
   return null
 }
 
+/** Title token. A parenthetical such as "(no Phase PASS)" does not cancel it. */
+function titleUserAction(title: string): boolean {
+  const match = /USER_ACTION_REQUIRED/iu.exec(title)
+  if (!match || match.index === undefined) return false
+  const before = title.slice(Math.max(0, match.index - 16), match.index)
+  return !/(?:\bno\b|\bnot\b|没有|不是|并未|并非|未|不)\s*$/iu.test(before)
+}
+
+function titleReviewOnly(title: string, verbs: readonly { start: number, end: number }[]): boolean {
+  return verbs.length > 0 && verbs.every(hit => title.slice(hit.start, hit.end).toLowerCase() === 'review')
+}
+
+/** The bare word review is not a request unless 请, 待, needs, or please is in the same title. */
+function titleAllowsReview(title: string): boolean {
+  return /请|待|\bneeds\b|\bplease\b/iu.test(title)
+}
+
 /** The title alone. A configured request verb is enough; the body does not have to repeat it. */
 function titleRequest(title: string, config: WaitingConfig): TextHit | null {
   const text = title.replace(/\s+/g, ' ').trim()
-  if (!text) return null
-  if (verbAt(text, config.requestVerbs).length === 0) return null
+  if (!text || isNegativeSentence(text)) return null
+  if (titleUserAction(text)) return { rule: '明确请求', excerpt: clipSentence(text), at: null }
+  const verbs = verbAt(text, config.requestVerbs)
+  if (verbs.length === 0) return null
+  if (titleReviewOnly(text, verbs) && !titleAllowsReview(text)) return null
   return { rule: '明确请求', excerpt: clipSentence(text), at: null }
 }
 
@@ -484,6 +656,10 @@ export function strongText(record: GithubRecord, config: WaitingConfig): TextHit
   const viewer = record.viewerLogin ?? ''
   const fromComments = commentThreadHit(record, config, viewer, names)
   if (fromComments) return fromComments
+  for (const cell of statusNextActionCells(record.body)) {
+    const ask = columnShapedAsk(cell, config)
+    if (ask) return { rule: '明确请求', excerpt: ask, at: record.createdAt || null }
+  }
   for (const section of statusSectionTexts(record.body)) {
     const hit = scanPlace(section, record.createdAt || null, config, viewer, names)
     if (hit) return hit
