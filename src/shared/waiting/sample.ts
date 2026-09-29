@@ -39,6 +39,15 @@ const TITLES = [
   '验收关注仓库留空的自动模式'
 ]
 
+const WEAK_EXCERPTS = [
+  '@ada 截图在附件里。',
+  'cc @ada，夜间模式的截图在下面。',
+  '@ada 导出页的截图我传到评论了。',
+  '截图先放这儿，@ada。',
+  '@ada 这是空状态的截图。',
+  '@ada 对比图在这条评论里。'
+]
+
 const REASON_SETS = [
   ['要人动手'],
   ['待你审/合'],
@@ -58,17 +67,17 @@ export function sampleWaitingRows(): WaitingRow[] {
   const days = [
     64, 58, 51, 44, 41, 36, 33, 30, 27, 24,
     22, 21, 19, 18, 16, 15, 14, 13, 12, 11,
-    10, 9, 8, 7, 6, 6, 5, 5, 4, 4,
+    60, 9, 8, 7, 6, 6, 5, 5, 4, 4,
     3, 3, 2, 2, 2, 1, 1, 1, 1, 0,
     0, 0, 45, 39, 28, 17, 9, 4, 62, 3,
     8, 1
   ]
   return days.map((waitingDays, index) => {
     const repo = REPOS[index % REPOS.length] ?? 'northwind/ledger'
-    const reasons = REASON_SETS[index % REASON_SETS.length] ?? ['要人动手']
     const tier = index % 9 === 0 ? 'weak' as const : 'strong' as const
+    const reasons = tier === 'weak' ? ['提及'] : (REASON_SETS[index % REASON_SETS.length] ?? ['要人动手'])
     const signalText = tier === 'weak'
-      ? '正文里提到了截图，没有明确请求'
+      ? (WEAK_EXCERPTS[Math.floor(index / 9) % WEAK_EXCERPTS.length] ?? '@ada 截图在附件里。')
       : reasons.includes('待你审/合')
         ? '最近活动 2026-09-20，已连续 3 天没有 push、评论或 review'
         : reasons.includes('请求 review')
@@ -117,6 +126,7 @@ export function sampleWaitingRows(): WaitingRow[] {
       waitingDays,
       daysEstimated: index % 7 === 0,
       signalText,
+      ownRequest: tier === 'strong' && signalText === '请确认这一版能否合入',
       tier,
       updatedAt: '2026-09-01T00:00:00.000Z',
       ignored: false

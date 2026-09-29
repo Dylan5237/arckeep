@@ -11,6 +11,45 @@ const ACTION_CLASS: Record<string, string> = {
   '待办': 'act-todo'
 }
 
+/** Mention-only rows are not a request to act. */
+export const MENTION_ONLY_LABEL = '只是提及'
+
+/** The main-list excerpt is the signed-in user's own latest request. */
+export const OWN_REQUEST_LABEL = '你写的'
+
+export function ownRequestLabel(row: { tier?: 'strong' | 'weak', ownRequest?: boolean, signal?: { own?: boolean } }): string | null {
+  const own = row.ownRequest === true || row.signal?.own === true
+  if ((row.tier ?? 'strong') !== 'strong' || !own) return null
+  return OWN_REQUEST_LABEL
+}
+
+export interface MaybeSectionMemory {
+  whenEmpty: boolean | null
+  whenListed: boolean | null
+}
+
+export function rowActionLabel(row: { tier: 'strong' | 'weak', action: string, reasons: readonly string[] }): string | null {
+  if (row.tier === 'weak') {
+    const mentionOnly = row.reasons.includes('提及') && !row.reasons.includes('要人动手')
+    return mentionOnly ? MENTION_ONLY_LABEL : null
+  }
+  return row.action || '要你动手'
+}
+
+/**
+ * First visit with an empty main list opens the section. First visit with rows leaves it closed.
+ * A saved choice wins after that, including a collapse that must stay collapsed next launch.
+ */
+export function maybeSectionOpen(mainCount: number, memory: MaybeSectionMemory): boolean {
+  if (mainCount === 0) return memory.whenEmpty ?? true
+  return memory.whenListed ?? false
+}
+
+export function rememberMaybeSection(mainCount: number, open: boolean, memory: MaybeSectionMemory): MaybeSectionMemory {
+  if (mainCount === 0) return { ...memory, whenEmpty: open }
+  return { ...memory, whenListed: open }
+}
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
@@ -77,6 +116,7 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
   hideRepo: (repo: string) => void
   unhideRepo: (repo: string) => void
   toggleIgnored: (show: boolean) => void
+  rememberMaybe: (open: boolean) => void
   open: (url: string) => void
 }): void {
   const mainRows = snapshot.rows.filter(row => row.tier !== 'weak')
@@ -148,7 +188,16 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
     } else if (mainRows.length > 0) {
       page.append(renderGroups(mainRows, handlers))
     }
-    if (maybeRows.length > 0) page.append(renderMaybe(maybeRows, handlers))
+    if (maybeRows.length > 0) {
+      page.append(renderMaybe(
+        maybeRows,
+        handlers,
+        maybeSectionOpen(mainRows.length, {
+          whenEmpty: snapshot.maybeWhenEmpty,
+          whenListed: snapshot.maybeWhenListed
+        })
+      ))
+    }
   }
   bindExclusiveRowActions(page, '.waiting-row')
   host.replaceChildren(page)
@@ -176,11 +225,18 @@ function renderMaybe(rows: readonly WaitingRow[], handlers: {
   hideRepo: (repo: string) => void
   open: (url: string) => void
   todos: () => void
-}): HTMLElement {
+  rememberMaybe: (open: boolean) => void
+}, startsOpen: boolean): HTMLElement {
   const details = el('details', { class: 'maybe-related' })
+  details.open = startsOpen
+  details.addEventListener('toggle', () => {
+    if (details.open !== startsOpen) handlers.rememberMaybe(details.open)
+  })
   details.append(el('summary', {}, [maybeRelatedLabel(rows.length)]))
-  details.append(el('p', { class: 'hint' }, ['只有提及，或正文里散落的关键词。不计入上面的待处理件数。']))
-  details.append(renderGroups(rows, handlers))
+  details.append(el('p', { class: 'hint' }, ['只有「只是提及」。不计入上面的待处理件数。']))
+  const list = el('div', { class: 'maybe-list' })
+  for (const row of rows) list.append(renderRow(row, handlers))
+  details.append(list)
   return details
 }
 
@@ -242,12 +298,14 @@ function renderRow(row: WaitingRow, handlers: {
     }
     handlers.open(row.url)
   })
-  const actionName = row.action || '要你动手'
-  const chip = el('span', {
-    class: `chip chip-${ACTION_CLASS[actionName] ?? 'act-do'}`,
-    title: row.reasons.join(' · ')
-  }, [actionName])
-  const viaNames = row.reasons.filter(reason => PROVENANCE.has(reason))
+  const actionName = rowActionLabel(row)
+  const chip = actionName
+    ? el('span', {
+      class: row.tier === 'weak' ? 'chip chip-mention' : `chip chip-${ACTION_CLASS[actionName] ?? 'act-do'}`,
+      title: row.tier === 'weak' ? '不计入待处理件数' : row.reasons.join(' · ')
+    }, [actionName])
+    : null
+  const viaNames = row.tier === 'weak' ? [] : row.reasons.filter(reason => PROVENANCE.has(reason))
   const via = viaNames.length > 0
     ? el('span', { class: 'waiting-via' }, [viaNames.join(' · ')])
     : null
@@ -284,13 +342,22 @@ function renderRow(row: WaitingRow, handlers: {
     ])
     actions.append(snooze, ignore)
   }
-  const body = [days, title, chip, meta, actions]
+  const body: Array<Node | string | null> = [days, title, chip, meta, actions]
   if (via) body.splice(3, 0, via)
-  const reason = el('p', { class: 'waiting-reason' }, [row.signalText || row.reasons.join(' · ') || '等待'])
+  const excerpt = row.signalText.trim()
+  const ownLabel = ownRequestLabel(row)
+  const reason = excerpt
+    ? el('p', { class: 'waiting-reason' }, [
+      ...(ownLabel ? [el('span', { class: 'chip chip-own' }, [ownLabel])] : []),
+      excerpt
+    ])
+    : row.tier === 'weak'
+      ? null
+      : el('p', { class: 'waiting-reason' }, [row.reasons.join(' · ') || '等待'])
   return el('div', {
     class: `waiting-row age-${age}${row.ignored ? ' is-ignored' : ''}`,
     'data-row-id': row.id
-  }, [...body, reason])
+  }, [...body, reason].filter((node): node is Node | string => node != null))
 }
 
 export async function renderWaiting(
@@ -308,7 +375,9 @@ export async function renderWaiting(
     showIgnored: false,
     hiddenCount: 0,
     hiddenRepos: [],
-    todosAvailable: false
+    todosAvailable: false,
+    maybeWhenEmpty: null,
+    maybeWhenListed: null
   }
   const apply = (snapshot: WaitingSnapshot) => {
     paint(host, snapshot, {
@@ -321,6 +390,7 @@ export async function renderWaiting(
       hideRepo: repo => { void act(api => api.hideWaitingRepo(repo)) },
       unhideRepo: repo => { void act(api => api.unhideWaitingRepo(repo)) },
       toggleIgnored: show => { void act(api => api.setShowIgnored(show)) },
+      rememberMaybe: open => { void act(api => api.setMaybeSectionOpen(open)) },
       open: url => { void window.arckeep.openExternal(url) }
     })
   }

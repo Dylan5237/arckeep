@@ -28,6 +28,7 @@ export const IpcChannel = {
   hideWaitingRepo: 'waiting:hide-repo',
   unhideWaitingRepo: 'waiting:unhide-repo',
   setShowIgnored: 'waiting:show-ignored',
+  setMaybeSectionOpen: 'waiting:maybe-section',
   setWaiting: 'waiting:set-config',
   openExternal: 'waiting:open-external',
   advanceWaitingDays: 'waiting:advance-days',

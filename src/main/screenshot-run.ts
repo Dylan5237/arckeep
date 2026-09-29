@@ -413,6 +413,7 @@ export async function presentScreenshot(options: {
     || scene === 'waiting-related'
     || scene === 'waiting-related-open'
     || scene === 'waiting-maybe-only'
+    || scene === 'waiting-maybe-collapsed'
   ) {
     const expected = scene === 'waiting' || scene === 'waiting-narrow'
       ? '验收北区截图'
@@ -430,27 +431,65 @@ export async function presentScreenshot(options: {
                   ? 'GitHub 认证无效或已过期'
                   : scene === 'waiting-loading'
                     ? '正在刷新'
-                    : scene === 'waiting-maybe-only'
+                    : scene === 'waiting-maybe-only' || scene === 'waiting-maybe-collapsed'
                       ? '没有明确等你的事 · 另有 6 条可能相关'
                       : scene === 'waiting-related' || scene === 'waiting-related-open'
                         ? '可能相关 · 6'
                         : '速率限制'
     await waitUntil(contents, includesText(expected), expected)
-    if (scene === 'waiting-related' || scene === 'waiting-related-open' || scene === 'waiting-maybe-only') {
+    if (scene === 'waiting') {
+      await contents.executeJavaScript(`
+        const own = [...document.querySelectorAll('.waiting-reason')].find(node => node.querySelector('.chip-own'))
+        if (!own) throw new Error('own request label missing')
+        const label = own.querySelector('.chip-own')?.textContent?.trim() ?? ''
+        if (label !== '你写的') throw new Error('own label: ' + label)
+        const text = own.textContent ?? ''
+        if (!text.includes('请确认这一版能否合入')) throw new Error('own excerpt missing: ' + text)
+        const foreign = [...document.querySelectorAll('.waiting-reason')].find(node => (node.textContent ?? '').includes('请求 @ada review'))
+        if (!foreign) throw new Error('other request missing')
+        if (foreign.querySelector('.chip-own')) throw new Error('other request labeled 你写的')
+        true
+      `)
+    }
+    if (scene === 'waiting-related' || scene === 'waiting-related-open' || scene === 'waiting-maybe-only' || scene === 'waiting-maybe-collapsed') {
       await contents.executeJavaScript(`
         const details = document.querySelector('details.maybe-related')
         if (!(details instanceof HTMLDetailsElement)) throw new Error('maybe section missing')
         const summary = details.querySelector('summary')?.textContent ?? ''
         if (!/^可能相关 · \\d+$/.test(summary.trim())) throw new Error('maybe header missing count: ' + summary)
-        details.open = ${scene === 'waiting-related-open' ? 'true' : 'false'}
-        if (${scene === 'waiting-maybe-only' ? 'true' : 'false'}) {
+        if (${scene === 'waiting-maybe-only' ? 'true' : 'false'} && !details.open) {
+          throw new Error('maybe section should start open on the first empty-main visit')
+        }
+        if (${scene === 'waiting-maybe-collapsed' ? 'true' : 'false'} && details.open) {
+          throw new Error('a saved collapse should stay collapsed')
+        }
+        if (${scene === 'waiting-related' ? 'true' : 'false'} && details.open) {
+          throw new Error('maybe section should start collapsed when the main list has rows')
+        }
+        if (${scene === 'waiting-related-open' ? 'true' : 'false'}) details.open = true
+        const weakText = details.innerText
+        if (weakText.includes('两周以上') || weakText.includes('3–13 天') || weakText.includes('近 3 天')) {
+          throw new Error('weak rows must stay one list')
+        }
+        if (${scene === 'waiting-related-open' || scene === 'waiting-maybe-only' ? 'true' : 'false'}) {
+          const chips = [...details.querySelectorAll('.waiting-row .chip')].map(chip => chip.textContent ?? '')
+          if (chips.length === 0) throw new Error('expanded weak rows missing')
+          if (chips.some(label => label.includes('要你动手'))) throw new Error('weak row still uses 要你动手')
+          if (!chips.every(label => label.trim() === '只是提及')) throw new Error('weak row label: ' + chips.join(','))
+          const excerpts = [...details.querySelectorAll('.waiting-reason')].map(node => node.textContent ?? '')
+          if (excerpts.some(text => text.includes('没有明确请求') || text.includes('正文里提到了'))) {
+            throw new Error('weak excerpt is commentary')
+          }
+          if (!excerpts.some(text => text.includes('@ada'))) throw new Error('weak excerpt is not source text')
+        }
+        if (${scene === 'waiting-maybe-only' || scene === 'waiting-maybe-collapsed' ? 'true' : 'false'}) {
           const text = document.body.innerText
           if (text.includes('全部处理完了')) throw new Error('all-done copy shown beside weak rows')
           if ([...document.querySelectorAll('.waiting-groups')].some(group => !details.contains(group))) {
             throw new Error('main list should be empty')
           }
         }
-        details.scrollIntoView({ block: ${scene === 'waiting-maybe-only' ? "'nearest'" : "'start'"} })
+        if (${scene === 'waiting-related' || scene === 'waiting-related-open' ? 'true' : 'false'}) details.scrollIntoView({ block: 'start' })
         true
       `)
       await new Promise(resolve => setTimeout(resolve, 80))

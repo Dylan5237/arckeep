@@ -41,7 +41,7 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
   const card = el('section', { class: 'card' }, [
     el('h2', {}, ['等我处理']),
     el('p', { class: 'hint' }, [
-      '主列表只收明确请求、状态头、review、标签、指派且有请求，以及连续无动静的 PR。仅提及和正文里散落的关键词放在「可能相关」。代码围栏、需求、路线图、变更史、人员表和步骤表不参与判断。状态文档正则示例：等 ?Dylan|AWAITING ACCEPT|HUMAN_REQUIRED|needs-dylan'
+      '主列表收明确请求、正文里任意一节状态、review、包含待处理词的标签、尚未完成的指派，以及连续无动静的 PR。你自己的最新评论里如果还有明确请求，也算。可能相关只放「只是提及」。代码围栏、需求、路线图、变更史、人员表和步骤表不参与判断。状态文档正则示例：等 ?Dylan|AWAITING ACCEPT|HUMAN_REQUIRED|needs-dylan'
     ])
   ])
   const sources: WaitingSources = { ...config.sources }

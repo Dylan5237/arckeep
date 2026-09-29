@@ -110,7 +110,7 @@ describe('source classification', () => {
     const review = classifyRecord(record({
       kind: 'pr',
       number: 2,
-      title: 'Review me',
+      title: 'Diff me',
       fromReview: true,
       reviewRequestedAt: '2026-09-21T00:00:00.000Z',
       inScopeRepo: false
@@ -178,7 +178,7 @@ describe('source classification', () => {
       kind: 'issue',
       number: 9,
       title: 'Need a person',
-      body: '待验收',
+      body: '请确认',
       inScopeRepo: true,
       repoPushedAt: quiet
     }), rules, NOW)
@@ -244,8 +244,7 @@ describe('human action signals', () => {
       body: '等Dylan',
       comments: [{ body: '继续看实现', createdAt: '2026-09-20T00:00:00.000Z' }]
     }), rules, NOW)
-    expect(staleSignal?.tier).toBe('weak')
-    expect(staleSignal?.reasons).toEqual(['要人动手'])
+    expect(staleSignal).toBeNull()
 
     const labelStillOn = classifyRecord(record({
       kind: 'issue',
@@ -278,7 +277,7 @@ describe('human action signals', () => {
       kind: 'issue',
       number: 20,
       title: 'Parent',
-      body: '待验收',
+      body: '请确认',
       createdAt: '2026-09-01T00:00:00.000Z'
     }), rulesOn, NOW)
     const child = classifyRecord(record({
@@ -441,7 +440,7 @@ describe('repo activity scope', () => {
               pushedAt: quietPush,
               issues: {
                 pageInfo: { hasNextPage: false },
-                nodes: [issueNode('example/quiet', 61, 'Need a person', '待验收')]
+                nodes: [issueNode('example/quiet', 61, 'Need a person', '请确认')]
               },
               pullRequests: {
                 pageInfo: { hasNextPage: false },
