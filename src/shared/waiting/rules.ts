@@ -30,7 +30,7 @@ const DEFAULT_KEYWORDS = [
   '明示接受或拒收'
 ]
 
-const DEFAULT_REQUEST_VERBS = ['请', '需', 'please', 'need', '等']
+const DEFAULT_REQUEST_VERBS = ['请', '需', 'please', 'need', '等', '裁决', '拍板', '确认', '定夺', '决定', 'review', 'approve', 'accept']
 
 const DEFAULT_REQUEST_ACTIONS = ['确认', '接受', '拒收', '验收', '决定', 'review', 'approve', 'confirm', 'accept']
 

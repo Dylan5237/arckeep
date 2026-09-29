@@ -533,6 +533,10 @@ textarea {
   margin: 4px 8px 8px;
 }
 
+.maybe-list .waiting-row {
+  border-top: 1px solid var(--arckeep-soft-stone);
+}
+
 .auth-alert {
   display: flex;
   align-items: center;
@@ -659,6 +663,13 @@ textarea {
   white-space: nowrap;
 }
 
+.chip-mention { background: var(--arckeep-soft-stone); color: var(--arckeep-muted-graphite); }
+.chip-own {
+  margin-right: 6px;
+  vertical-align: middle;
+  background: var(--arckeep-soft-stone);
+  color: var(--arckeep-muted-graphite);
+}
 .chip-act-do { background: #F3D9D2; color: #7A2E22; }
 .chip-act-review { background: #F3E4C8; color: #6A4A16; }
 .chip-act-push { background: #E8DDF0; color: #4C3268; }

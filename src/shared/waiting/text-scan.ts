@@ -4,8 +4,8 @@ import type { GithubRecord, WaitingConfig } from './types.js'
 const FENCE = /```[\s\S]*?```|~~~[\s\S]*?~~~/g
 const EXCLUDED_CHINESE = ['需求', '功能说明', '功能描述', '功能设计', '验收标准', '用户故事', '背景', '设计', '规格', '路线图', '变更记录', '更新日志', '历史', '人员', '成员', '花名册', '分析报告', '误报分析', '复盘']
 const EXCLUDED_ASCII = /^(?:spec|feature|prd|roadmap|changelog|history|roster|people)\b/i
-const STATUS_HEADING = /^(?:状态|现状|进度|当前状态)$/u
-const STATUS_ASCII = /^status\b/i
+const STATUS_HEADING = /^(?:状态|现状|进度|当前状态|一眼状态)$/u
+const STATUS_ASCII = /^(?:current status|status)\b/i
 const ROSTER_HEADER = /负责人|人员|成员|owner|assignee|roster|people|花名册/i
 const CHECKLIST_HEADER = /步骤|清单|checklist|任务|task|step/i
 
@@ -144,14 +144,69 @@ export function readableBody(markdown: string, leadingOnly: boolean): string {
   return kept.join('\n').trim()
 }
 
-export function latestOtherComment(record: GithubRecord): ScannedText | null {
+/** Every status subsection, from its heading through the next heading of the same level. */
+export function statusSectionTexts(markdown: string): string[] {
+  const lines = stripFences(markdown).split(/\r?\n/)
+  const sections: string[] = []
+  let index = 0
+  while (index < lines.length) {
+    const heading = headingOf(lines[index] ?? '')
+    if (!heading || !statusHeading(heading.title)) {
+      index += 1
+      continue
+    }
+    const level = heading.level
+    index += 1
+    const kept: string[] = []
+    while (index < lines.length) {
+      const next = headingOf(lines[index] ?? '')
+      if (next && next.level <= level) break
+      if (isTableLine(lines[index] ?? '')) {
+        const table = skipTable(lines, index)
+        index = table.next
+        if (table.text) kept.push(table.text)
+        continue
+      }
+      const visible = bodyLine(lines[index] ?? '')
+      if (visible.trim()) kept.push(visible)
+      index += 1
+    }
+    const text = kept.join('\n').trim()
+    if (text) sections.push(text)
+  }
+  return sections
+}
+
+export function latestStatusText(markdown: string): string {
+  const sections = statusSectionTexts(markdown)
+  return sections[sections.length - 1] ?? ''
+}
+
+const CLOSED_STATUS = /(?:closed|done|已关闭)/giu
+
+/** The latest status subsection says the work is done or closed. No subsection means it is still open. */
+export function statusIsDoneOrClosed(text: string, config: WaitingConfig): boolean {
+  if (!text.trim()) return false
+  const resolved = config.resolvedSignals.map(pattern => safeRegex(pattern))
+  if (evaluateSignals(text, [], resolved) === 'resolved') return true
+  for (const match of text.matchAll(CLOSED_STATUS)) {
+    const at = match.index ?? 0
+    if (!isNegatedSignal(text, at, at + match[0].length)) return true
+  }
+  return false
+}
+
+export function latestComment(record: GithubRecord): (ScannedText & { own: boolean }) | null {
   const viewer = (record.viewerLogin ?? '').trim().toLowerCase()
   for (let index = record.comments.length - 1; index >= 0; index -= 1) {
     const comment = record.comments[index]
-    if (!comment) continue
+    if (!comment?.body.trim()) continue
     const author = (comment.authorLogin ?? '').trim().toLowerCase()
-    if (viewer && author && author === viewer) continue
-    return { text: stripFences(comment.body).trim(), at: comment.createdAt || null }
+    return {
+      text: stripFences(comment.body).trim(),
+      at: comment.createdAt || null,
+      own: Boolean(viewer && author && author === viewer)
+    }
   }
   return null
 }
@@ -211,6 +266,30 @@ function patternHits(text: string, patterns: readonly RegExp[]): boolean {
   })
 }
 
+/** The sentence that names the viewer. Empty when the source has no such sentence. */
+export function mentionSentence(record: GithubRecord): string {
+  const login = (record.viewerLogin ?? '').trim()
+  const needles = [login ? `@${login}` : '', login].filter(needle => needle.length > 0)
+  const chunks: string[] = []
+  for (let index = record.comments.length - 1; index >= 0; index -= 1) {
+    const comment = record.comments[index]
+    if (comment?.body) chunks.push(stripFences(comment.body))
+  }
+  if (record.body) chunks.push(stripFences(record.body))
+  for (const chunk of chunks) {
+    for (const sentence of splitSentences(chunk)) {
+      const text = sentence.text.replace(/\s+/g, ' ').trim()
+      if (!text) continue
+      const folded = text.toLowerCase()
+      const named = needles.length > 0
+        ? needles.some(needle => folded.includes(needle.toLowerCase()))
+        : /@[A-Za-z0-9]/.test(text)
+      if (named) return text.slice(0, 160)
+    }
+  }
+  return ''
+}
+
 export function userPatterns(record: GithubRecord, config: WaitingConfig): RegExp[] {
   const compiled = config.roleNames.map(pattern => safeRegex(pattern))
   const login = (record.viewerLogin ?? '').trim()
@@ -259,6 +338,8 @@ export interface TextHit {
   rule: string
   excerpt: string
   at: string | null
+  /** The hit is the signed-in user's own latest explicit request. */
+  own?: boolean
 }
 
 function clipSentence(sentence: string): string {
@@ -345,12 +426,66 @@ function scanPlace(text: string, at: string | null, config: WaitingConfig, viewe
   return null
 }
 
+function ownRequest(text: string, at: string | null, config: WaitingConfig, viewer: string, names: readonly RegExp[]): TextHit | null {
+  for (const sentence of splitSentences(text)) {
+    const request = explicitRequest(sentence.text, config, viewer, names)
+    if (request) return { rule: '明确请求', excerpt: request, at, own: true }
+  }
+  return null
+}
+
+/** The title alone. A configured request verb is enough; the body does not have to repeat it. */
+function titleRequest(title: string, config: WaitingConfig): TextHit | null {
+  const text = title.replace(/\s+/g, ' ').trim()
+  if (!text) return null
+  if (verbAt(text, config.requestVerbs).length === 0) return null
+  return { rule: '明确请求', excerpt: clipSentence(text), at: null }
+}
+
+/**
+ * Newest comment first. A comment that closes the matter blocks older requests.
+ * A placeholder or acknowledgement does not, so an earlier explicit request still counts.
+ * Only the newest comment is marked as the signed-in user's own request.
+ */
+function commentThreadHit(record: GithubRecord, config: WaitingConfig, viewer: string, names: readonly RegExp[]): TextHit | null {
+  const viewerLogin = viewer.trim().toLowerCase()
+  let newest = true
+  let scannedOther = false
+  for (let index = record.comments.length - 1; index >= 0; index -= 1) {
+    const comment = record.comments[index]
+    if (!comment?.body.trim()) continue
+    const text = stripFences(comment.body).trim()
+    if (!text) continue
+    if (commentCloses(text, config)) return null
+    const author = (comment.authorLogin ?? '').trim().toLowerCase()
+    const own = Boolean(viewerLogin && author && author === viewerLogin)
+    const at = comment.createdAt || null
+    if (newest) {
+      newest = false
+      const hit = own ? ownRequest(text, at, config, viewer, names) : scanPlace(text, at, config, viewer, names)
+      if (hit) return hit
+      if (!own) scannedOther = true
+      continue
+    }
+    if (!own && !scannedOther) {
+      scannedOther = true
+      const hit = scanPlace(text, at, config, viewer, names)
+      if (hit) return hit
+      continue
+    }
+    const earlier = ownRequest(text, at, config, viewer, names)
+    if (earlier) return { rule: earlier.rule, excerpt: earlier.excerpt, at }
+  }
+  return null
+}
+
 export function strongText(record: GithubRecord, config: WaitingConfig): TextHit | null {
   const names = userPatterns(record, config)
   const viewer = record.viewerLogin ?? ''
-  const comment = latestOtherComment(record)
-  if (comment?.text) {
-    const hit = scanPlace(comment.text, comment.at, config, viewer, names)
+  const fromComments = commentThreadHit(record, config, viewer, names)
+  if (fromComments) return fromComments
+  for (const section of statusSectionTexts(record.body)) {
+    const hit = scanPlace(section, record.createdAt || null, config, viewer, names)
     if (hit) return hit
   }
   const leading = readableBody(record.body, true)
@@ -365,6 +500,8 @@ export function strongText(record: GithubRecord, config: WaitingConfig): TextHit
       if (hit) return hit
     }
   }
+  const fromTitle = titleRequest(record.title, config)
+  if (fromTitle) return { ...fromTitle, at: record.createdAt || null }
   return null
 }
 
@@ -393,12 +530,10 @@ export function weakKeyword(record: GithubRecord, config: WaitingConfig): string
 export function labelMatches(name: string, patterns: readonly string[]): boolean {
   const label = name.trim().toLowerCase()
   return patterns.some(pattern => {
-    const raw = pattern.trim()
+    const raw = pattern.trim().toLowerCase()
     if (!raw) return false
-    if (raw.endsWith('*') && !/[*?[\]\\]/.test(raw.slice(0, -1))) {
-      return label.startsWith(raw.slice(0, -1).toLowerCase())
-    }
-    return label === raw.toLowerCase()
+    const token = raw.endsWith('*') ? raw.slice(0, -1) : raw
+    return token.length > 0 && label.includes(token)
   })
 }
 

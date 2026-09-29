@@ -49,7 +49,13 @@ function loadMemory(file: string): { memory: WaitingMemory, refreshedAt: string 
   }
 }
 
-function loadDismissals(file: string): { items: DismissalMap, hiddenRepos: string[], revealedParked: string[] } {
+function loadDismissals(file: string): {
+  items: DismissalMap
+  hiddenRepos: string[]
+  revealedParked: string[]
+  maybeWhenEmpty: boolean | null
+  maybeWhenListed: boolean | null
+} {
   return readDismissalState(readJson(file))
 }
 
@@ -70,6 +76,8 @@ function snapshotOf(input: {
   hiddenRepos: readonly string[]
   parkedRepos: readonly string[]
   revealedParked: readonly string[]
+  maybeWhenEmpty: boolean | null
+  maybeWhenListed: boolean | null
 }): { snapshot: WaitingSnapshot, dismissals: DismissalMap } {
   const hiddenRepos = effectiveHiddenRepos(input.hiddenRepos, input.parkedRepos, input.revealedParked)
   const visible = partitionDismissals(input.drafts, input.dismissals, input.now, input.showIgnored, hiddenRepos)
@@ -86,7 +94,9 @@ function snapshotOf(input: {
       showIgnored: input.showIgnored,
       hiddenCount: visible.hiddenCount,
       hiddenRepos,
-      todosAvailable: input.todosAvailable
+      todosAvailable: input.todosAvailable,
+      maybeWhenEmpty: input.maybeWhenEmpty,
+      maybeWhenListed: input.maybeWhenListed
     }
   }
 }
@@ -96,6 +106,8 @@ export class WaitingService {
   private dismissals: DismissalMap
   private hiddenRepos: string[]
   private revealedParked: string[]
+  private maybeWhenEmpty: boolean | null
+  private maybeWhenListed: boolean | null
   private parkedRepos: string[] = []
   private refreshedAt: string | null
   private drafts: WaitingDraft[] = []
@@ -122,6 +134,8 @@ export class WaitingService {
     this.dismissals = storedDismissals.items
     this.hiddenRepos = storedDismissals.hiddenRepos
     this.revealedParked = storedDismissals.revealedParked
+    this.maybeWhenEmpty = storedDismissals.maybeWhenEmpty
+    this.maybeWhenListed = storedDismissals.maybeWhenListed
     this.clock = deps.clock ?? createWaitingClock()
     this.snapshot = {
       rows: [],
@@ -134,7 +148,9 @@ export class WaitingService {
       showIgnored: settings.getSettings().waiting.showIgnored,
       hiddenCount: 0,
       hiddenRepos: [...this.hiddenRepos],
-      todosAvailable: (deps.todos ?? pendingTodoProvider).available
+      todosAvailable: (deps.todos ?? pendingTodoProvider).available,
+      maybeWhenEmpty: this.maybeWhenEmpty,
+      maybeWhenListed: this.maybeWhenListed
     }
   }
 
@@ -220,7 +236,9 @@ export class WaitingService {
       todosAvailable: result.todosAvailable,
       hiddenRepos: this.hiddenRepos,
       parkedRepos: this.parkedRepos,
-      revealedParked: this.revealedParked
+      revealedParked: this.revealedParked,
+      maybeWhenEmpty: this.maybeWhenEmpty,
+      maybeWhenListed: this.maybeWhenListed
     })
     this.dismissals = painted.dismissals
     this.persistDismissals()
@@ -273,6 +291,14 @@ export class WaitingService {
     return { ok: true, data: this.repaint() }
   }
 
+  setMaybeSectionOpen(open: unknown): IpcResult<WaitingSnapshot> {
+    if (typeof open !== 'boolean') return { ok: false, error: '展开状态无效' }
+    const mainCount = this.snapshot.rows.filter(row => row.tier !== 'weak').length
+    if (mainCount === 0) this.maybeWhenEmpty = open
+    else this.maybeWhenListed = open
+    return { ok: true, data: this.repaint() }
+  }
+
   setShowIgnored(value: unknown): IpcResult<WaitingSnapshot> {
     if (typeof value !== 'boolean') return { ok: false, error: '显示已忽略的值无效' }
     this.settings.patchShowIgnored(value)
@@ -307,7 +333,9 @@ export class WaitingService {
       todosAvailable: this.snapshot.todosAvailable,
       hiddenRepos: this.hiddenRepos,
       parkedRepos: this.parkedRepos,
-      revealedParked: this.revealedParked
+      revealedParked: this.revealedParked,
+      maybeWhenEmpty: this.maybeWhenEmpty,
+      maybeWhenListed: this.maybeWhenListed
     })
     this.dismissals = painted.dismissals
     this.persistDismissals()
@@ -329,7 +357,9 @@ export class WaitingService {
     writeJson(this.files.dismissals, writeDismissalState({
       items: this.dismissals,
       hiddenRepos: this.hiddenRepos,
-      revealedParked: this.revealedParked
+      revealedParked: this.revealedParked,
+      maybeWhenEmpty: this.maybeWhenEmpty,
+      maybeWhenListed: this.maybeWhenListed
     }))
   }
 }

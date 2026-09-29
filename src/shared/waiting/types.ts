@@ -176,6 +176,8 @@ export interface ReasonDetail {
 export interface WaitingSignal {
   rule: string
   excerpt: string
+  /** The excerpt is the signed-in user's own latest explicit request. */
+  own?: boolean
 }
 
 export interface WaitingDraft {
@@ -239,6 +241,8 @@ export interface WaitingRow {
   childCount: number
   /** One line explaining why this row is here. Same text as the JSON signal excerpt. */
   signalText: string
+  /** Main-list excerpt is the signed-in user's own latest explicit request. */
+  ownRequest: boolean
   tier: WaitingTier
 }
 
@@ -261,6 +265,10 @@ export interface WaitingSnapshot {
   hiddenCount: number
   hiddenRepos: string[]
   todosAvailable: boolean
+  /** Saved open state when the main list is empty. Null means the first visit still uses the default. */
+  maybeWhenEmpty: boolean | null
+  /** Saved open state when the main list has rows. Null means the first visit stays collapsed. */
+  maybeWhenListed: boolean | null
 }
 
 export interface DismissalRecord {
