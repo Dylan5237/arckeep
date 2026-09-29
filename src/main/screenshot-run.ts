@@ -140,7 +140,8 @@ export async function presentScreenshot(options: {
     contents = capture.webContents
     const focused = `document.activeElement === document.querySelector('#text')
       && document.querySelector('#caret')?.hidden === false`
-    const hint = `document.body.innerText.includes('Enter 保存')`
+    const hint = `document.body.innerText.includes('Enter 记下并关闭')
+      && !document.body.innerText.includes('Enter 保存')`
     const expected = scene === 'capture-filled'
       ? `document.querySelector('#text').value === '记一条带仓库的待办'
         && document.querySelector('#repo').value === 'example/demo'
