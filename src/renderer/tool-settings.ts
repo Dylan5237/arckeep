@@ -1,4 +1,5 @@
 import type { ToolFixtureInvalid } from '../shared/tools/fixture'
+import { errorLine } from '../shared/tools/present'
 import type { AppState } from '../shared/types'
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -17,10 +18,69 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 function messageBox(parent: HTMLElement, kind: 'info' | 'error', text: string): void {
   parent.querySelector('.alert')?.remove()
-  parent.insertBefore(
-    el('div', { class: kind === 'error' ? 'alert error' : 'alert', role: kind === 'error' ? 'alert' : 'status' }, [text]),
-    parent.querySelector('textarea')
-  )
+  const anchor = parent.querySelector('.json-shell') ?? parent.querySelector('textarea')
+  const box = el('div', { class: kind === 'error' ? 'alert error' : 'alert', role: kind === 'error' ? 'alert' : 'status' }, [text])
+  if (anchor) parent.insertBefore(box, anchor)
+  else parent.append(box)
+}
+
+function paintJsonGutter(gutter: HTMLElement, text: string, line: number | null): void {
+  gutter.replaceChildren()
+  for (const [index] of text.split('\n').entries()) {
+    const number = index + 1
+    const span = el('span', { class: number === line ? 'json-gutter-line json-gutter-bad' : 'json-gutter-line' })
+    span.textContent = String(number)
+    gutter.append(span)
+  }
+}
+
+function selectErrorLine(editor: HTMLTextAreaElement, line: number | null): void {
+  if (!line) {
+    editor.setSelectionRange(0, 0)
+    return
+  }
+  const lines = editor.value.split('\n')
+  const start = lines.slice(0, line - 1).join('\n').length + (line > 1 ? 1 : 0)
+  const end = start + (lines[line - 1]?.length ?? 0)
+  editor.setSelectionRange(start, end)
+}
+
+function mountJsonEditor(initial: string, line: number | null): {
+  shell: HTMLElement
+  editor: HTMLTextAreaElement
+  setLine: (next: number | null) => void
+} {
+  const shell = el('div', { class: 'json-shell' })
+  const gutter = el('div', { class: 'json-gutter', 'aria-hidden': 'true' })
+  const editor = el('textarea', { id: 'tool-shelf-json', 'aria-label': '工具架 JSON', spellcheck: 'false' })
+  editor.value = initial
+  editor.classList.add('tool-json')
+  let marked = line
+  if (marked) editor.setAttribute('aria-invalid', 'true')
+  const sync = () => {
+    paintJsonGutter(gutter, editor.value, marked)
+    gutter.scrollTop = editor.scrollTop
+  }
+  editor.addEventListener('scroll', () => {
+    gutter.scrollTop = editor.scrollTop
+  })
+  editor.addEventListener('input', sync)
+  sync()
+  selectErrorLine(editor, marked)
+  if (marked && marked > 1) editor.scrollTop = Math.max(0, (marked - 3) * 19)
+  shell.append(gutter, editor)
+  return {
+    shell,
+    editor,
+    setLine(next: number | null) {
+      marked = next
+      if (next) editor.setAttribute('aria-invalid', 'true')
+      else editor.removeAttribute('aria-invalid')
+      sync()
+      selectErrorLine(editor, next)
+      if (next && next > 1) editor.scrollTop = Math.max(0, (next - 3) * 19)
+    }
+  }
 }
 
 export async function renderToolSettings(
@@ -35,9 +95,8 @@ export async function renderToolSettings(
       '动作写在 JSON 里，保存时按 schema/tool-shelf.schema.json 校验。{{参数}} 会在执行前按 shell 加引号，不能写在引号里面。示例在 schema/tool-shelf.example.json。'
     ])
   ])
-  const editor = el('textarea', { id: 'tool-shelf-json', 'aria-label': '工具架 JSON', spellcheck: 'false' })
-  editor.value = invalid?.draft ?? state.toolShelfJson
-  editor.classList.add('tool-json')
+  const markedLine = invalid ? (invalid.line || errorLine(invalid.error)) : null
+  const { shell, editor, setLine } = mountJsonEditor(invalid?.draft ?? state.toolShelfJson, markedLine)
   if (invalid) messageBox(card, 'error', invalid.error)
 
   const save = el('button', { type: 'button', class: 'primary' }, ['保存'])
@@ -48,6 +107,7 @@ export async function renderToolSettings(
     const result = await window.arckeep.setToolShelf(editor.value)
     if (!result.ok) {
       messageBox(card, 'error', result.error)
+      setLine(errorLine(result.error))
       return
     }
     messageBox(card, 'info', '工具架已保存')
@@ -75,7 +135,7 @@ export async function renderToolSettings(
     editor.value = await window.arckeep.getToolExample()
     messageBox(card, 'info', '已填入示例，还没有保存')
   })
-  card.append(editor, el('div', { class: 'actions' }, [save, importFile, exportFile, example]))
+  card.append(shell, el('div', { class: 'actions' }, [save, importFile, exportFile, example]))
   if (invalid) requestAnimationFrame(() => card.scrollIntoView({ block: 'start' }))
   return card
 }

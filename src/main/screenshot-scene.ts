@@ -37,6 +37,7 @@ export const SCREENSHOT_SCENES = [
   'overview-collapsed',
   'overview-archived',
   'overview-empty',
+  'overview-auto-empty',
   'overview-no-token',
   'overview-invalid-token',
   'overview-loading',
@@ -68,10 +69,13 @@ export function parseScreenshotScene(value: string | undefined): ScreenshotScene
 
 export function screenshotWindowSize(scene: ScreenshotScene): { width: number, height: number } {
   if (scene === 'waiting-narrow' || scene === 'overview-narrow') return { width: 800, height: 1680 }
-  if (scene === 'tools-narrow') return { width: 800, height: 1500 }
-  if (scene === 'narrow' || scene === 'todos-narrow') return { width: 800, height: 760 }
-  if (scene === 'tools' || scene === 'tools-running' || scene === 'tools-exit' || scene === 'tools-aborted') {
-    return { width: 1120, height: 1100 }
+  if (scene === 'tools-narrow' || scene === 'narrow' || scene === 'todos-narrow') return { width: 800, height: 760 }
+  if (scene === 'tools') return { width: 1120, height: 760 }
+  if (scene === 'tools-running' || scene === 'tools-success' || scene === 'tools-failed' || scene === 'tools-aborted') {
+    return { width: 1120, height: 900 }
+  }
+  if (scene === 'tools-preview' || scene === 'tools-params' || scene === 'tools-copied') {
+    return { width: 1120, height: 860 }
   }
   if (scene === 'tools-invalid') return { width: 1120, height: 980 }
   if (scene === 'waiting-hover' || scene === 'waiting-ignore' || scene === 'overview-chip-hover') return { width: 1180, height: 900 }
@@ -143,7 +147,7 @@ export function screenshotReadyText(scene: ScreenshotScene): string {
   if (scene === 'waiting-rate-limit') return '速率限制'
   if (scene === 'overview' || scene === 'overview-narrow' || scene === 'overview-collapsed') return 'harbor/lumen'
   if (scene === 'overview-archived') return '已归档'
-  if (scene === 'overview-empty') return '还没有可显示的仓库'
+  if (scene === 'overview-empty' || scene === 'overview-auto-empty') return '还没有可显示的仓库'
   if (scene === 'overview-chip-hover') return '卡住：CI 失败'
   if (scene === 'overview-no-token') return '未配置 GitHub 认证'
   if (scene === 'overview-invalid-token') return 'GitHub 认证无效或已过期'

@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { buildPreview } from '../shared/tools/preview.js'
+import type { KnownRepo } from '../shared/tools/repos.js'
 import type { ActionPreview } from '../shared/tools/types.js'
 import { validateToolShelfText } from './tool-validate.js'
 
@@ -26,13 +27,14 @@ export function previewStoredAction(
   json: string,
   actionId: string,
   params: Record<string, string>,
-  baseCwd: string
+  baseCwd: string,
+  knownRepos: readonly KnownRepo[] = []
 ): ActionPreview {
   const validated = validateToolShelfText(json)
   if (!validated.ok) throw new Error(validated.error)
   const action = validated.config.actions.find(item => item.id === actionId)
   if (!action) throw new Error('没有这个动作')
-  const preview = buildPreview(action, params, baseCwd, process.env.ARCKEEP_POWERSHELL || 'powershell.exe')
+  const preview = buildPreview(action, params, baseCwd, knownRepos)
   if (preview.cwd) preview.cwd = path.resolve(preview.cwd)
   return preview
 }

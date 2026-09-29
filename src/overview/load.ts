@@ -1,6 +1,7 @@
 import { githubData, githubErrorMessages, githubGraphql } from '../github/client.js'
-import { classifyOverview, inAutoScope, mapCiState, selectOverviewRows } from '../shared/overview/classify.js'
+import { classifyOverview, hasOverviewPushAccess, inAutoScope, mapCiState, selectOverviewRows } from '../shared/overview/classify.js'
 import type { OverviewConfig, OverviewPullRequest, OverviewRepoFacts, OverviewRow, OverviewSourceError } from '../shared/overview/types.js'
+import { laterIso } from '../shared/waiting/days.js'
 import { GithubAuthError, GithubRateLimitError, earlierReset } from '../shared/waiting/rate-limit.js'
 
 const BATCH = 8
@@ -20,6 +21,7 @@ interface ListedRepo {
   isEmpty: boolean
   pushedAt: string | null
   archived: boolean
+  permission: string | null
 }
 
 function splitRepo(full: string): { owner: string, name: string } | null {
@@ -46,41 +48,42 @@ function readListed(node: unknown): ListedRepo | null {
   if (!node || typeof node !== 'object') return null
   const name = 'nameWithOwner' in node && typeof node.nameWithOwner === 'string' ? node.nameWithOwner : ''
   if (!splitRepo(name)) return null
+  const permission = 'viewerPermission' in node && typeof node.viewerPermission === 'string'
+    ? node.viewerPermission
+    : null
+  if (!hasOverviewPushAccess(permission)) return null
   return {
     name,
     isEmpty: 'isEmpty' in node && node.isEmpty === true,
     pushedAt: 'pushedAt' in node && typeof node.pushedAt === 'string' ? node.pushedAt : null,
-    archived: 'isArchived' in node && node.isArchived === true
+    archived: 'isArchived' in node && node.isArchived === true,
+    permission
   }
 }
 
 async function discoverRepos(
   token: string,
   fetchImpl: typeof fetch,
-  connection: 'repositories' | 'watching',
   limit: number
 ): Promise<{ repos: ListedRepo[], truncated: boolean }> {
   const repos: ListedRepo[] = []
   let cursor: string | null = null
   let truncated = false
-  const field = connection === 'repositories'
-    ? `repositories(first: ${REPO_PAGE_SIZE}, after: $cursor, ownerAffiliations: [OWNER], orderBy: {field: PUSHED_AT, direction: DESC})`
-    : `watching(first: ${REPO_PAGE_SIZE}, after: $cursor)`
   const pageCap = Math.max(1, Math.ceil(Math.max(limit, 1) / REPO_PAGE_SIZE) + 1)
   for (let page = 0; page < pageCap && repos.length < limit; page += 1) {
     const payload = await githubGraphql(token, `
       query($cursor: String) {
         viewer {
-          ${field} {
+          repositories(first: ${REPO_PAGE_SIZE}, after: $cursor, ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER], orderBy: {field: PUSHED_AT, direction: DESC}) {
             pageInfo { hasNextPage endCursor }
-            nodes { nameWithOwner isEmpty pushedAt isArchived }
+            nodes { nameWithOwner isEmpty pushedAt isArchived viewerPermission }
           }
         }
       }
     `, { cursor }, fetchImpl)
     const viewer = githubData(payload).viewer
-    const listed = viewer && typeof viewer === 'object' && connection in viewer
-      ? (viewer as Record<string, unknown>)[connection]
+    const listed = viewer && typeof viewer === 'object' && 'repositories' in viewer
+      ? (viewer as { repositories?: unknown }).repositories
       : null
     const batch = connectionPage(listed)
     for (const node of batch.nodes) {
@@ -139,6 +142,21 @@ const REPO_FIELDS = `
       reviews(states: APPROVED, first: 1) { totalCount }
     }
   }
+  issues(states: [OPEN, CLOSED], first: 1, orderBy: {field: UPDATED_AT, direction: DESC}) {
+    nodes {
+      createdAt
+      updatedAt
+      comments(last: 1) { nodes { createdAt } }
+    }
+  }
+  recentPulls: pullRequests(states: [OPEN, CLOSED, MERGED], first: 1, orderBy: {field: UPDATED_AT, direction: DESC}) {
+    nodes {
+      createdAt
+      updatedAt
+      comments(last: 1) { nodes { createdAt } }
+      reviews(last: 1) { nodes { submittedAt } }
+    }
+  }
 `
 
 function detailQuery(count: number): string {
@@ -165,6 +183,7 @@ function errorFacts(name: string, message: string): OverviewRepoFacts {
     hasDefaultBranchCommit: false,
     pushedAt: null,
     lastCommitAt: null,
+    lastIssueActivityAt: null,
     openPrCount: 0,
     ciState: 'unknown',
     ciFailureUrl: null,
@@ -197,6 +216,67 @@ function failingCheckUrl(rollup: unknown, repoUrl: string): string {
     if (details || target) return details || target || fallback
   }
   return fallback
+}
+
+function readIso(value: unknown): string | null {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : null
+}
+
+function latestStamp(values: Array<string | null>): string | null {
+  let best: string | null = null
+  let bestMs = Number.NEGATIVE_INFINITY
+  for (const value of values) {
+    if (!value) continue
+    const ms = Date.parse(value)
+    if (!Number.isFinite(ms) || ms < bestMs) continue
+    best = value
+    bestMs = ms
+  }
+  return best
+}
+
+function commentStamps(node: object): string[] {
+  const stamps: string[] = []
+  const comments = 'comments' in node ? node.comments : null
+  const commentNodes = comments && typeof comments === 'object' && 'nodes' in comments && Array.isArray(comments.nodes)
+    ? comments.nodes
+    : []
+  for (const comment of commentNodes) {
+    const created = comment && typeof comment === 'object' && 'createdAt' in comment ? readIso(comment.createdAt) : null
+    if (created) stamps.push(created)
+  }
+  const reviews = 'reviews' in node ? node.reviews : null
+  const reviewNodes = reviews && typeof reviews === 'object' && 'nodes' in reviews && Array.isArray(reviews.nodes)
+    ? reviews.nodes
+    : []
+  for (const review of reviewNodes) {
+    const submitted = review && typeof review === 'object' && 'submittedAt' in review ? readIso(review.submittedAt) : null
+    if (submitted) stamps.push(submitted)
+  }
+  return stamps
+}
+
+/** Newest create, update, or comment across the already-sorted issue and pull connections. */
+export function readIssueActivity(node: object): string | null {
+  const issueConnection = 'issues' in node ? node.issues : null
+  const pullConnection = 'recentPulls' in node ? node.recentPulls : null
+  return laterIso(connectionActivity(issueConnection), connectionActivity(pullConnection))
+}
+
+function connectionActivity(connection: unknown): string | null {
+  if (!connection || typeof connection !== 'object' || !('nodes' in connection) || !Array.isArray(connection.nodes)) {
+    return null
+  }
+  const stamps: string[] = []
+  for (const item of connection.nodes) {
+    if (!item || typeof item !== 'object') continue
+    const created = 'createdAt' in item ? readIso(item.createdAt) : null
+    const updated = 'updatedAt' in item ? readIso(item.updatedAt) : null
+    if (created) stamps.push(created)
+    if (updated) stamps.push(updated)
+    stamps.push(...commentStamps(item))
+  }
+  return latestStamp(stamps)
 }
 
 function readPull(node: unknown): OverviewPullRequest | null {
@@ -254,6 +334,7 @@ export function parseRepositoryNode(node: unknown, requestedName: string): Overv
     hasDefaultBranchCommit: Boolean(oid || committedDate),
     pushedAt: 'pushedAt' in node && typeof node.pushedAt === 'string' ? node.pushedAt : null,
     lastCommitAt: committedDate,
+    lastIssueActivityAt: readIssueActivity(node),
     openPrCount,
     ciState: mapCiState(rollupState),
     ciFailureUrl,
@@ -346,23 +427,12 @@ export async function loadOverview(options: {
       }
       names = options.watchedRepos.slice(0, limit)
     } else {
-      const owned = await discoverRepos(options.token, fetchImpl, 'repositories', limit)
-      const room = Math.max(0, limit - owned.repos.length)
-      let watchingRepos: ListedRepo[] = []
-      let watchingTruncated = false
-      if (room > 0) {
-        const watching = await discoverRepos(options.token, fetchImpl, 'watching', room)
-        watchingRepos = watching.repos
-        watchingTruncated = watching.truncated
-      } else if (!owned.truncated) {
-        const peek = await discoverRepos(options.token, fetchImpl, 'watching', 1)
-        watchingTruncated = peek.repos.length > 0
-      }
-      if (owned.truncated || watchingTruncated) {
+      const owned = await discoverRepos(options.token, fetchImpl, limit)
+      if (owned.truncated) {
         notices.push(`仓库数量达到上限 ${limit}，其余仓库没有继续查询。到设置里调高「仓库数量上限」。`)
       }
       const seen = new Set<string>()
-      for (const repo of [...owned.repos, ...watchingRepos]) {
+      for (const repo of owned.repos) {
         const key = repo.name.toLowerCase()
         if (seen.has(key)) continue
         seen.add(key)

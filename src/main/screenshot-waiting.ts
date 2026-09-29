@@ -126,6 +126,8 @@ export function createScreenshotWaiting(scene: ScreenshotScene): {
   unhideRepo: (repo?: unknown) => IpcResult<WaitingSnapshot>
   setShowIgnored: (value?: unknown) => IpcResult<WaitingSnapshot>
   advanceDays: (days?: unknown) => IpcResult<WaitingSnapshot>
+  observedGithubRepos: () => readonly string[]
+  observedLocalLinks: () => readonly { github: string, path: string }[]
 } {
   const snapshot = screenshotWaitingSnapshot(scene)
   const refresh = scene === 'waiting-loading'
@@ -141,6 +143,8 @@ export function createScreenshotWaiting(scene: ScreenshotScene): {
     hideRepo: () => ok(),
     unhideRepo: () => ok(),
     setShowIgnored: () => ok(),
-    advanceDays: () => ({ ok: false, error: '测试钩子未开启' })
+    advanceDays: () => ({ ok: false, error: '测试钩子未开启' }),
+    observedGithubRepos: () => [],
+    observedLocalLinks: () => []
   }
 }

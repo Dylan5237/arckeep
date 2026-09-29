@@ -1,10 +1,14 @@
 export type ShellKind = 'cmd' | 'powershell' | 'git-bash'
 
+export type ToolParamInput = 'line' | 'multiline' | 'directory' | 'repo'
+
 export interface ToolParam {
   key: string
   label: string
   default?: string
   required?: boolean
+  /** line: single-line text. multiline: template body. directory / repo: pickers. */
+  input?: ToolParamInput
 }
 
 interface ToolActionBase {
@@ -12,6 +16,11 @@ interface ToolActionBase {
   title: string
   description?: string
   params?: ToolParam[]
+  /**
+   * Confirm-button text. Placeholders use the values the user filled in.
+   * This is a label, not a shell command.
+   */
+  confirmLabel?: string
 }
 
 export interface OpenUrlAction extends ToolActionBase {
@@ -29,6 +38,11 @@ export interface RunCommandAction extends ToolActionBase {
   type: 'run-command'
   shell: ShellKind
   command: string
+  /**
+   * Optional command shown in the preview (often with --dry-run).
+   * Confirm runs `command`, never this string.
+   */
+  previewCommand?: string
   cwd?: string
 }
 
@@ -48,8 +62,13 @@ export interface ActionPreview {
   actionId: string
   title: string
   type: ToolAction['type']
-  /** Exact URL, argv display, shell script, or clipboard text that confirm will use. */
+  /**
+   * What confirm uses: URL, folder display, clipboard text, or the shell script.
+   * The script is the user command, without runner details such as `exit $LASTEXITCODE`.
+   */
   text: string
+  /** Dry-run (or other preview) command. Shown only. Confirm does not run it. */
+  dryRun?: string
   shell?: ShellKind
   cwd?: string
   argv?: string[]

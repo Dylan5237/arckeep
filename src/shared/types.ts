@@ -1,12 +1,14 @@
 import type { OverviewConfig, OverviewSnapshot } from './overview/types.js'
 import type { CaptureDraft, TodoItem, TodoUpdate } from './todos/types.js'
 import type { ToolFixture } from './tools/fixture.js'
+import type { KnownRepo } from './tools/repos.js'
 import type { ActionPreview, ToolAction, ToolRunEvent } from './tools/types.js'
 import type { WaitingConfig, WaitingSnapshot } from './waiting/types.js'
 
 export type { OverviewConfig, OverviewSnapshot } from './overview/types.js'
 export type { WaitingConfig, WaitingSnapshot } from './waiting/types.js'
 export type { ToolFixture } from './tools/fixture.js'
+export type { KnownRepo } from './tools/repos.js'
 export type { ActionPreview, ToolAction, ToolRunEvent } from './tools/types.js'
 
 export const DEFAULT_HOTKEY = 'Ctrl+Alt+Space'
@@ -84,6 +86,8 @@ export interface ArckeepApi {
   setToolShelf(json: string): Promise<IpcResult<{ toolShelfJson: string }>>
   getToolExample(): Promise<string>
   getToolCatalog(): Promise<{ ok: true, actions: ToolAction[] } | { ok: false, error: string }>
+  getKnownRepos(): Promise<KnownRepo[]>
+  pickFolder(): Promise<IpcResult<{ cancelled: true } | { cancelled: false, path: string }>>
   importToolShelf(): Promise<IpcResult<{ cancelled: true } | { cancelled: false, text: string }>>
   exportToolShelf(json: string): Promise<IpcResult<{ cancelled: boolean }>>
   previewTool(actionId: string, params: Record<string, string>): Promise<IpcResult<ActionPreview>>

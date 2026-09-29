@@ -26,7 +26,13 @@ npm start
 npm run overview -- --json
 ```
 
-`npm run overview -- --json` 只读查询项目总览，认证用 `gh auth token` 或环境变量 `GITHUB_TOKEN`。默认不含已归档仓库；`--include-archived` 把它们加回来，并带 `archived: true`。`--fixture` 不访问网络。
+`npm run overview -- --json` 只读查询项目总览，认证用 `gh auth token` 或环境变量 `GITHUB_TOKEN`。默认不含已归档仓库；`--include-archived` 把它们加回来，并带 `archived: true`。每行还可以带 `group`（`active` / `stale` / `archived`）和 `stallBasis`（停滞看的是默认分支提交还是 Issue/PR 活动，以及较新的那个时间）。`--fixture` 不访问网络。
+
+关注列表为空时走自动模式：列出你有写权限的全部仓库，也就是你拥有的、你是协作者的、以及你作为组织成员并且有推送权限的（`ADMIN` / `MAINTAIN` / `WRITE`）。只 watch、没有写权限的仓库不会出现，也不会计入页头数量。已归档仓库默认继续排除。没有单独的「最近 push」窗口。两个天数都可以在设置里改，默认是：
+
+- 陈旧 30 天。默认分支提交和 Issue / PR 活动（创建、更新、评论）里较新的那个还在 30 天以内（含刚好 30 天）就留在活跃列表；超过 30 天才进「陈旧」。每个未归档仓库都会落在这两组之一。
+- 停滞 7 天，只判活跃列表里的仓库。默认分支最后一次提交，以及 Issue / PR 活动，两边都满 7 天才算停滞；有一边还在 7 天内就不算。行上的「停滞 X 天」按较新的那一边计算。陈旧分组不再标停滞。
+- 页头「需要看一眼」不算陈旧分组里的任何仓库，包括陈旧的空仓和陈旧仓库上的 CI 失败。这些提醒仍显示在行里。空仓只有留在活跃列表时才计入，并且行里仍显示「空仓」。
 
 设置写在 `app.getPath('userData')`。应用启动时把该目录指到 `%APPDATA%\Arckeep\`（目录名是 `Arckeep`，不是 package 名的小写）。GitHub token 经 Electron `safeStorage` 加密后写入 `settings.json`，不写日志、不以明文落盘。本机 `gh auth token` 可用时优先使用 gh CLI，不把这份 token 再存一份。
 
