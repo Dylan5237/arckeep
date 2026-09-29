@@ -1,0 +1,13 @@
+{
+  "name": "arckeep-verify-issue-4",
+  "private": true,
+  "version": "0.0.0",
+  "description": "独立验收工具：不属于 Arckeep 产品代码，只用来驱动打包好的 Arckeep.exe 做黑盒验收。",
+  "type": "module",
+  "scripts": {
+    "verify": "node run.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.48.0"
+  }
+}
