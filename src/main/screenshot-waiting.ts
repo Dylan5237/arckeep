@@ -103,6 +103,10 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
       todosAvailable: true
     })
   }
+  if (scene === 'waiting-maybe-only') {
+    const rows = sampleWaitingRows().filter(row => row.tier === 'weak')
+    return base({ rows, hiddenCount: 0 })
+  }
   if (scene === 'waiting-empty') return base({ hiddenCount: 0, rows: [] })
   if (scene === 'waiting-no-token') return base({ auth: 'missing', refreshedAt: null, hiddenCount: 0 })
   if (scene === 'waiting-invalid-token') return base({ auth: 'invalid', refreshedAt: null, hiddenCount: 0 })
