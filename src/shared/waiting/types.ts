@@ -139,6 +139,12 @@ export interface ReasonDetail {
   estimated: boolean
 }
 
+/** Which generic rule kept this row, plus a short excerpt of the original text. */
+export interface WaitingSignal {
+  rule: string
+  excerpt: string
+}
+
 export interface WaitingDraft {
   id: string
   repo: string
@@ -159,6 +165,8 @@ export interface WaitingDraft {
   parent: string | number | null
   /** Qualifying child issues included in this same result. */
   childCount: number
+  /** Why this row is waiting. Existing fields stay; this one is extra. */
+  signal: WaitingSignal
 }
 
 export interface WaitingJsonRow {
@@ -173,6 +181,7 @@ export interface WaitingJsonRow {
   daysEstimated: boolean
   parent?: string | number | null
   childCount?: number
+  signal?: WaitingSignal
 }
 
 export interface WaitingRow {

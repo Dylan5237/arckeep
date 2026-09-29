@@ -650,9 +650,24 @@ textarea {
   pointer-events: none;
 }
 
-.waiting-row.show-actions .row-actions {
+.waiting-groups:hover .waiting-row .row-actions {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.waiting-groups:hover .waiting-row:hover .row-actions,
+.waiting-groups:not(:hover) .waiting-row:focus-within .row-actions,
+.waiting-groups:not(:hover) .waiting-row.show-actions .row-actions,
+.waiting-row.is-ignored .row-actions,
+.waiting-groups:hover .waiting-row.is-ignored .row-actions {
   opacity: 1;
   pointer-events: auto;
+}
+
+.waiting-row:hover,
+.waiting-row:focus-within,
+.waiting-row:has(details[open]) {
+  z-index: 4;
 }
 
 .snooze {
@@ -675,7 +690,7 @@ textarea {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  z-index: 3;
+  z-index: 5;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -684,6 +699,17 @@ textarea {
   background: var(--arckeep-white);
   border: 1px solid var(--arckeep-soft-stone);
   border-radius: 8px;
+}
+
+.ignore-menu {
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+}
+
+.ignore-menu button {
+  white-space: nowrap;
+  text-align: left;
 }
 
 button.tiny {

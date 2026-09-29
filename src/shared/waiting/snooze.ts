@@ -74,7 +74,7 @@ export function partitionDismissals(
   let hiddenCount = 0
   for (const draft of drafts) {
     if (hidden.has(draft.repo.toLowerCase())) {
-      hiddenCount += 1
+      if (!showIgnored) hiddenCount += 1
       continue
     }
     let record: DismissalRecord | undefined = nextMap[draft.id]
@@ -84,10 +84,9 @@ export function partitionDismissals(
     }
     const snoozed = Boolean(record?.snoozeUntil && Date.parse(record.snoozeUntil) > now.getTime())
     const ignored = Boolean(record?.ignored)
-    if (snoozed || (ignored && !showIgnored)) {
-      hiddenCount += 1
-      continue
-    }
+    const deferred = snoozed || ignored
+    if (deferred) hiddenCount += 1
+    if (deferred && !showIgnored) continue
     rows.push({
       id: draft.id,
       repo: draft.repo,
@@ -100,7 +99,7 @@ export function partitionDismissals(
       waitingDays: draft.waitingDays,
       daysEstimated: draft.daysEstimated,
       updatedAt: draft.updatedAt,
-      ignored,
+      ignored: deferred,
       parentNumber: draft.parentNumber,
       parent: draft.parent,
       childCount: 0

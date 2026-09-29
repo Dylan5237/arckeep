@@ -9,7 +9,7 @@ import { blankRecord, parseIssueTree } from '../src/shared/waiting/parse-github.
 import { tasklistIssueRefs } from '../src/shared/waiting/sub-issues.js'
 import { defaultWaitingConfig, parseWaitingConfig } from '../src/shared/waiting/rules.js'
 import { evaluateSignals } from '../src/shared/waiting/signals.js'
-import { partitionDismissals, readDismissalState, writeDismissalState } from '../src/shared/waiting/snooze.js'
+import { ignoreDraft, partitionDismissals, readDismissalState, snoozeDraft, writeDismissalState } from '../src/shared/waiting/snooze.js'
 import type { GithubRecord, WaitingConfig } from '../src/shared/waiting/types.js'
 import { loadGithubRecords } from '../src/waiting/github-load.js'
 import { runCli } from '../src/waiting/cli.js'
@@ -508,5 +508,166 @@ describe('sub-issues stay on their own rows', () => {
     expect(records.find(record => record.number === 2)?.parentNumber).toBe(1)
     expect(records.find(record => record.number === 2)?.url).toBe(issueUrl(2))
     expect(tasklistIssueRefs('see #4\n- [ ] #4\n- [x] https://github.com/owner/repo/issues/5', repo).map(ref => ref.number)).toEqual([4, 5])
+  })
+})
+
+describe('recall of requests that are still open', () => {
+  const rules = config()
+
+  it('keeps a request in the same paragraph as a negated PASS', () => {
+    const cases = [
+      '请主人确认或拒收，这一版不 PASS',
+      '还需要用户动手。未 PASS',
+      '请确认这一步\nno Phase 2 PASS',
+      '请确认，no one has written PASS yet'
+    ]
+    for (const body of cases) {
+      const row = classifyRecord(record({ kind: 'issue', number: 70, title: 'Still open', body }), rules, NOW)
+      expect(row?.reasons, body).toEqual(['要人动手'])
+      expect(row?.signal.rule === '同一段里的否定式' || row?.signal.rule === '请主人或用户动手', body).toBe(true)
+      expect(row?.signal.excerpt.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('treats an explicit ask to confirm or reject as an action by itself', () => {
+    const row = classifyRecord(record({
+      kind: 'issue',
+      number: 71,
+      title: 'Owner',
+      body: '请主人确认或拒收这一版。'
+    }), rules, NOW)
+    expect(row?.reasons).toEqual(['要人动手'])
+    expect(row?.signal.rule).toBe('请主人或用户动手')
+    expect(row?.signal.excerpt).toContain('请主人确认或拒收')
+  })
+
+  it('reads an unfinished status table, checklist, and status line from the issue body', () => {
+    const table = classifyRecord(record({
+      kind: 'issue',
+      number: 72,
+      title: 'Table',
+      body: '| 项 | 状态 |\n| --- | --- |\n| 发布 | 待用户确认后 push |\n| 文档 | 已完成 |',
+      comments: [{ body: '我先记下进度', createdAt: '2026-09-21T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(table?.reasons).toEqual(['要人动手'])
+    expect(table?.signal.rule).toBe('正文未完成的状态')
+    expect(table?.signal.excerpt).toContain('待用户确认后 push')
+
+    const checked = classifyRecord(record({
+      kind: 'issue',
+      number: 73,
+      title: 'Checked',
+      body: '- [x] 待用户确认后 push\n- [ ] 等用户看完再合并'
+    }), rules, NOW)
+    expect(checked?.signal.excerpt).toContain('等用户看完再合并')
+    expect(checked?.signal.excerpt).not.toContain('待用户确认后 push')
+
+    const line = classifyRecord(record({
+      kind: 'issue',
+      number: 74,
+      title: 'Line',
+      body: '状态：等用户确认截图'
+    }), rules, NOW)
+    expect(line?.reasons).toEqual(['要人动手'])
+    expect(line?.signal.rule).toBe('正文未完成的状态')
+  })
+
+  it('does not drop a stale mention when the body still asks for a person', () => {
+    const row = classifyRecord(record({
+      kind: 'issue',
+      number: 75,
+      title: 'Old mention',
+      fromMention: true,
+      viewerLogin: 'ada',
+      mentionedAt: '2026-01-01T00:00:00.000Z',
+      body: '抄送 @ada\n\n| 项 | 状态 |\n| --- | --- |\n| 上线 | 待用户确认后 push |',
+      inScopeRepo: false,
+      repoAccess: 'unknown'
+    }), rules, NOW)
+    expect(row?.reasons).toEqual(['提及'])
+    expect(row?.signal.rule).toBe('过时提及旁仍有等待')
+    expect(row?.signal.excerpt).toContain('待用户确认后 push')
+  })
+})
+
+describe('keywords that only describe the product are not waiting', () => {
+  const rules = config()
+
+  it('ignores code, quotes, spec sections, and a report that never asks the user', () => {
+    const spec = classifyRecord(record({
+      kind: 'issue',
+      number: 80,
+      title: 'Spec',
+      body: [
+        '## 需求',
+        '用户可以点请确认。',
+        '## 验收标准',
+        '- [ ] 待用户确认后 push',
+        '## 背景',
+        '需要你在设计里写待验收。',
+        '## 设计',
+        '按钮文案是请拒收。',
+        '## 规格',
+        'USER_ACTION_REQUIRED'
+      ].join('\n')
+    }), rules, NOW)
+    expect(spec).toBeNull()
+
+    const code = classifyRecord(record({
+      kind: 'issue',
+      number: 81,
+      title: 'Code',
+      body: '实现见下。\n\n```\nUSER_ACTION_REQUIRED\n请确认\n```\n\n调用 `请确认` 即可。\n\n> 请确认截图'
+    }), rules, NOW)
+    expect(code).toBeNull()
+
+    const report = classifyRecord(record({
+      kind: 'issue',
+      number: 82,
+      title: 'Report',
+      body: [
+        '# 分析报告',
+        '这篇只复盘规则，没有要谁动手。',
+        '关键词「请确认」「待验收」「USER_ACTION_REQUIRED」出现在描述里。',
+        '功能会显示待验收，并不代表当前在等用户。'
+      ].join('\n')
+    }), rules, NOW)
+    expect(report).toBeNull()
+  })
+
+  it('still keeps a current-status sentence that asks the user to act', () => {
+    const row = classifyRecord(record({
+      kind: 'issue',
+      number: 83,
+      title: 'Now',
+      body: '## 需求\n按钮写请确认。\n\n## 现状\n请确认是否拒收这一版。'
+    }), rules, NOW)
+    expect(row?.reasons).toEqual(['要人动手'])
+    expect(row?.signal.excerpt).toContain('请确认是否拒收')
+  })
+})
+
+describe('show ignored rows', () => {
+  it('lists snoozed and ignored rows when asked, and the count matches those rows', () => {
+    const make = (number: number, title: string) => classifyRecord(record({
+      kind: 'issue',
+      number,
+      title,
+      fromAssignee: true,
+      assignedAt: '2026-09-01T00:00:00.000Z'
+    }), config(), NOW)
+    const first = make(1, 'One')
+    const second = make(2, 'Two')
+    const third = make(3, 'Three')
+    if (!first || !second || !third) throw new Error('missing draft')
+    const map = ignoreDraft(snoozeDraft({}, first.id, 7, NOW), second)
+    const hidden = partitionDismissals([first, second, third], map, NOW, false)
+    expect(hidden.rows.map(row => row.title)).toEqual(['Three'])
+    expect(hidden.hiddenCount).toBe(2)
+    const shown = partitionDismissals([first, second, third], map, NOW, true)
+    const faded = shown.rows.filter(row => row.ignored)
+    expect(faded).toHaveLength(shown.hiddenCount)
+    expect(faded.map(row => row.title).sort()).toEqual(['One', 'Two'])
+    expect(shown.rows).toHaveLength(3)
   })
 })

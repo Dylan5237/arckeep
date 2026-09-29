@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest'
 import { defaultAppDataDir, todosFilePath, userDataDir } from '../src/main/paths.js'
 import { parseSettings } from '../src/main/settings-store.js'
 import { TodoStore } from '../src/main/todos/store.js'
-import { assembleWaiting } from '../src/shared/waiting/assemble.js'
+import { assembleWaiting, draftsFromTodos } from '../src/shared/waiting/assemble.js'
 import { defaultWaitingConfig } from '../src/shared/waiting/rules.js'
+import { ignoreDraft, partitionDismissals, snoozeDraft } from '../src/shared/waiting/snooze.js'
 import { toTodoWaitingItems } from '../src/shared/waiting/todo-source.js'
 import type { WaitingJsonRow } from '../src/shared/waiting/types.js'
 import { runCli } from '../src/waiting/cli.js'
@@ -155,7 +156,8 @@ describe('等我 todos', () => {
       waitingDays: 7,
       daysEstimated: false,
       parent: null,
-      childCount: 0
+      childCount: 0,
+      signal: { rule: '待办', excerpt: '还在等我' }
     })
     const keys = Object.keys(row ?? {}).sort()
     expect(keys).toEqual([
@@ -166,10 +168,33 @@ describe('等我 todos', () => {
       'parent',
       'reasons',
       'repo',
+      'signal',
       'title',
       'type',
       'url',
       'waitingDays'
     ])
+    expect(row?.signal).toEqual({ rule: '待办', excerpt: '还在等我' })
+  })
+
+  it('hides a todo row when snoozed or ignored, and shows it faded when asked', () => {
+    const now = new Date('2026-09-28T00:00:00.000Z')
+    const [draft] = draftsFromTodos([{
+      id: 'todo-1',
+      title: '回一封信',
+      createdAt: '2026-09-20T00:00:00.000Z',
+      updatedAt: '2026-09-20T00:00:00.000Z',
+      url: 'arckeep://todos?id=todo-1'
+    }], now)
+    if (!draft) throw new Error('missing todo draft')
+    const snoozed = snoozeDraft({}, draft.id, 3, now)
+    expect(partitionDismissals([draft], snoozed, now, false).rows).toHaveLength(0)
+    const shown = partitionDismissals([draft], snoozed, now, true)
+    expect(shown.hiddenCount).toBe(1)
+    expect(shown.rows[0]).toMatchObject({ type: 'todo', ignored: true, title: '回一封信' })
+    const ignored = ignoreDraft({}, draft)
+    const restored = partitionDismissals([draft], ignored, now, true)
+    expect(restored.rows.filter(row => row.ignored)).toHaveLength(restored.hiddenCount)
+    expect(restored.rows[0]?.action).toBe('待办')
   })
 })

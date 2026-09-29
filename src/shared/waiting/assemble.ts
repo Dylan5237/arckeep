@@ -24,7 +24,8 @@ export function draftsFromStatusDocs(hits: readonly StatusDocHit[], now: Date): 
         reason: WAITING_REASONS.statusDoc,
         at: hit.eventAt,
         estimated: !hit.eventAt
-      }]
+      }],
+      signal: { rule: '状态文档', excerpt: hit.text }
     }, now)
   })
 }
@@ -42,7 +43,8 @@ export function draftsFromBranches(hits: readonly LocalBranchHit[], now: Date): 
       reason: WAITING_REASONS.local,
       at: hit.committedAt || null,
       estimated: !hit.committedAt
-    }]
+    }],
+    signal: { rule: '没推送', excerpt: hit.subject }
   }, now))
 }
 
@@ -59,7 +61,8 @@ export function draftsFromTodos(items: readonly TodoWaitingItem[], now: Date): W
       reason: WAITING_REASONS.todo,
       at: item.createdAt,
       estimated: false
-    }]
+    }],
+    signal: { rule: '待办', excerpt: item.title }
   }, now))
 }
 
@@ -92,7 +95,8 @@ export function toWaitingJson(drafts: readonly WaitingDraft[]): WaitingJsonRow[]
     waitingDays: draft.waitingDays,
     daysEstimated: draft.daysEstimated,
     parent: draft.parent,
-    childCount: draft.childCount
+    childCount: draft.childCount,
+    signal: draft.signal
   }))
 }
 
