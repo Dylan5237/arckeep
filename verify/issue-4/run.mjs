@@ -33,30 +33,27 @@ async function main() {
   console.log('[run.mjs] EVIDENCE_DIR =', EVIDENCE_DIR)
 
   // 先跑一个很快（<1 分钟）的预检：SendInput 能不能送达一个已知聚焦的窗口、
-  // 真实全局热键能不能被真实 SendInput 触发。上一轮完整跑了 ~1 小时后发现几乎所有
-  // 依赖真实热键的检查项都失败在同一个根因上；这次先用预检确认根因是否已修复，
-  // 避免在还没修复之前又浪费一次完整 60 分钟的 Actions 时间。
+  // 真实全局热键能不能被真实 SendInput 触发。第一轮完整跑了 ~1 小时后发现几乎所有
+  // 依赖真实热键的检查项都卡在同一个根因上：这个 GitHub-hosted windows-latest 环境里，
+  // SendInput 在 Win32 层面调用成功（不报错、不是 0 个事件），但目标窗口（不管是不是
+  // 通过热键打开的）完全收不到任何按键效果——这是这个 CI 平台本身的会话/输入桌面限制，
+  // 不是产品缺陷，也不是脚本 bug（真正的 $pid/$PID 变量冲突 bug 已经在上一版修了）。
+  // 预检结果写进 evidence/preflight.json，并存进 lib.envFlags 供各 scenario 参考：
+  // 需要验证「真实全局热键机制本身」的检查项据此直接判 BLOCKED（不再反复重试一个
+  // 已知会卡满 8000ms/30000ms 超时的动作，节省 Actions 时间）；其它检查项改用测试钩子
+  // 打开捕获窗口 + Playwright 自己的 CDP 键盘事件（不经过 OS，走 Chromium 真实输入管线，
+  // 能如实测到渲染进程/主进程里除「OS 全局热键投递」之外的全部真实逻辑）。
   const { run: runPreflight } = await import('./scenarios/session-0-preflight.mjs')
   const preflight = await runPreflight()
   killStrayArckeep()
 
-  const hotkeyDeliveryOk = preflight?.realHotkeyOpensCapture?.ok === true
-  const sendInputToWindowOk = preflight?.sendInputToFocusedWindow?.ok === true
-  console.log(`[run.mjs] preflight: sendInputToFocusedWindow.ok=${sendInputToWindowOk} realHotkeyOpensCapture.ok=${hotkeyDeliveryOk}`)
-
-  if (!hotkeyDeliveryOk) {
-    const reason = `预检发现真实全局热键（真实 SendInput 触发 RegisterHotKey/globalShortcut）在本次运行环境里没有生效，` +
-      `详情见 evidence/preflight.json 的 realHotkeyOpensCapture 字段（sendInputToFocusedWindow.ok=${sendInputToWindowOk} 用于区分是` +
-      `「SendInput 完全没送达任何窗口」还是「送达了已聚焦窗口，但全局热键本身没被触发」）。` +
-      `为避免在根因未修复前重复消耗一次完整 60 分钟的 Actions 时间，本次运行到这里为止，未执行完整的 5 个 Session。`
-    console.error(`\n===== 中止：真实热键预检未通过 =====\n${reason}`)
-    for (const id of CHECK_IDS) {
-      results[id] = { verdict: 'BLOCKED', evidence: ['preflight.json'], steps: '', notes: reason }
-    }
-    fs.writeFileSync(path.join(EVIDENCE_DIR, 'results.json'), JSON.stringify(results, null, 2), 'utf8')
-    fs.writeFileSync(path.join(EVIDENCE_DIR, 'console-observations.json'), JSON.stringify(consoleObservations, null, 2), 'utf8')
-    fs.writeFileSync(path.join(EVIDENCE_DIR, 'index.md'), '# 证据索引\n\n| 文件 | 说明 | 对应检查项 |\n| --- | --- | --- |\n| `preflight.json` | 真实热键预检结果（详见其中字段） | 全部 |\n', 'utf8')
-    return
+  lib.envFlags.hotkeyDeliveryOk = preflight?.realHotkeyOpensCapture?.ok === true
+  lib.envFlags.sendInputToWindowOk = preflight?.sendInputToFocusedWindow?.ok === true
+  lib.envFlags.checkedAt = new Date().toISOString()
+  console.log(`[run.mjs] preflight: sendInputToFocusedWindow.ok=${lib.envFlags.sendInputToWindowOk} realHotkeyOpensCapture.ok=${lib.envFlags.hotkeyDeliveryOk}`)
+  if (!lib.envFlags.hotkeyDeliveryOk) {
+    console.warn('\n[run.mjs] 警告：真实全局热键预检未通过，见 evidence/preflight.json。' +
+      '涉及「真实全局热键机制本身」的检查项会据此直接判 BLOCKED；其它检查项改用测试钩子+Playwright 键盘事件继续正常测试。')
   }
 
   const { run: runSessionA } = await import('./scenarios/session-a.mjs')

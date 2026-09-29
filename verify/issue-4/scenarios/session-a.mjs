@@ -2,6 +2,19 @@
 // 覆盖 checklist: 1, 2, 3, 4, 5, 6, 8, A1, A2, A3
 //
 // 注意：本文件针对被测 SHA 0734791（PR #12 + 设计评审 PR #18）编写。
+//
+// 环境限制说明（见 evidence/preflight.json + run.mjs 里的预检)：这个 GitHub-hosted
+// windows-latest 环境里，PowerShell SendInput 在 Win32 层调用不报错，但目标窗口（不管
+// 是不是通过全局热键打开的）完全收不到任何按键效果——这是 CI 平台的会话/输入桌面限制，
+// 不是产品缺陷。因此：
+//   - 需要验证「真实全局热键机制本身」的部分（Item 1 的热键触发、Item 3/A1 里
+//     「真实按键确认生效/失效」的子项）在 lib.envFlags.hotkeyDeliveryOk===false 时
+//     直接判 BLOCKED，不再反复重试。
+//   - 不是在测热键机制本身、只是需要「某种方式打开捕获窗口」的检查项（2/4/5/6/8/A2/A3），
+//     改用 openCaptureViaHook()（测试钩子 IPC 打开，走的是与真实热键完全相同的主进程
+//     openCapture 代码路径）+ Playwright 自己的 page.keyboard（CDP 真实按键事件，
+//     经过 Chromium 输入管线，会真正触发渲染进程的 keydown 监听器）。
+//
 // Item 5 的删除流程已按 #18 的新行为（立即删除 + 「已删除 · 撤销」，不再弹确认框）
 // 改写；「撤销后原样恢复 + jsonl 核对」「删除提示停留时长」的完整验证见 R3
 // （scenarios/session-e-review.mjs），Item 5 这里只验证「不确认框 + 不撤销 + 重启后仍消失」。
@@ -10,19 +23,13 @@ import path from 'node:path'
 import * as lib from '../lib.mjs'
 
 const {
-  setResult, mergeNotes, logEvidence, EVIDENCE_DIR,
-  launchApp, mainWindowPage, captureWindowPage,
+  setResult, mergeNotes, logEvidence, EVIDENCE_DIR, envFlags,
+  launchApp, mainWindowPage, captureWindowPage, openCaptureViaHook, waitCaptureFocused,
   callTestHook, getAppState, quitApp, killStrayArckeep,
-  startNotepad, sendHotkey, sendKey, sendText, foreground,
+  startNotepad, sendHotkey, sendKey, foreground,
   fullShot, shot, waitFor, sleep, getUserDataDir, resetUserData, todosFile,
   appendEvidenceJson, writeJson
 } = lib
-
-async function ensureCaptureFocusedText(app) {
-  const cap = await captureWindowPage(app)
-  await cap.waitForFunction(() => document.activeElement && document.activeElement.id === 'text', null, { timeout: 3000 })
-  return cap
-}
 
 async function waitToastLifecycle(app, { timeoutMs = 4000 } = {}) {
   const appearStart = Date.now()
@@ -45,6 +52,24 @@ async function waitToastLifecycle(app, { timeoutMs = 4000 } = {}) {
   return { appeared: true, appearMs, disappearMs, toastWin }
 }
 
+/** 用测试钩子打开捕获窗口 + Playwright 自己的键盘输入打字/回车/关闭（不经过 OS SendInput）。 */
+async function createTodoViaHook(app, text, { waiting = false } = {}) {
+  await callTestHook(app, 'close')
+  await sleep(150)
+  const cap = await openCaptureViaHook(app)
+  await cap.type('#text', text)
+  await sleep(80)
+  if (waiting) {
+    await cap.click('#waiting')
+    await sleep(80)
+    await cap.evaluate(() => document.querySelector('#capture-form').requestSubmit())
+  } else {
+    await cap.press('#text', 'Enter')
+  }
+  await waitToastLifecycle(app, { timeoutMs: 3000 })
+  await sleep(150)
+}
+
 export async function run() {
   killStrayArckeep()
 
@@ -61,64 +86,74 @@ export async function run() {
 
   // =====================================================================
   // Item 1 + A1：托盘中按热键，记事本在前台，捕获框 1 秒内出现并获得焦点
+  // 这是「真实全局热键机制」本身的检查项——预检已确认这个 CI 环境的 SendInput
+  // 送不到任何窗口，这里仍然真实尝试一次（短超时，避免浪费时间），失败则判 BLOCKED。
   // =====================================================================
   try {
-    await callTestHook(app, 'close') // 等价于点主窗口关闭按钮：隐藏到托盘（真实关闭按钮走的同一个 handler）
-    startNotepad()
-    await sleep(900)
-    let fg = foreground()
-    if (fg.processName?.toLowerCase() !== 'notepad') {
-      // 兜底：再等一会儿，记事本窗口有时需要时间创建
-      await sleep(600)
-      fg = foreground()
-    }
-    logEvidence('item1-before-foreground.json', 'Ctrl+Alt+Space 之前的前台窗口（应为 notepad）', ['1'])
-    appendEvidenceJson('item1-before-foreground', fg)
-    fullShot('01-before-hotkey', { checkIds: ['1'], description: '按热键前：记事本在前台，Arckeep 只剩托盘' })
-
-    const t0 = Date.now()
-    const sendResult = sendHotkey('Ctrl+Alt+Space')
-    const visible = await waitFor(async () => {
-      const wins = app.windows()
-      for (const w of wins) {
-        const ok = await w.evaluate(() => {
-          const hasForm = !!document.querySelector('#capture-form')
-          const focused = document.hasFocus && document.hasFocus()
-          return hasForm && focused
-        }).catch(() => false)
-        if (ok) return w
-      }
-      return null
-    }, { timeoutMs: 3000, intervalMs: 15 })
-    const jsVisibleMs = Date.now() - t0
-
-    let osForeground = null
-    if (visible.ok) {
-      osForeground = foreground()
-    }
-    const withinOneSecond = visible.ok && jsVisibleMs <= 1000 && osForeground?.processName?.toLowerCase() === 'arckeep'
-
-    fullShot('02-after-hotkey', { checkIds: ['1', 'A1'], description: `按 Ctrl+Alt+Space 后 ${jsVisibleMs}ms：捕获框应已在前台并获得焦点` })
-    if (visible.ok) await shot(visible.value, '02-capture-window', { checkIds: ['1', 'A1'], description: '捕获框窗口截图（focus 检测通过后）' })
-
-    appendEvidenceJson('item1-timing', { jsVisibleMs, sendResult, osForeground })
-
-    if (visible.ok) {
-      const cap = visible.value
-      const hasTextFocus = await cap.evaluate(() => document.activeElement?.id === 'text').catch(() => false)
-      setResult('1', withinOneSecond ? 'PASS' : 'FAIL', {
-        evidence: ['01-before-hotkey-full.png', '02-after-hotkey-full.png', '02-capture-window.png', 'item1-timing.json', 'item1-before-foreground.json'],
-        steps: '1) test-hook close 隐藏主窗口到托盘 2) 启动记事本并确认前台 3) PowerShell SendInput 真实发送 Ctrl+Alt+Space 4) 轮询 DOM+GetForegroundWindow 确认捕获框成为前台并有焦点',
-        notes: `捕获框在 ${jsVisibleMs}ms 内${visible.ok ? '' : '未'}可见且获得焦点；GetForegroundWindow 进程=${osForeground?.processName}，标题=${osForeground?.title}`
+    if (!envFlags.hotkeyDeliveryOk) {
+      setResult('1', 'BLOCKED', {
+        evidence: ['preflight.json'],
+        steps: '预检（scenarios/session-0-preflight.mjs）已确认：真实 SendInput 在这个 CI 环境的 Win32 调用不报错，但目标窗口收不到任何按键效果，全局热键无法用真实系统按键验证',
+        notes: '这是 GitHub-hosted windows-latest 的会话/输入桌面限制（详见 evidence/preflight.json 的 realHotkeyOpensCapture/sendInputToFocusedWindow 字段），不是产品缺陷：无法用黑盒真实按键的方式验证「按热键后 1 秒内捕获框获得前台焦点」这一条'
       })
-      setResult('A1', hasTextFocus ? 'PASS' : 'FAIL', {
-        evidence: ['02-capture-window.png'],
-        steps: '同上；随后直接检查 document.activeElement 是否为 #text 输入框',
-        notes: `按热键后 document.activeElement.id === 'text' : ${hasTextFocus}（尚未点击，直接检测焦点）`
+      setResult('A1', 'BLOCKED', {
+        evidence: ['preflight.json'],
+        steps: '同上；A1 的前半段（热键触发+立即聚焦）依赖同一个不可用的机制',
+        notes: '热键触发本身不可测（见 Item 1）；A1 里「打字→Enter→toast 出现约 1s 后消失」这部分用测试钩子打开捕获窗口后单独复测，见下方 notes'
       })
     } else {
-      setResult('1', 'FAIL', { evidence: ['01-before-hotkey-full.png', '02-after-hotkey-full.png'], notes: `${jsVisibleMs}ms 内未观察到捕获框可见+focus` })
-      setResult('A1', 'BLOCKED', { notes: '捕获框未出现，无法检测输入焦点' })
+      await callTestHook(app, 'close') // 等价于点主窗口关闭按钮：隐藏到托盘（真实关闭按钮走的同一个 handler）
+      startNotepad()
+      await sleep(900)
+      let fg = foreground()
+      if (fg.processName?.toLowerCase() !== 'notepad') {
+        await sleep(600)
+        fg = foreground()
+      }
+      logEvidence('item1-before-foreground.json', 'Ctrl+Alt+Space 之前的前台窗口（应为 notepad）', ['1'])
+      appendEvidenceJson('item1-before-foreground', fg)
+      fullShot('01-before-hotkey', { checkIds: ['1'], description: '按热键前：记事本在前台，Arckeep 只剩托盘' })
+
+      const t0 = Date.now()
+      const sendResult = sendHotkey('Ctrl+Alt+Space')
+      const visible = await waitFor(async () => {
+        for (const w of app.windows()) {
+          const ok = await w.evaluate(() => {
+            const hasForm = !!document.querySelector('#capture-form')
+            const focused = document.hasFocus && document.hasFocus()
+            return hasForm && focused
+          }).catch(() => false)
+          if (ok) return w
+        }
+        return null
+      }, { timeoutMs: 3000, intervalMs: 15 })
+      const jsVisibleMs = Date.now() - t0
+
+      let osForeground = null
+      if (visible.ok) osForeground = foreground()
+      const withinOneSecond = visible.ok && jsVisibleMs <= 1000 && osForeground?.processName?.toLowerCase() === 'arckeep'
+
+      fullShot('02-after-hotkey', { checkIds: ['1', 'A1'], description: `按 Ctrl+Alt+Space 后 ${jsVisibleMs}ms：捕获框应已在前台并获得焦点` })
+      if (visible.ok) await shot(visible.value, '02-capture-window', { checkIds: ['1', 'A1'], description: '捕获框窗口截图（focus 检测通过后）' })
+      appendEvidenceJson('item1-timing', { jsVisibleMs, sendResult, osForeground })
+
+      if (visible.ok) {
+        const cap = visible.value
+        const hasTextFocus = await cap.evaluate(() => document.activeElement?.id === 'text').catch(() => false)
+        setResult('1', withinOneSecond ? 'PASS' : 'FAIL', {
+          evidence: ['01-before-hotkey-full.png', '02-after-hotkey-full.png', '02-capture-window.png', 'item1-timing.json', 'item1-before-foreground.json'],
+          steps: '1) test-hook close 隐藏主窗口到托盘 2) 启动记事本并确认前台 3) PowerShell SendInput 真实发送 Ctrl+Alt+Space 4) 轮询 DOM+GetForegroundWindow 确认捕获框成为前台并有焦点',
+          notes: `捕获框在 ${jsVisibleMs}ms 内${visible.ok ? '' : '未'}可见且获得焦点；GetForegroundWindow 进程=${osForeground?.processName}，标题=${osForeground?.title}`
+        })
+        setResult('A1', hasTextFocus ? 'PASS' : 'FAIL', {
+          evidence: ['02-capture-window.png'],
+          steps: '同上；随后直接检查 document.activeElement 是否为 #text 输入框',
+          notes: `按热键后 document.activeElement.id === 'text' : ${hasTextFocus}（尚未点击，直接检测焦点）`
+        })
+      } else {
+        setResult('1', 'FAIL', { evidence: ['01-before-hotkey-full.png', '02-after-hotkey-full.png'], notes: `${jsVisibleMs}ms 内未观察到捕获框可见+focus（预检显示 hotkeyDeliveryOk=true，但这次单独复测没有重现，记为真实失败而非环境限制）` })
+        setResult('A1', 'BLOCKED', { notes: '捕获框未出现，无法检测输入焦点' })
+      }
     }
   } catch (err) {
     setResult('1', 'BLOCKED', { notes: `异常：${err.stack || err}` })
@@ -126,24 +161,27 @@ export async function run() {
   }
 
   // =====================================================================
-  // A1 continued：直接打字（真实 SendInput），Enter 保存并关闭，出现「已记下」约 1s 后消失
+  // A1 continued：用测试钩子打开捕获框，Playwright 键盘输入打字，Enter 保存并关闭，
+  // 出现「已记下」约 1s 后消失——这部分不依赖 OS 全局热键，能独立测「打字→保存→toast」
+  // 这条产品行为本身，即便上面热键触发部分是 BLOCKED。
   // =====================================================================
   try {
-    const cap = await captureWindowPage(app)
-    const text1 = 'A1真实按键记一条'
-    sendText(text1)
+    await callTestHook(app, 'close')
     await sleep(150)
+    const cap = await openCaptureViaHook(app)
+    const text1 = 'A1捕获测试记一条'
+    await cap.type('#text', text1)
+    await sleep(100)
     const domText = await cap.evaluate(() => document.querySelector('#text').value)
-    await shot(cap, '03-a1-typed', { checkIds: ['A1'], description: 'SendInput 真实按键打字后，输入框内容' })
+    await shot(cap, '03-a1-typed', { checkIds: ['A1'], description: 'Playwright 键盘输入打字后，输入框内容' })
 
-    const enterAt = Date.now()
-    sendKey('Return')
+    await cap.press('#text', 'Enter')
     const toastResult = await waitToastLifecycle(app)
     if (toastResult.appeared) {
       await shot(toastResult.toastWin, '04-a1-saved-toast', { checkIds: ['A1'], description: '「已记下」提示出现（独立无边框 BrowserWindow，屏幕右下角）' })
       fullShot('04-a1-saved-toast', { checkIds: ['A1'], description: '「已记下」提示出现（全屏，右下角）' })
     }
-    appendEvidenceJson('a1-toast-timing', { enterAt, ...toastResult, toastWin: undefined })
+    appendEvidenceJson('a1-toast-timing', { ...toastResult, toastWin: undefined })
 
     const closed = await waitFor(async () => {
       for (const w of app.windows()) {
@@ -153,32 +191,44 @@ export async function run() {
       return true
     }, { timeoutMs: 2000 })
 
-    const ok = domText === text1 && toastResult.appeared && toastResult.appearMs < 1200
+    const toastOk = domText === text1 && toastResult.appeared && toastResult.appearMs < 1200
       && toastResult.disappearMs !== null && toastResult.disappearMs > 500 && toastResult.disappearMs < 2500
       && closed.ok
-    setResult('A1', ok ? 'PASS' : 'FAIL', {
-      evidence: ['02-capture-window.png', '03-a1-typed.png', '04-a1-saved-toast.png', '04-a1-saved-toast-full.png', 'a1-toast-timing.json'],
-      steps: '热键打开后不点击，直接 SendInput 输入真实字符 -> DOM 显示一致 -> SendInput 发 Enter -> 捕获窗口关闭 -> 出现「已记下」toast -> 约 1s 后自动消失',
-      notes: `打字后 DOM 值="${domText}"；toast 出现耗时 ${toastResult.appearMs}ms，停留 ${toastResult.disappearMs}ms；窗口是否已关闭=${closed.ok}；「已记下」toast 是一个独立无边框 BrowserWindow（showSavedToast，SAVED_TOAST_MS=1000ms），出现在主屏幕工作区右下角`
-    })
+    mergeNotes('A1', `【测试钩子打开+Playwright键盘输入子项，独立于上面的真实热键触发】打字后 DOM 值="${domText}"；toast 出现耗时 ${toastResult.appearMs}ms，停留 ${toastResult.disappearMs}ms；窗口是否已关闭=${closed.ok}；这部分本身=${toastOk ? 'OK' : '有问题'}（「已记下」toast 是独立无边框 BrowserWindow，showSavedToast，SAVED_TOAST_MS=1000ms，出现在主屏幕工作区右下角）`)
+    if (!envFlags.hotkeyDeliveryOk && toastOk) {
+      // 热键机制本身 BLOCKED，但这部分产品行为已经独立确认没问题，保留 BLOCKED 结论（因为 A1 明确要求「按热键」触发），
+      // 只是让 notes 更完整，不改判 PASS。
+    } else if (envFlags.hotkeyDeliveryOk && !toastOk) {
+      lib.results.A1.verdict = 'FAIL'
+    }
   } catch (err) {
-    setResult('A1', 'FAIL', { notes: `A1 后半段异常：${err.stack || err}` })
+    mergeNotes('A1', `打字/toast 子项异常：${err.stack || err}`)
   }
 
   // =====================================================================
-  // Item 2（前半）：Enter 保存后待办页出现这一条
+  // Item 2（前半）：Enter 保存后待办页出现这一条——用测试钩子打开，不依赖热键
   // =====================================================================
   try {
+    await callTestHook(app, 'close')
+    await sleep(150)
+    const cap = await openCaptureViaHook(app)
+    const text2 = 'Item2捕获测试记一条'
+    await cap.type('#text', text2)
+    await sleep(100)
+    await cap.press('#text', 'Enter')
+    await waitToastLifecycle(app, { timeoutMs: 3000 })
+    await sleep(150)
+
     await callTestHook(app, 'show')
     page = await mainWindowPage(app)
     await page.click('[data-view="todos"]')
     await page.waitForSelector('.todo-list, .empty-todos', { timeout: 3000 })
     const texts = await page.$$eval('.todo-text', els => els.map(e => e.textContent))
     await shot(page, '05-todos-after-enter', { checkIds: ['2'], description: '待办页：Enter 保存的这一条已出现' })
-    const found = texts.includes('A1真实按键记一条')
+    const found = texts.includes(text2)
     setResult('2', found ? 'PASS' : 'FAIL', {
       evidence: ['05-todos-after-enter.png'],
-      steps: '在快速捕获里 Enter 保存后，打开待办页确认该条存在（Esc 不新增待办的验证见下方「热键改键」与 A3/8 场景）',
+      steps: '用测试钩子打开捕获窗口（与真实热键走同一段主进程 openCapture 代码路径），Playwright 键盘输入打字，Enter 保存后打开待办页确认该条存在（Esc 不新增待办的验证见下方「热键改键」与 A3/8 场景）',
       notes: `待办页当前文本：${JSON.stringify(texts)}`
     })
   } catch (err) {
@@ -186,7 +236,9 @@ export async function run() {
   }
 
   // =====================================================================
-  // Item 3：设置里换热键，新组合生效、旧组合失效（真实按键测两个组合），重启后仍是新组合
+  // Item 3：设置里换热键，新组合生效、旧组合失效（需要真实按键验证），重启后仍是新组合
+  // 「真实按键确认生效/失效」是这条检查的核心要求，热键机制在这个环境不可测时整体判 BLOCKED，
+  // 但「保存成功」「重启后设置仍持久化为新组合」不依赖 OS 热键，单独确认并写进 notes。
   // =====================================================================
   try {
     await page.click('[data-view="settings"]')
@@ -198,142 +250,133 @@ export async function run() {
     const savedOk = state.activeHotkey === 'Ctrl+Alt+J' && !state.hotkeyWarning
     await shot(page, '06-hotkey-changed', { checkIds: ['3'], description: '设置页：热键已改为 Ctrl+Alt+J' })
 
-    // 新组合：真按键应生效
-    await callTestHook(app, 'close')
-    await sleep(300)
-    sendHotkey('Ctrl+Alt+J')
-    const newOpened = await waitFor(async () => {
-      for (const w of app.windows()) {
-        const ok = await w.evaluate(() => !!document.querySelector('#capture-form')).catch(() => false)
-        if (ok) return w
-      }
-      return null
-    }, { timeoutMs: 3000, intervalMs: 30 })
-    if (newOpened.ok) {
-      await shot(newOpened.value, '07-new-combo-opens', { checkIds: ['3'], description: 'Ctrl+Alt+J 真实按键打开捕获框' })
-      sendKey('Escape')
-      await sleep(300)
-    }
-
-    // 旧组合：真按键应失效
-    sendHotkey('Ctrl+Alt+Space')
-    await sleep(500)
-    const oldStillClosed = !(await Promise.all(app.windows().map(w => w.evaluate(() => !!document.querySelector('#capture-form')).catch(() => false)))).some(Boolean)
-    fullShot('08-old-combo-no-effect', { checkIds: ['3'], description: '旧组合 Ctrl+Alt+Space 按下后无反应（截图时应仍是记事本前台，没有捕获框弹出）' })
-
-    // 重启后仍是新组合
     await quitApp(app)
     app = await launchApp({ label: 'A-after-rebind' })
     page = await mainWindowPage(app)
     state = await getAppState(page)
     const persisted = state.hotkey === 'Ctrl+Alt+J' && state.activeHotkey === 'Ctrl+Alt+J'
+    await shot(page, '09-new-combo-after-restart', { checkIds: ['3'], description: '重启后设置仍持久化为 Ctrl+Alt+J（真实按键生效性见环境限制说明）' })
 
-    await callTestHook(app, 'close')
-    await sleep(300)
-    sendHotkey('Ctrl+Alt+J')
-    const afterRestartOpened = await waitFor(async () => {
-      for (const w of app.windows()) {
-        const ok = await w.evaluate(() => !!document.querySelector('#capture-form')).catch(() => false)
-        if (ok) return w
-      }
-      return null
-    }, { timeoutMs: 3000, intervalMs: 30 })
-    if (afterRestartOpened.ok) {
-      await shot(afterRestartOpened.value, '09-new-combo-after-restart', { checkIds: ['3'], description: '重启后 Ctrl+Alt+J 仍能真实唤出捕获框' })
-      sendKey('Escape')
+    if (!envFlags.hotkeyDeliveryOk) {
+      setResult('3', 'BLOCKED', {
+        evidence: ['06-hotkey-changed.png', '09-new-combo-after-restart.png', 'preflight.json'],
+        steps: '设置页填 Ctrl+Alt+J 保存（可独立确认）-> 真实按键验证新组合生效/旧组合失效（这个 CI 环境不可用，见 preflight.json）-> quit 重启 -> 读取设置确认仍是 Ctrl+Alt+J（可独立确认）',
+        notes: `不依赖真实热键、可独立确认的部分：保存成功=${savedOk}；重启后设置持久化为新组合=${persisted}。核心的「真实按键确认新组合生效、旧组合失效」这部分因 GitHub-hosted windows-latest 的 SendInput 会话限制无法验证（见 evidence/preflight.json），按硬性要求判 BLOCKED 而非 PASS/FAIL`
+      })
+    } else {
+      // 预检显示热键投递是通的：走真实按键验证
+      await callTestHook(app, 'close')
       await sleep(300)
+      sendHotkey('Ctrl+Alt+J')
+      const newOpened = await waitFor(async () => {
+        for (const w of app.windows()) {
+          const ok = await w.evaluate(() => !!document.querySelector('#capture-form')).catch(() => false)
+          if (ok) return w
+        }
+        return null
+      }, { timeoutMs: 3000, intervalMs: 30 })
+      if (newOpened.ok) { await shot(newOpened.value, '07-new-combo-opens', { checkIds: ['3'], description: 'Ctrl+Alt+J 真实按键打开捕获框' }); sendKey('Escape'); await sleep(300) }
+      sendHotkey('Ctrl+Alt+Space')
+      await sleep(500)
+      const oldStillClosed = !(await Promise.all(app.windows().map(w => w.evaluate(() => !!document.querySelector('#capture-form')).catch(() => false)))).some(Boolean)
+      fullShot('08-old-combo-no-effect', { checkIds: ['3'], description: '旧组合按下后无反应' })
+      const afterRestartOpened = await waitFor(async () => {
+        for (const w of app.windows()) {
+          const ok = await w.evaluate(() => !!document.querySelector('#capture-form')).catch(() => false)
+          if (ok) return w
+        }
+        return null
+      }, { timeoutMs: 3000, intervalMs: 30 })
+      if (!afterRestartOpened.ok) { sendHotkey('Ctrl+Alt+J'); await sleep(500) }
+      const ok = savedOk && newOpened.ok && oldStillClosed && persisted
+      setResult('3', ok ? 'PASS' : 'FAIL', {
+        evidence: ['06-hotkey-changed.png', '07-new-combo-opens.png', '08-old-combo-no-effect-full.png', '09-new-combo-after-restart.png'],
+        steps: '设置页填 Ctrl+Alt+J 保存 -> 真实 SendInput 发 Ctrl+Alt+J（生效）-> 真实 SendInput 发 Ctrl+Alt+Space（旧组合，应无反应）-> quit 重启 -> 读取设置确认仍是 Ctrl+Alt+J',
+        notes: `保存成功=${savedOk}; 新组合真实按键生效=${newOpened.ok}; 旧组合真实按键已失效=${oldStillClosed}; 重启后设置仍为新组合=${persisted}`
+      })
     }
     await callTestHook(app, 'show')
     page = await mainWindowPage(app)
-
-    const ok = savedOk && newOpened.ok && oldStillClosed && persisted && afterRestartOpened.ok
-    setResult('3', ok ? 'PASS' : 'FAIL', {
-      evidence: ['06-hotkey-changed.png', '07-new-combo-opens.png', '08-old-combo-no-effect-full.png', '09-new-combo-after-restart.png'],
-      steps: '设置页填 Ctrl+Alt+J 保存 -> 真实 SendInput 发 Ctrl+Alt+J（生效）-> 真实 SendInput 发 Ctrl+Alt+Space（旧组合，应无反应）-> quit 重启 -> 读取设置确认仍是 Ctrl+Alt+J -> 再次真实按键确认仍生效',
-      notes: `保存成功=${savedOk}; 新组合真实按键生效=${newOpened.ok}; 旧组合真实按键已失效=${oldStillClosed}; 重启后设置仍为新组合=${persisted}; 重启后新组合仍生效=${afterRestartOpened.ok}`
-    })
   } catch (err) {
     setResult('3', 'FAIL', { notes: `异常：${err.stack || err}` })
   }
 
   // =====================================================================
-  // Item 8 + A3：草稿在 Esc/点外面 时保存、热键恢复；清空后 Esc 清掉草稿不再恢复；退出重启后仍能恢复
+  // Item 8 + A3：草稿在 Esc/失焦时保存、再次打开时恢复；清空后 Esc 清掉草稿不再恢复；
+  // 退出重启后仍能恢复。全部改用测试钩子打开捕获窗口 + Playwright 键盘事件——
+  // Esc/清空/打字都是渲染进程自己的 keydown 监听器，不经过 OS 全局热键，Playwright
+  // 的 CDP 按键事件是真实按键事件，能如实测到这段逻辑。「点击窗口外面失焦」用
+  // BrowserWindow.blur() 编程调用模拟（同样触发主进程真实的 'blur' 监听器），
+  // 不依赖已知失效的 OS 级前台切换。
   // =====================================================================
   try {
     const countBefore = (await page.evaluate(() => window.arckeep.listTodos())).length
 
-    // A3 case 1：输入后 Esc -> 存草稿 -> 再次热键 -> 原样恢复（进程内，未重启）
+    // A3 case 1：输入后 Esc -> 存草稿 -> 再次打开 -> 原样恢复（进程内，未重启）
     await callTestHook(app, 'close')
-    await sleep(250)
-    sendHotkey('Ctrl+Alt+J')
-    let cap = await ensureCaptureFocusedText(app)
-    const draftText1 = 'Esc应该存成草稿'
-    sendText(draftText1)
     await sleep(150)
-    sendKey('Escape')
+    let cap = await openCaptureViaHook(app)
+    const draftText1 = 'Esc应该存成草稿'
+    await cap.type('#text', draftText1)
+    await sleep(100)
+    await cap.press('#text', 'Escape')
     await sleep(300)
     const draftAfterEsc = await page.evaluate(() => window.arckeep.getCaptureDraft())
     await callTestHook(app, 'close')
-    await sleep(250)
-    sendHotkey('Ctrl+Alt+J')
-    cap = await ensureCaptureFocusedText(app)
     await sleep(150)
+    cap = await openCaptureViaHook(app)
+    await sleep(100)
     const restoredValue = await cap.evaluate(() => document.querySelector('#text').value)
-    await shot(cap, '10-draft-restored', { checkIds: ['A3', '8'], description: 'Esc 存草稿后再次按热键，原样恢复' })
+    await shot(cap, '10-draft-restored', { checkIds: ['A3', '8'], description: 'Esc 存草稿后再次打开，原样恢复' })
 
     // Item 2 后半：Esc 不新增待办
     const countAfterEscRestore = (await page.evaluate(() => window.arckeep.listTodos())).length
     const escDidNotCreateTodo = countAfterEscRestore === countBefore
 
-    // A3 case 2：点窗口外面（记事本）失焦 -> 也应存草稿
+    // A3 case 2：编程调用 BrowserWindow.blur()，等价于「点击窗口外面」使捕获框失焦
     let clickOutsideOk = false
     try {
-      sendKey('Escape') // 先清掉这一份，重新开一份用于点外面测试，避免重复解释
+      await cap.press('#text', 'Escape') // 先清掉这一份，重新开一份用于失焦测试
       await sleep(300)
-      sendHotkey('Ctrl+Alt+J')
-      cap = await ensureCaptureFocusedText(app)
+      cap = await openCaptureViaHook(app)
       const draftText2 = '点外面也该存草稿'
-      sendText(draftText2)
-      await sleep(150)
-      // 把记事本切回前台，等价于「点到窗口外面」，捕获框失焦
-      startNotepad()
-      await sleep(500)
-      let fg = foreground()
-      if (fg.processName?.toLowerCase() !== 'notepad') { await sleep(600); fg = foreground() }
+      await cap.type('#text', draftText2)
+      await sleep(100)
+      const bwHandle = await app.browserWindow(cap)
+      await bwHandle.evaluate(win => win.blur())
       await sleep(500) // 等主进程里的 200ms blur 计时器把窗口关掉
       const capStillOpen = await Promise.all(app.windows().map(w => w.evaluate(() => !!document.querySelector('#capture-form')).catch(() => false)))
       const draftAfterBlur = await page.evaluate(() => window.arckeep.getCaptureDraft())
       clickOutsideOk = !capStillOpen.some(Boolean) && draftAfterBlur.text === draftText2
-      fullShot('11-blur-outside-draft', { checkIds: ['A3'], description: '捕获框失焦（记事本前台）后自动关闭并存草稿' })
-      appendEvidenceJson('a3-blur-draft', { fg, draftAfterBlur })
+      fullShot('11-blur-outside-draft', { checkIds: ['A3'], description: '捕获框失焦（BrowserWindow.blur() 编程调用，等价于点击窗口外面）后自动关闭并存草稿' })
+      appendEvidenceJson('a3-blur-draft', { draftAfterBlur })
     } catch (err) {
-      mergeNotes('A3', `点外面场景异常：${err}`)
+      mergeNotes('A3', `失焦场景异常：${err}`)
     }
 
-    // Item 8：清空后 Esc，草稿一起清掉，下次热键不再恢复
+    // Item 8：清空后 Esc，草稿一起清掉，下次打开不再恢复
     await callTestHook(app, 'close')
-    await sleep(250)
-    sendHotkey('Ctrl+Alt+J')
-    cap = await ensureCaptureFocusedText(app)
     await sleep(150)
+    cap = await openCaptureViaHook(app)
+    await sleep(100)
     const beforeClearValue = await cap.evaluate(() => document.querySelector('#text').value)
-    // 真实按键：Ctrl+A 全选，Delete 清空（不是脚本直接置空 value）
-    sendHotkey('Ctrl+A')
-    await sleep(120)
-    sendKey('Delete')
-    await sleep(150)
+    // Playwright 键盘事件：Ctrl+A 全选，Delete 清空（不是脚本直接置空 value）
+    await cap.click('#text')
+    await cap.press('#text', 'Control+A')
+    await sleep(80)
+    await cap.press('#text', 'Delete')
+    await sleep(100)
     const clearedValue = await cap.evaluate(() => document.querySelector('#text').value)
-    sendKey('Escape')
+    await cap.press('#text', 'Escape')
     await sleep(300)
     const draftAfterClearEsc = await page.evaluate(() => window.arckeep.getCaptureDraft())
     await callTestHook(app, 'close')
-    await sleep(250)
-    sendHotkey('Ctrl+Alt+J')
-    cap = await ensureCaptureFocusedText(app)
     await sleep(150)
+    cap = await openCaptureViaHook(app)
+    await sleep(100)
     const valueAfterReopen = await cap.evaluate(() => document.querySelector('#text').value)
-    await shot(cap, '12-draft-cleared', { checkIds: ['8'], description: '清空后 Esc，下次热键打开是空的，草稿没有恢复' })
-    sendKey('Escape')
+    await shot(cap, '12-draft-cleared', { checkIds: ['8'], description: '清空后 Esc，下次打开是空的，草稿没有恢复' })
+    await cap.press('#text', 'Escape')
     await sleep(300)
     await callTestHook(app, 'show')
     page = await mainWindowPage(app)
@@ -341,14 +384,14 @@ export async function run() {
     const item8Ok = beforeClearValue === draftText1 && clearedValue === '' && (!draftAfterClearEsc.text) && valueAfterReopen === ''
     setResult('8', item8Ok ? 'PASS' : 'FAIL', {
       evidence: ['10-draft-restored.png', '12-draft-cleared.png'],
-      steps: '按热键输入文字，Esc 关闭 -> 草稿有内容且再次按热键会恢复（已验证）；再打开一次，Ctrl+A 全选 + Delete 真实按键清空输入框 -> Esc -> getCaptureDraft() 应为空 -> 再次按热键 -> 输入框应为空',
-      notes: `清空前草稿="${beforeClearValue}"；Ctrl+A+Delete 后值="${clearedValue}"；Esc 后草稿="${JSON.stringify(draftAfterClearEsc)}"；再次热键打开值="${valueAfterReopen}"`
+      steps: '打开捕获窗口输入文字，Esc 关闭 -> 草稿有内容且再次打开会恢复（已验证）；再打开一次，Playwright 键盘事件 Ctrl+A 全选 + Delete 清空输入框 -> Esc -> getCaptureDraft() 应为空 -> 再次打开 -> 输入框应为空',
+      notes: `清空前草稿="${beforeClearValue}"；Ctrl+A+Delete 后值="${clearedValue}"；Esc 后草稿="${JSON.stringify(draftAfterClearEsc)}"；再次打开值="${valueAfterReopen}"（打开捕获窗口用的是测试钩子而非真实热键，见文件头部环境限制说明；渲染进程内部的 Esc/清空逻辑本身用 Playwright 真实 CDP 按键事件验证，与真实按键效果一致）`
     })
 
     setResult('A3', (draftAfterEsc.text === draftText1 && restoredValue === draftText1 && clickOutsideOk) ? 'PASS' : 'FAIL', {
       evidence: ['10-draft-restored.png', '11-blur-outside-draft-full.png'],
-      steps: '1) 热键打开，SendInput 打字，SendInput 发 Esc -> getCaptureDraft() 应含刚输入内容 2) 再次热键 -> 输入框应原样恢复 3) 再打开一份，打字后把记事本切回前台使捕获框失焦（点窗口外面的等价操作）-> 200ms 后应自动关闭并把内容存进草稿 4) 退出应用重启后仍能恢复见下方',
-      notes: `Esc 后草稿="${draftAfterEsc.text}"；再次热键恢复值="${restoredValue}"；失焦（点外面）保存草稿=${clickOutsideOk}`
+      steps: '1) 打开捕获窗口，Playwright 打字，Playwright 发 Esc -> getCaptureDraft() 应含刚输入内容 2) 再次打开 -> 输入框应原样恢复 3) 再打开一份，打字后用 BrowserWindow.blur() 编程调用模拟点击窗口外面使捕获框失焦（触发与真实失焦相同的主进程 blur 监听器）-> 200ms 后应自动关闭并把内容存进草稿 4) 退出应用重启后仍能恢复见下方',
+      notes: `Esc 后草稿="${draftAfterEsc.text}"；再次打开恢复值="${restoredValue}"；失焦（BrowserWindow.blur()，等价于点外面）保存草稿=${clickOutsideOk}；打开捕获窗口用测试钩子而非真实热键（见环境限制说明），验证的是草稿保存/恢复逻辑本身，不是热键机制`
     })
     mergeNotes('2', `Esc 不新增待办：${escDidNotCreateTodo}`)
   } catch (err) {
@@ -356,37 +399,32 @@ export async function run() {
     mergeNotes('A3', `进程内验证异常：${err}`)
   }
 
-  // A3：退出应用重启后按热键仍能恢复草稿
+  // A3：退出应用重启后再次打开仍能恢复草稿
   try {
     await callTestHook(app, 'close')
-    await sleep(250)
-    sendHotkey('Ctrl+Alt+J')
-    let cap = await ensureCaptureFocusedText(app)
-    const restartDraft = '重启后应该还在的草稿'
-    sendText(restartDraft)
     await sleep(150)
-    sendKey('Escape')
+    let cap = await openCaptureViaHook(app)
+    const restartDraft = '重启后应该还在的草稿'
+    await cap.type('#text', restartDraft)
+    await sleep(100)
+    await cap.press('#text', 'Escape')
     await sleep(300)
     await quitApp(app)
     app = await launchApp({ label: 'A-draft-restart' })
     page = await mainWindowPage(app)
     await callTestHook(app, 'close')
-    await sleep(250)
-    sendHotkey('Ctrl+Alt+J')
-    cap = await ensureCaptureFocusedText(app)
     await sleep(150)
+    cap = await openCaptureViaHook(app)
+    await sleep(100)
     const valueAfterAppRestart = await cap.evaluate(() => document.querySelector('#text').value)
-    await shot(cap, '13-draft-after-app-restart', { checkIds: ['A3'], description: '退出应用重启后，按热键草稿仍原样恢复' })
-    sendKey('Escape')
+    await shot(cap, '13-draft-after-app-restart', { checkIds: ['A3'], description: '退出应用重启后，再次打开草稿仍原样恢复' })
+    await cap.press('#text', 'Escape')
     await sleep(300)
     await callTestHook(app, 'show')
     page = await mainWindowPage(app)
     const restartOk = valueAfterAppRestart === restartDraft
-    mergeNotes('A3', `退出应用重启后按热键恢复草稿=${restartOk}（值="${valueAfterAppRestart}"）`)
-    if (!restartOk) {
-      lib.results.A3.verdict = 'FAIL'
-    }
-    lib.results.A3.evidence.push('13-draft-after-app-restart.png')
+    mergeNotes('A3', `退出应用重启后恢复草稿=${restartOk}（值="${valueAfterAppRestart}"）`)
+    if (!restartOk) lib.results.A3.verdict = 'FAIL'
   } catch (err) {
     mergeNotes('A3', `重启恢复草稿场景异常：${err}`)
     lib.results.A3.verdict = 'FAIL'
@@ -397,37 +435,13 @@ export async function run() {
   // =====================================================================
   let todo4Texts = {}
   try {
-    const mk = async (text) => {
-      await callTestHook(app, 'close')
-      await sleep(250)
-      sendHotkey('Ctrl+Alt+J')
-      const cap = await ensureCaptureFocusedText(app)
-      sendText(text)
-      await sleep(150)
-      sendKey('Return')
-      await waitToastLifecycle(app, { timeoutMs: 3000 })
-      await sleep(200)
-    }
-
     const plainText = 'Item4普通待办'
     const repoText = 'Item4带仓库 #Dylan5237/req-to-page'
     const waitingText = 'Item4等我待办'
 
-    await mk(plainText)
-    await mk(repoText)
-
-    // 第三条需要勾「等我」复选框：热键打开后先用真实按键把内容打进 #text，再点击 #waiting（不是打字，用点击）
-    await callTestHook(app, 'close')
-    await sleep(250)
-    sendHotkey('Ctrl+Alt+J')
-    let cap = await ensureCaptureFocusedText(app)
-    sendText(waitingText)
-    await sleep(150)
-    await cap.click('#waiting')
-    await sleep(100)
-    await cap.evaluate(() => document.querySelector('#capture-form').requestSubmit())
-    await waitToastLifecycle(app, { timeoutMs: 3000 })
-    await sleep(200)
+    await createTodoViaHook(app, plainText)
+    await createTodoViaHook(app, repoText)
+    await createTodoViaHook(app, waitingText, { waiting: true })
 
     await callTestHook(app, 'show')
     page = await mainWindowPage(app)
@@ -462,7 +476,7 @@ export async function run() {
     todo4Texts = { plainId: plain2?.id, repoId: withRepo2?.id, waitingId: waiting2?.id, waitingText }
     setResult('4', ok ? 'PASS' : 'FAIL', {
       evidence: ['14-todos-3-items.png', '15-todos-after-restart.png', 'item4-todos.jsonl.txt'],
-      steps: '真实按键在快速捕获里连续记 3 条（一条含 #owner/repo，一条勾选「等我」），Enter 保存；打开待办页核对三条属性；调用与托盘「退出」相同的 quit handler 退出并重启；核对三条仍存在、属性不变；贴 todos.jsonl 原文',
+      steps: '用测试钩子打开捕获窗口连续记 3 条（一条含 #owner/repo，一条勾选「等我」，Playwright 键盘输入打字，Enter 保存）；打开待办页核对三条属性；调用与托盘「退出」相同的 quit handler 退出并重启；核对三条仍存在、属性不变；贴 todos.jsonl 原文',
       notes: `重启前：plain=${JSON.stringify(plain)} withRepo=${JSON.stringify(withRepo)} waiting=${JSON.stringify(waiting)}\n重启后：plain=${JSON.stringify(plain2)} withRepo=${JSON.stringify(withRepo2)} waiting=${JSON.stringify(waiting2)}`
     })
   } catch (err) {
@@ -493,15 +507,7 @@ export async function run() {
     const isDoneAfterUncheck = await page.locator(rowSelector('Item4普通待办')).getAttribute('class')
 
     // 删除：新建一条专用于删除流程 —— 点删除立即生效，不弹确认框，出现「已删除 · 撤销」
-    await callTestHook(app, 'close')
-    await sleep(250)
-    sendHotkey('Ctrl+Alt+J')
-    const cap = await ensureCaptureFocusedText(app)
-    sendText('待删除的测试待办-item5')
-    await sleep(150)
-    sendKey('Return')
-    await waitToastLifecycle(app, { timeoutMs: 3000 })
-    await sleep(200)
+    await createTodoViaHook(app, '待删除的测试待办-item5')
     await callTestHook(app, 'show')
     page = await mainWindowPage(app)
     await page.click('[data-view="todos"]')
@@ -570,7 +576,7 @@ export async function run() {
     setResult('5', ok ? 'PASS' : 'FAIL', {
       evidence: ['16-todo-completed.png', '17-delete-no-confirm-undo-bar.png', '18-after-delete-undo-expired.png', '19-todo-edited.png', '20-todo-filtered.png'],
       steps: '勾选/取消勾选完成状态（已完成的行折进默认折叠的「已完成」分组）；新建一条专门测删除：点删除 -> 立即生效，无 .modal-backdrop 确认框，底部出现「已删除 · 撤销」-> 5 秒不点撤销，提示消失，条目保持已删除，重启仍不在；编辑文字/仓库/等我并保存；按仓库过滤只显示对应条目；核对 listTodos() 顺序（未完成在前，按创建时间）',
-      notes: `完成态class=${isDoneClass}；取消完成class=${isDoneAfterUncheck}；删除前存在=${countBeforeDelete === 1}；点删除后是否出现确认框=${modalAppeared > 0}（应为 false）；点删除后行是否立即消失=${rowGoneImmediately}；是否出现「撤销」按钮=${undoBarVisible > 0}；5 秒后撤销提示是否消失=${undoBarGoneAfterWait}；重启后仍不在=${goneAfterRestart}；编辑结果=${JSON.stringify(edited)}；过滤结果=${JSON.stringify(filteredTexts)}；顺序正确=${orderOk}；Issue 正文原写“删除要确认”，本条按 #18 R3 的新行为（立即删除+撤销，不再弹确认框）判定`
+      notes: `完成态class=${isDoneClass}；取消完成class=${isDoneAfterUncheck}；删除前存在=${countBeforeDelete === 1}；点删除后是否出现确认框=${modalAppeared > 0}（应为 false）；点删除后行是否立即消失=${rowGoneImmediately}；是否出现「撤销」按钮=${undoBarVisible > 0}；5 秒后撤销提示是否消失=${undoBarGoneAfterWait}；重启后仍不在=${goneAfterRestart}；编辑结果=${JSON.stringify(edited)}；过滤结果=${JSON.stringify(filteredTexts)}；顺序正确=${orderOk}；Issue 正文原写"删除要确认"，本条按 #18 R3 的新行为（立即删除+撤销，不再弹确认框）判定`
     })
   } catch (err) {
     setResult('5', 'FAIL', { notes: `异常：${err.stack || err}` })
@@ -586,22 +592,10 @@ export async function run() {
     await page.click('.card:has(input[aria-label="关注仓库"]) button.primary')
     await page.waitForTimeout(200)
 
-    const mkA2 = async (text) => {
-      await callTestHook(app, 'close')
-      await sleep(250)
-      sendHotkey('Ctrl+Alt+J')
-      const cap = await ensureCaptureFocusedText(app)
-      sendText(text)
-      await sleep(150)
-      sendKey('Return')
-      await waitToastLifecycle(app, { timeoutMs: 3000 })
-      await sleep(200)
-    }
-
-    await mkA2('买菜 #Dylan5237/req-to-page')       // case1: 完整 owner/repo
-    await mkA2('清理缓存 #req-to-page')              // case2: 关注列表里的短名
-    await mkA2('随便记点 #不存在的名字')               // case3: 认不出的短名，留在正文
-    await mkA2('记得处理 !等我')                      // case4: !等我
+    await createTodoViaHook(app, '买菜 #Dylan5237/req-to-page')   // case1: 完整 owner/repo
+    await createTodoViaHook(app, '清理缓存 #req-to-page')          // case2: 关注列表里的短名
+    await createTodoViaHook(app, '随便记点 #不存在的名字')          // case3: 认不出的短名，留在正文
+    await createTodoViaHook(app, '记得处理 !等我')                  // case4: !等我
 
     await callTestHook(app, 'show')
     page = await mainWindowPage(app)
@@ -620,7 +614,7 @@ export async function run() {
       && case4 && case4.waiting === true && case4.text === '记得处理'
     setResult('A2', ok ? 'PASS' : 'FAIL', {
       evidence: ['21-a2-shorthand.png'],
-      steps: '先在设置里把 Dylan5237/req-to-page 加入关注仓库；再依次用真实 SendInput 在捕获框打 4 种正文：完整 #owner/repo；关注列表里的短名 #repo；认不出的短名 #不存在的名字；!等我；逐条保存后核对 listTodos() 的 text/repo/waiting 字段',
+      steps: '先在设置里把 Dylan5237/req-to-page 加入关注仓库；再依次用测试钩子打开捕获窗口 + Playwright 键盘输入打 4 种正文：完整 #owner/repo；关注列表里的短名 #repo；认不出的短名 #不存在的名字；!等我；逐条保存后核对 listTodos() 的 text/repo/waiting 字段',
       notes: `case1(#owner/repo，与关注列表无关，源码里全 owner/repo 形式始终解析)=${JSON.stringify(case1)}\ncase2(#repo 命中关注列表)=${JSON.stringify(case2)}\ncase3(#repo 未命中，留在正文)=${JSON.stringify(case3)}\ncase4(!等我)=${JSON.stringify(case4)}`
     })
   } catch (err) {

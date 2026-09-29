@@ -39,6 +39,10 @@ export function logEvidence(file, description, checkIds) {
   evidenceLog.push({ file, description, checkIds })
 }
 
+/** 跑完预检后由 run.mjs 写入，各 scenario 用来判断「这次运行环境里真实全局热键 SendInput 到底通不通」，
+ * 从而决定是否还要浪费时间去反复尝试一个已知会失败的真实按键确认，还是直接跳过并在 notes 里说明。 */
+export const envFlags = { hotkeyDeliveryOk: null, sendInputToWindowOk: null, checkedAt: null }
+
 // ---------------------------------------------------------------------------
 // 原生 Windows 输入 / 截图（win.ps1）
 // ---------------------------------------------------------------------------
@@ -206,6 +210,41 @@ export function captureWindowPage(app, opts) {
 }
 export function toastWindowPage(app, opts) {
   return findWindowByMarker(app, () => !!document.querySelector('body') && document.title === '已记下', opts)
+}
+
+/** 等一个已经打开的捕获窗口拿到 #text 的输入焦点（不关心它是怎么打开的：热键还是测试钩子）。 */
+export async function waitCaptureFocused(app, opts) {
+  const cap = await captureWindowPage(app, opts)
+  await cap.waitForFunction(() => document.activeElement && document.activeElement.id === 'text', null, { timeout: 3000 }).catch(() => {})
+  return cap
+}
+
+/**
+ * 用测试钩子（IPC，不经过全局热键/SendInput）打开捕获窗口。这份构建的 CI 环境已经证实真实全局热键的
+ * SendInput 投递不通（见 evidence/preflight.json），本函数只是为了让「不是在测热键机制本身」的检查项
+ * （比如草稿保存、简写解析、待办 CRUD）仍然能测到 Arckeep 真实的捕获窗口 + 真实渲染进程逻辑：打开捕获窗口
+ * 走的是与真实热键完全相同的主进程 openCapture 代码路径（同一个 createCaptureWindow /
+ * focusCaptureInput），唯一不同的只是「谁触发了这次打开」，不影响捕获窗口内部任何行为。
+ * 需要专门验证「真实全局热键本身能不能生效」的检查项（1/3/9/A1/A4 相关/R1/R2 的真实按键子项）
+ * 不能用这个函数代替，必须仍然走 sendHotkey。
+ */
+export async function openCaptureViaHook(app, opts) {
+  await callTestHook(app, 'capture')
+  return waitCaptureFocused(app, opts)
+}
+
+/**
+ * 用 Playwright 自己的 CDP 按键（不经过 OS SendInput）在聚焦的输入框里模拟一次「组合键」，
+ * 用于 R2「录制热键」场景——产品代码里 record 按钮监听的是 #hotkey-input 上一个普通的
+ * window/DOM keydown 事件（见 src/renderer/main.ts 的 acceleratorFromEvent），完全不经过
+ * Electron 的 globalShortcut/OS 层，所以哪怕 OS 级 SendInput 在这个 CI 环境不通，
+ * Playwright 自己的键盘事件仍然是「真的」按键事件（走 CDP Input.dispatchKeyEvent，
+ * 会真正触发 keydown 监听器），能如实测到这段渲染进程逻辑本身对不对。
+ */
+export async function pressAcceleratorViaPlaywright(page, modifiers, key) {
+  for (const m of modifiers) await page.keyboard.down(m)
+  await page.keyboard.press(key)
+  for (const m of [...modifiers].reverse()) await page.keyboard.up(m)
 }
 
 export async function getUserDataDir(app) {
