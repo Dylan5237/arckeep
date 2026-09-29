@@ -66,6 +66,15 @@ export function sampleWaitingRows(): WaitingRow[] {
   return days.map((waitingDays, index) => {
     const repo = REPOS[index % REPOS.length] ?? 'northwind/ledger'
     const reasons = REASON_SETS[index % REASON_SETS.length] ?? ['要人动手']
+    const signalText = reasons.includes('待你审/合')
+      ? '3 天无动静'
+      : reasons.includes('请求 review')
+        ? '请求 review'
+        : reasons.includes('指派')
+          ? '指派'
+          : reasons.includes('要人动手')
+            ? '请确认这一版'
+            : reasons[0] ?? '等待'
     const type = reasons.includes('待办')
       ? 'todo' as const
       : reasons.includes('待你审/合') || reasons.includes('请求 review')
@@ -96,6 +105,7 @@ export function sampleWaitingRows(): WaitingRow[] {
       childCount: 0,
       waitingDays,
       daysEstimated: index % 7 === 0,
+      signalText,
       updatedAt: '2026-09-01T00:00:00.000Z',
       ignored: false
     }

@@ -25,7 +25,10 @@ const DEFAULT_KEYWORDS = [
   '待你验收',
   '待用户',
   '等用户',
-  '请主人'
+  '请主人',
+  '请拍板',
+  '明示接受或拒收',
+  '\\bACK\\b'
 ]
 
 const DEFAULT_LABELS = [
@@ -38,7 +41,34 @@ const DEFAULT_LABELS = [
 const DEFAULT_RESOLVED = [
   '已验收',
   '已完成',
-  '\\bPASS\\b'
+  '\\bPASS\\b',
+  '无需操作',
+  '不需要用户',
+  '不需要你'
+]
+
+const DEFAULT_ROLES = ['主人', 'owner', '维护者', '负责人', 'maintainer']
+
+const DEFAULT_STATUS_HEADERS = [
+  'NEEDS USER ACTION',
+  'BLOCKED',
+  'WAITING ON',
+  'ACTION REQUIRED'
+]
+
+const DEFAULT_SPEC_MARKERS = ['需求', '功能', 'spec', 'feature', 'PRD']
+
+const DEFAULT_OTHER_ACTORS = ['agent', 'bot', '助手']
+
+const DEFAULT_SELF_STEPS = ['我还没', '自己还没', '我来做']
+
+/** Asks aimed at a role name.「请确认」also lives in the keyword list. */
+export const DEFAULT_ROLE_ASKS = [
+  '明示接受或拒收',
+  '接受或拒收',
+  '请拍板',
+  '请确认',
+  '请.{0,12}(?:确认|拍板|拒收|接收|接受)'
 ]
 
 /** Enough for a large personal account. Hitting it shows a notice instead of dropping repos quietly. */
@@ -76,6 +106,12 @@ export function defaultWaitingConfig(): WaitingConfig {
     mentionPolicy: 'action-or-recent',
     mentionRecentDays: DEFAULT_MENTION_RECENT_DAYS,
     openPrQuietDays: DEFAULT_OPEN_PR_QUIET_DAYS,
+    roleNames: [...DEFAULT_ROLES],
+    roleAskPhrases: [...DEFAULT_ROLE_ASKS],
+    statusHeaders: [...DEFAULT_STATUS_HEADERS],
+    specMarkers: [...DEFAULT_SPEC_MARKERS],
+    otherActors: [...DEFAULT_OTHER_ACTORS],
+    selfStepPhrases: [...DEFAULT_SELF_STEPS],
     showIgnored: false
   }
 }
@@ -209,6 +245,12 @@ export function parseWaitingConfig(input: unknown, options?: { validatePatterns?
     mentionPolicy: choice<MentionPolicy>(input.mentionPolicy, ['action-or-recent', 'any'], defaults.mentionPolicy, '提及规则'),
     mentionRecentDays: dayWindow(input.mentionRecentDays, defaults.mentionRecentDays, '提及的最近天数'),
     openPrQuietDays: dayWindow(input.openPrQuietDays, defaults.openPrQuietDays, '待你审/合的无动静天数'),
+    roleNames: input.roleNames === undefined ? defaults.roleNames : stringList(input.roleNames, 40, '角色称呼'),
+    roleAskPhrases: input.roleAskPhrases === undefined ? defaults.roleAskPhrases : stringList(input.roleAskPhrases, 40, '角色请求'),
+    statusHeaders: input.statusHeaders === undefined ? defaults.statusHeaders : stringList(input.statusHeaders, 40, '状态头'),
+    specMarkers: input.specMarkers === undefined ? defaults.specMarkers : stringList(input.specMarkers, 40, '需求类标记'),
+    otherActors: input.otherActors === undefined ? defaults.otherActors : stringList(input.otherActors, 40, '非用户负责人'),
+    selfStepPhrases: input.selfStepPhrases === undefined ? defaults.selfStepPhrases : stringList(input.selfStepPhrases, 40, '自己未完成的步骤'),
     showIgnored: bool(input.showIgnored, false)
   }
   if (options?.validatePatterns) validateWaitingPatterns(config)
@@ -218,6 +260,12 @@ export function parseWaitingConfig(input: unknown, options?: { validatePatterns?
 export function validateWaitingPatterns(config: WaitingConfig): void {
   compileUserRegexList(config.humanKeywords, '人工动作关键词')
   compileUserRegexList(config.resolvedSignals, '已解决信号')
+  compileUserRegexList(config.roleNames, '角色称呼')
+  compileUserRegexList(config.roleAskPhrases, '角色请求')
+  compileUserRegexList(config.statusHeaders, '状态头')
+  compileUserRegexList(config.specMarkers, '需求类标记')
+  compileUserRegexList(config.otherActors, '非用户负责人')
+  compileUserRegexList(config.selfStepPhrases, '自己未完成的步骤')
   for (const rule of config.statusDocRules) {
     compileUserRegex(rule.pattern, '状态文档正则')
   }

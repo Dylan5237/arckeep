@@ -78,6 +78,18 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
   mentionDays.value = String(config.mentionRecentDays)
   const quietDays = el('input', { type: 'number', min: '1', max: '365', 'aria-label': '待你审/合的无动静天数' })
   quietDays.value = String(config.openPrQuietDays)
+  const roles = el('textarea', { 'aria-label': '角色称呼' })
+  roles.value = config.roleNames.join('\n')
+  const roleAsks = el('textarea', { 'aria-label': '角色请求' })
+  roleAsks.value = config.roleAskPhrases.join('\n')
+  const headers = el('textarea', { 'aria-label': '状态头' })
+  headers.value = config.statusHeaders.join('\n')
+  const specs = el('textarea', { 'aria-label': '需求类标记' })
+  specs.value = config.specMarkers.join('\n')
+  const actors = el('textarea', { 'aria-label': '非用户负责人' })
+  actors.value = config.otherActors.join('\n')
+  const selfSteps = el('textarea', { 'aria-label': '自己未完成的步骤' })
+  selfSteps.value = config.selfStepPhrases.join('\n')
   const rulesBox = el('div', { class: 'rule-list' })
   const rules: StatusDocRule[] = config.statusDocRules.map(rule => ({ ...rule }))
   const drawRules = () => {
@@ -121,6 +133,12 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
       mentionPolicy: mentionPolicy.value as MentionPolicy,
       mentionRecentDays: Number(mentionDays.value),
       openPrQuietDays: Number(quietDays.value),
+      roleNames: lines(roles.value),
+      roleAskPhrases: lines(roleAsks.value),
+      statusHeaders: lines(headers.value),
+      specMarkers: lines(specs.value),
+      otherActors: lines(actors.value),
+      selfStepPhrases: lines(selfSteps.value),
       showIgnored: config.showIgnored
     }
     void window.arckeep.setWaiting(next).then(async result => {
@@ -138,6 +156,22 @@ export function renderWaitingSettings(state: AppState, rerender: () => Promise<v
     toggles,
     el('h3', {}, ['人工动作关键词']),
     keywords,
+    el('h3', {}, ['角色称呼']),
+    el('p', { class: 'hint' }, ['最新评论用这些称呼指代你，并同时有明确请求时，即使没有 @、也没写「用户」，也算在等你。']),
+    roles,
+    el('h3', {}, ['角色请求']),
+    el('p', { class: 'hint' }, ['和角色称呼出现在同一条评论里才生效。例如：明示接受或拒收、请拍板、请.{0,12}(?:确认|拍板|拒收)。']),
+    roleAsks,
+    el('h3', {}, ['状态头']),
+    el('p', { class: 'hint' }, ['忽略大小写和两边的符号。BLOCKED 只在指向你、或没有别的阻塞对象时算。WAITING ON 必须指向你或上面的角色。']),
+    headers,
+    el('h3', {}, ['需求类标记']),
+    el('p', { class: 'hint' }, ['标题或标签命中这些词时，正文里描述功能行为的句子不算。评论或正文状态区里的明确请求仍然算。']),
+    specs,
+    el('h3', {}, ['非用户负责人']),
+    actors,
+    el('h3', {}, ['自己未完成的步骤']),
+    selfSteps,
     el('h3', {}, ['人工动作标签']),
     labels,
     el('h3', {}, ['已解决信号']),

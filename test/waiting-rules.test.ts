@@ -424,7 +424,7 @@ describe('quiet open pulls in writable repos', () => {
     expect(classifyRecord(pull({ lastPushedAt: age(2), createdAt: age(2) }), config(), NOW)).toBeNull()
     const exact = classifyRecord(pull({ lastPushedAt: age(3), createdAt: age(3) }), config(), NOW)
     expect(exact?.reasons).toEqual(['待你审/合'])
-    expect(exact?.signal).toEqual({ rule: '3 天无动静', excerpt: '' })
+    expect(exact?.signal).toEqual({ rule: '3 天无动静', excerpt: '3 天无动静' })
     expect(exact?.waitingDays).toBe(3)
     const older = classifyRecord(pull({ lastPushedAt: age(4), createdAt: age(4) }), config(), NOW)
     expect(older?.signal.rule).toBe('3 天无动静')
@@ -479,6 +479,7 @@ describe('quiet open pulls in writable repos', () => {
     }), config(), NOW)
     expect(review?.reasons).toEqual(['请求 review'])
     expect(review?.signal.rule).toBe('请求 review')
+    expect(review?.signal.excerpt).toBe('请求 review')
 
     const assigned = classifyRecord(pull({
       fromAssignee: true,
@@ -488,6 +489,7 @@ describe('quiet open pulls in writable repos', () => {
     }), config(), NOW)
     expect(assigned?.reasons).toEqual(['指派'])
     expect(assigned?.signal.rule).toBe('指派')
+    expect(assigned?.signal.excerpt).toBe('指派')
   })
 
   it('honors a different quiet window', () => {
@@ -496,10 +498,269 @@ describe('quiet open pulls in writable repos', () => {
     expect(classifyRecord(pull({ lastPushedAt: age(4), createdAt: age(4) }), rules, NOW)).toBeNull()
     const hit = classifyRecord(pull({ lastPushedAt: age(5), createdAt: age(5) }), rules, NOW)
     expect(hit?.reasons).toEqual(['待你审/合'])
-    expect(hit?.signal).toEqual({ rule: '5 天无动静', excerpt: '' })
+    expect(hit?.signal).toEqual({ rule: '5 天无动静', excerpt: '5 天无动静' })
     expect(parseWaitingConfig({}).openPrQuietDays).toBe(3)
     expect(parseWaitingConfig({ openPrQuietDays: 5 }).openPrQuietDays).toBe(5)
     expect(() => parseWaitingConfig({ openPrQuietDays: 0 })).toThrow('待你审/合的无动静天数')
+  })
+})
+
+describe('role names, status headers, specs, and step owners', () => {
+  const rules = config()
+
+  it('counts a role plus an explicit ask, and ignores a role with no ask', () => {
+    const asked = classifyRecord(record({
+      kind: 'issue',
+      number: 90,
+      title: 'Ship',
+      body: '先记在这里',
+      comments: [{ body: '请负责人确认能否合入', createdAt: '2026-09-21T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(asked?.reasons).toEqual(['要人动手'])
+    expect(asked?.signal.rule).toBe('角色称呼请动手')
+    expect(asked?.signal.excerpt).toContain('请负责人确认')
+
+    const named = classifyRecord(record({
+      kind: 'issue',
+      number: 91,
+      title: 'Decide',
+      comments: [{ body: '主人，请明示接受或拒收这一版', createdAt: '2026-09-21T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(named?.reasons).toEqual(['要人动手'])
+    expect(named?.signal.excerpt).toContain('明示接受或拒收')
+
+    const chatter = classifyRecord(record({
+      kind: 'issue',
+      number: 92,
+      title: 'Note',
+      comments: [{ body: '主人今天看了风景', createdAt: '2026-09-21T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(chatter).toBeNull()
+
+    const renamed = classifyRecord(record({
+      kind: 'issue',
+      number: 93,
+      title: 'Other name',
+      comments: [{ body: '请负责人确认能否合入', createdAt: '2026-09-21T00:00:00.000Z' }]
+    }), config({ roleNames: ['值班人'] }), NOW)
+    expect(renamed).toBeNull()
+  })
+
+  it('does not let an inequality clarification cancel an explicit request', () => {
+    const clarified = classifyRecord(record({
+      kind: 'issue',
+      number: 94,
+      title: 'Not the same',
+      comments: [{
+        body: '合入 ≠ 接受，请主人明示接受或拒收',
+        createdAt: '2026-09-21T00:00:00.000Z'
+      }]
+    }), rules, NOW)
+    expect(clarified?.reasons).toEqual(['要人动手'])
+    expect(clarified?.signal.excerpt).toContain('明示接受或拒收')
+
+    const notPass = classifyRecord(record({
+      kind: 'issue',
+      number: 95,
+      title: 'Still open',
+      comments: [{ body: '不等于通过，请确认', createdAt: '2026-09-21T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(notPass?.reasons).toEqual(['要人动手'])
+    expect(notPass?.signal.excerpt).toContain('请确认')
+
+    const dismissed = classifyRecord(record({
+      kind: 'issue',
+      number: 96,
+      title: 'Done enough',
+      comments: [{ body: '请确认，无需操作', createdAt: '2026-09-21T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(dismissed).toBeNull()
+
+    const notNeeded = classifyRecord(record({
+      kind: 'issue',
+      number: 97,
+      title: 'Skip',
+      body: '不需要用户再看'
+    }), rules, NOW)
+    expect(notNeeded).toBeNull()
+  })
+
+  it('reads configured status headers, and only some BLOCKED or WAITING ON lines', () => {
+    const needs = classifyRecord(record({
+      kind: 'issue',
+      number: 98,
+      title: 'Header',
+      comments: [{ body: '**NEEDS USER ACTION**', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(needs?.signal.rule).toBe('状态头')
+    expect(needs?.signal.excerpt.toUpperCase()).toContain('NEEDS USER ACTION')
+
+    const blocked = classifyRecord(record({
+      kind: 'issue',
+      number: 99,
+      title: 'Blocked',
+      body: '状态：BLOCKED'
+    }), rules, NOW)
+    expect(blocked?.signal.rule).toBe('状态头')
+
+    const blockedOnOwner = classifyRecord(record({
+      kind: 'issue',
+      number: 100,
+      title: 'Blocked on you',
+      comments: [{ body: 'BLOCKED on owner', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(blockedOnOwner?.reasons).toEqual(['要人动手'])
+
+    const blockedOnCi = classifyRecord(record({
+      kind: 'issue',
+      number: 101,
+      title: 'Blocked on CI',
+      comments: [{ body: 'BLOCKED: CI', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(blockedOnCi).toBeNull()
+
+    const waitingOwner = classifyRecord(record({
+      kind: 'issue',
+      number: 102,
+      title: 'Wait',
+      body: '状态：WAITING ON 维护者'
+    }), rules, NOW)
+    expect(waitingOwner?.signal.excerpt.toUpperCase()).toContain('WAITING ON')
+
+    const waitingAgent = classifyRecord(record({
+      kind: 'issue',
+      number: 103,
+      title: 'Wait agent',
+      body: '状态：WAITING ON agent'
+    }), rules, NOW)
+    expect(waitingAgent).toBeNull()
+
+    const custom = classifyRecord(record({
+      kind: 'issue',
+      number: 104,
+      title: 'Custom header',
+      comments: [{ body: 'NEEDS USER ACTION', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), config({ statusHeaders: ['ACTION REQUIRED'] }), NOW)
+    expect(custom).toBeNull()
+  })
+
+  it('ignores feature behavior in a spec issue unless a comment or status line asks', () => {
+    const described = classifyRecord(record({
+      kind: 'issue',
+      number: 105,
+      title: '功能：导出',
+      body: '导出流程会等待用户完成选择后再继续。'
+    }), rules, NOW)
+    expect(described).toBeNull()
+
+    const labeled = classifyRecord(record({
+      kind: 'issue',
+      number: 106,
+      title: '夜间模式',
+      labels: ['spec'],
+      body: '当开关打开后，等待用户完成授权。'
+    }), rules, NOW)
+    expect(labeled).toBeNull()
+
+    const commented = classifyRecord(record({
+      kind: 'issue',
+      number: 107,
+      title: '功能：导出',
+      body: '导出流程会等待用户完成选择后再继续。',
+      comments: [{ body: '请确认是否按这个做', createdAt: '2026-09-22T00:00:00.000Z' }]
+    }), rules, NOW)
+    expect(commented?.reasons).toEqual(['要人动手'])
+    expect(commented?.signal.excerpt).toContain('请确认是否按这个做')
+
+    const status = classifyRecord(record({
+      kind: 'issue',
+      number: 108,
+      title: 'PRD：搜索',
+      body: '搜索会等待用户完成输入。\n\n状态：请负责人确认范围'
+    }), rules, NOW)
+    expect(status?.reasons).toEqual(['要人动手'])
+    expect(status?.signal.excerpt).toContain('确认')
+  })
+
+  it('counts an unfinished step only when it is the user\'s or it asks the user', () => {
+    const mine = classifyRecord(record({
+      kind: 'issue',
+      number: 109,
+      title: 'Steps',
+      body: [
+        '| 步骤 | 负责人 | 状态 |',
+        '| --- | --- | --- |',
+        '| 验收 | 主人 | 未完成 |',
+        '| 补测试 | agent | 未完成 |'
+      ].join('\n')
+    }), rules, NOW)
+    expect(mine?.reasons).toEqual(['要人动手'])
+    expect(mine?.signal.rule).toBe('负责人指向用户')
+    expect(mine?.signal.excerpt).toContain('主人')
+    expect(mine?.signal.excerpt).not.toContain('agent')
+
+    const asked = classifyRecord(record({
+      kind: 'issue',
+      number: 110,
+      title: 'Checklist',
+      body: '- [ ] 请用户确认文案\n- [ ] agent：补测试\n- [ ] 我还没写完文档'
+    }), rules, NOW)
+    expect(asked?.signal.excerpt).toContain('请用户确认文案')
+    expect(asked?.signal.excerpt).not.toContain('补测试')
+    expect(asked?.signal.excerpt).not.toContain('我还没写完')
+
+    const theirs = classifyRecord(record({
+      kind: 'issue',
+      number: 111,
+      title: 'Someone else',
+      body: [
+        '| 步骤 | 负责人 | 状态 |',
+        '| --- | --- | --- |',
+        '| 写文档 | 张三 | 未完成 |'
+      ].join('\n')
+    }), rules, NOW)
+    expect(theirs).toBeNull()
+  })
+
+  it('puts the matched text on review, assignment, and quiet rows', () => {
+    const ack = classifyRecord(record({
+      kind: 'pr',
+      number: 112,
+      title: 'Merge',
+      fromOpenPr: true,
+      isDraft: false,
+      body: '需 @ada ACK 后合入',
+      lastPushedAt: new Date(NOW.getTime() - 86_400_000).toISOString(),
+      createdAt: new Date(NOW.getTime() - 86_400_000).toISOString()
+    }), rules, NOW)
+    expect(ack?.reasons).toEqual(['待你审/合'])
+    expect(ack?.signal.excerpt).toContain('ACK')
+    expect(ack?.signal.excerpt).toContain('合入')
+
+    const review = classifyRecord(record({
+      kind: 'pr',
+      number: 113,
+      title: 'Review',
+      fromReview: true,
+      fromOpenPr: true,
+      isDraft: false,
+      reviewRequestedAt: '2026-09-27T00:00:00.000Z',
+      body: '需 @ada ACK 后合入',
+      lastPushedAt: '2026-09-27T00:00:00.000Z',
+      createdAt: '2026-09-27T00:00:00.000Z'
+    }), rules, NOW)
+    expect(review?.reasons).toContain('请求 review')
+    expect(review?.signal.excerpt.startsWith('请求 review')).toBe(true)
+    expect(review?.signal.excerpt).toContain('ACK')
+
+    const assigned = classifyRecord(record({
+      kind: 'issue',
+      number: 114,
+      title: 'Assigned quietly',
+      fromAssignee: true,
+      assignedAt: '2026-09-20T00:00:00.000Z'
+    }), rules, NOW)
+    expect(assigned?.signal.excerpt).toBe('指派')
   })
 })
 

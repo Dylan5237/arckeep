@@ -7,8 +7,10 @@ interface Hit {
 
 const WORD_NEGATION = /(?:\bno\b|\bnot\b|\bwithout\b|\bnever\b|n't|没有|不是|并未|并非)/i
 const SHORT_NEGATION = /(?:未|无|非|不)\s*$/u
+const INEQUALITY = /(?:不等于|并非等于|不是等于|≠|!==|!=)/gu
+const INEQUALITY_TAIL = /(?:不等于|并非等于|不是等于|≠|!==|!=)\s*$/u
 const DESCRIPTIVE = /(?:文案|例如|比如|称为|叫做|显示|写成|字样|示例|描述|界面|流程|功能是|功能会|功能里|功能上)/u
-const OWNER_REQUEST = /请\s*主人|请拒收|请接收|请确认|需要用户|待你验收|待用户|等用户|需要你|等你|待验收|拒收|接收/u
+const OWNER_REQUEST = /请\s*主人|请拒收|请接收|请确认|请拍板|明示接受或拒收|需要用户|待你验收|待用户|等用户|需要你|等你|待验收|拒收|接收/u
 
 function flagsWithGlobal(pattern: RegExp): string {
   return pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`
@@ -39,12 +41,19 @@ function sentencePrefix(text: string, index: number): string {
   return last >= 0 ? scope.slice(last + 1) : scope
 }
 
-/** A resolved token in the same sentence as no/not/未/不/没有/不是 is not a resolution. */
+/**
+ * Negation cancels a token only when it says the user is not needed or the
+ * step is already done.「不等于 / ≠」clarifies that two things differ; it does
+ * not cancel a separate request later in the same comment. It does cancel the
+ * single token it is attached to, so「不等于通过」is not a real pass.
+ */
 export function isNegatedSignal(text: string, index: number): boolean {
   const prefix = sentencePrefix(text, index)
-  if (WORD_NEGATION.test(prefix)) return true
-  if (SHORT_NEGATION.test(prefix)) return true
-  return /(?:未|不)[^\n。！？.!?]{0,8}$/u.test(prefix)
+  if (INEQUALITY_TAIL.test(prefix)) return true
+  const stripped = prefix.replace(INEQUALITY, ' ')
+  if (WORD_NEGATION.test(stripped)) return true
+  if (SHORT_NEGATION.test(stripped)) return true
+  return /(?:未|不)[^\n。！？.!?]{0,8}$/u.test(stripped)
 }
 
 function descriptiveMention(text: string, index: number): boolean {
@@ -122,4 +131,77 @@ export function explainAction(
   if (negated) return { rule: '同一段里的否定式', excerpt }
   if (OWNER_REQUEST.test(matched)) return { rule: '请主人或用户动手', excerpt }
   return { rule: '动作关键词', excerpt }
+}
+
+function escapeLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function patternHits(text: string, patterns: readonly RegExp[]): boolean {
+  return patterns.some(pattern => {
+    pattern.lastIndex = 0
+    return pattern.test(text)
+  })
+}
+
+/** A role name plus an explicit ask in the same text, with or without @ or「用户」. */
+export function explainRoleAsk(
+  text: string,
+  roles: readonly RegExp[],
+  asks: readonly RegExp[],
+  keywords: readonly RegExp[],
+  resolved: readonly RegExp[]
+): ActionExplanation | null {
+  if (!patternHits(text, roles)) return null
+  if (explainAction(text, keywords, resolved)) return null
+  const directed = explainAction(text, asks, resolved)
+  if (!directed) return null
+  return { rule: '角色称呼请动手', excerpt: directed.excerpt }
+}
+
+function headerPattern(header: string): RegExp {
+  const body = escapeLiteral(header.trim()).replace(/ /g, '\\s+')
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}_])(${body})(?=$|[^\\p{L}\\p{N}_])`, 'giu')
+}
+
+function headerTarget(text: string, end: number): string {
+  const line = text.slice(end).split(/\r?\n/)[0] ?? ''
+  const cleaned = line
+    .replace(/^[\s*:：|—\-[\]]+/u, '')
+    .replace(/^(?:on|by|for)\s+/iu, '')
+  return (cleaned.split(/[。.!?\n,，;；]/u)[0] ?? '')
+    .replace(/[\s*:：|—\-[\]]+$/u, '')
+    .trim()
+}
+
+function headerKey(header: string): string {
+  return header.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/**
+ * A configured status token. BLOCKED counts when it names the user or names
+ * nobody. WAITING ON counts only when the object is the user or a role.
+ */
+export function explainStatusHeaders(
+  text: string,
+  headers: readonly string[],
+  userWords: readonly RegExp[]
+): ActionExplanation | null {
+  for (const header of headers) {
+    const pattern = headerPattern(header)
+    for (const match of text.matchAll(pattern)) {
+      const token = match[1] ?? header
+      const index = (match.index ?? 0) + match[0].lastIndexOf(token)
+      if (isNegatedSignal(text, index)) continue
+      const target = headerTarget(text, index + token.length)
+      const key = headerKey(header)
+      if (key === 'blocked') {
+        if (target && !patternHits(target, userWords)) continue
+      } else if (key === 'waiting on') {
+        if (!target || !patternHits(target, userWords)) continue
+      }
+      return { rule: '状态头', excerpt: clip(text, index, index + token.length) }
+    }
+  }
+  return null
 }
