@@ -13,6 +13,16 @@ import { _electron as electron } from 'playwright'
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs'
 import path from 'node:path'
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// Tracks the most recently launched Electron app so a fatal top-level error can still
+// force-close it before the process exits — an unclosed Electron/Chromium child process
+// on Windows can keep this step's stdio pipe open and hang the whole job long past the
+// script's own completion (observed: 57 extra minutes with zero further output).
+let currentApp = null
+
 const EXE_PATH = process.env.EXE_PATH
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ''
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.join(process.cwd(), 'evidence')
@@ -56,9 +66,22 @@ function readSettingsFile() {
   }
 }
 
-function resetUserData() {
-  if (USER_DATA_DIR && existsSync(USER_DATA_DIR)) {
-    rmSync(USER_DATA_DIR, { recursive: true, force: true })
+async function resetUserData() {
+  if (!USER_DATA_DIR || !existsSync(USER_DATA_DIR)) return
+  // Right after closing Electron, Windows can briefly hold a lock on files such as
+  // DIPS (Chromium's network-state DB) even though the process has exited — retry
+  // instead of letting a transient EBUSY abort the whole run.
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
+    try {
+      rmSync(USER_DATA_DIR, { recursive: true, force: true })
+      return
+    } catch (error) {
+      if (attempt === 8) {
+        console.error('[run] resetUserData: giving up after retries:', error instanceof Error ? error.message : error)
+        return
+      }
+      await sleep(400 * attempt)
+    }
   }
 }
 
@@ -69,13 +92,17 @@ async function launch(env = {}, extraArgs = []) {
     env: { ...process.env, ...env },
     timeout: 60_000
   })
+  currentApp = app
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
   // The renderer's initial default-view render (等我处理) runs asynchronously after
-  // domcontentloaded; interacting before it settles races its own content.replaceChildren
-  // call and can clobber whatever we just clicked into. Give it a moment to finish.
+  // domcontentloaded and is NOT awaited by the app itself; if that promise resolves
+  // later than expected (e.g. its own GitHub fetch is slow) it calls
+  // content.replaceChildren and silently clobbers whatever a later navigation put
+  // there. A short fixed wait only reduces the odds; settleOnPage() below adds a
+  // second, active verification after every navigation for the rest of the run.
   await page.waitForSelector('.page', { timeout: 15_000 }).catch(() => {})
-  await page.waitForTimeout(800)
+  await page.waitForTimeout(1200)
   // Record (not invoke) shell.openExternal calls from the main process, per the
   // task's instruction to wrap it in electronApp.evaluate rather than actually
   // opening a system browser on the CI runner.
@@ -93,14 +120,28 @@ async function openExternalCalls(app) {
   return app.evaluate(() => globalThis.__openExternalCalls || [])
 }
 
+// Clicks a nav button, waits for the target selector, then re-checks it a moment
+// later. If the app's unawaited initial-view render (or any other async re-render)
+// clobbers the page in between, the selector disappears and we simply click again.
+async function settleOnPage(page, navName, targetSelector, attempts = 4) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    await page.getByRole('button', { name: navName, exact: true }).click()
+    await page.waitForSelector(targetSelector, { timeout: 15_000 })
+    await page.waitForTimeout(400)
+    if (await page.locator(targetSelector).count() > 0) return
+    log(`settleOnPage: ${targetSelector} vanished after navigating to "${navName}" (attempt ${attempt}); retrying`)
+  }
+  // Last attempt: let a real error surface rather than silently swallowing it.
+  await page.getByRole('button', { name: navName, exact: true }).click()
+  await page.waitForSelector(targetSelector, { timeout: 15_000 })
+}
+
 async function gotoOverview(page) {
-  await page.getByRole('button', { name: '项目总览', exact: true }).click()
-  await page.waitForSelector('.page.overview', { timeout: 15_000 })
+  await settleOnPage(page, '项目总览', '.page.overview')
 }
 
 async function gotoSettings(page) {
-  await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.waitForSelector('#overview-settings', { timeout: 15_000 })
+  await settleOnPage(page, '设置', '#overview-settings')
 }
 
 async function clearWatchedRepos(page) {
@@ -136,6 +177,34 @@ async function waitForOverviewSettled(page) {
     const btn = document.querySelector('.waiting-toolbar button.primary')
     return btn && btn.textContent?.trim() === '刷新'
   }, { timeout: 30_000 }).catch(() => {})
+  // The refresh button flips back to "刷新" as soon as the fetch promise resolves;
+  // give the subsequent DOM paint (row/chip classification) a moment to actually land
+  // before any check reads chip/group state, or a real result can look empty by a
+  // few hundred ms of bad luck (observed: a chip absent here, present 5s later).
+  await page.waitForTimeout(600)
+}
+
+// Waits for at least one match, tolerating a render that lands slightly after
+// waitForOverviewSettled() returns, then reports whether it is actually present.
+async function waitForChipPresent(locator, timeout = 8000) {
+  try {
+    await locator.first().waitFor({ state: 'attached', timeout })
+  } catch {
+    // fall through — count() below will correctly report 0
+  }
+  return await locator.count() > 0
+}
+
+// Captures the live DOM for a failing/ambiguous check so the report and any follow-up
+// investigation do not depend on another full CI round-trip just to see what actually
+// rendered.
+async function debugHtml(page, selector = '.page', maxLen = 1500) {
+  try {
+    const html = await page.locator(selector).first().innerHTML()
+    return html.length > maxLen ? `${html.slice(0, maxLen)}…(truncated ${html.length} chars total)` : html
+  } catch (error) {
+    return `(could not read ${selector}: ${error instanceof Error ? error.message : String(error)})`
+  }
 }
 
 // ---------------------------------------------------------------------------------
@@ -161,7 +230,7 @@ async function phaseTokenSanity() {
 // Phase 1: exactly-3-repo list (item 1), per-row consistency (item 2), attention counts
 // ---------------------------------------------------------------------------------
 async function phaseCoreList() {
-  resetUserData()
+  await resetUserData()
   const ci = reference.scenarios.ciSuccess
   const cf = reference.scenarios.ciFailure
   const nc = reference.scenarios.noCi
@@ -253,14 +322,15 @@ async function phaseThresholdsAndChips(handle) {
     if (cf?.snapshot) {
       const row = page.locator('.overview-row', { has: page.locator('.waiting-title-text', { hasText: cf.snapshot.name }) })
       const chip = row.locator('.chip-stuck', { hasText: 'CI 失败' })
-      const chipVisible = await chip.count() > 0
+      const chipVisible = await waitForChipPresent(chip)
       item4Notes.push(`${cf.snapshot.name} CI失败 chip visible=${chipVisible}`)
       item4Ok = item4Ok && chipVisible
     }
     if (rw.snapshot?.reviewWait?.longest) {
       const row = page.locator('.overview-row', { has: page.locator('.waiting-title-text', { hasText: rw.snapshot.name }) })
       const chip = row.locator('.chip-stuck', { hasText: 'PR 等 review' })
-      const chipText = (await chip.count() > 0) ? (await chip.first().innerText()).trim() : null
+      const chipPresent = await waitForChipPresent(chip)
+      const chipText = chipPresent ? (await chip.first().innerText()).trim() : null
       const expectDays = rw.snapshot.reviewWait.longest.days
       const expectM = rw.snapshot.reviewWait.otherStuckCount
       const expectLabel = expectM > 0 ? `卡住：PR 等 review ${expectDays} 天，等 ${expectM} 个` : `卡住：PR 等 review ${expectDays} 天`
@@ -368,20 +438,32 @@ async function phaseThresholdsAndChips(handle) {
       item3Notes.push(`staleDays=7: chip visible=${visibleAt7} shouldDisappear=${shouldDisappear} ok=${ok7}`)
       item3Ok = item3Ok && ok7
 
-      // invalid values
+      // invalid values. A real user can only put a value into a type="number" input
+      // through actual keystrokes or a paste; Chromium itself refuses to insert
+      // non-numeric characters (Playwright's .fill() throws for those instead of
+      // silently no-op'ing), so we drive this one via real keyboard presses and
+      // record whatever ends up in the field, rather than treating that browser
+      // behaviour as a script crash.
       await gotoSettings(page)
       const invalidCases = ['0', '-1', 'abc', '999999']
       for (const value of invalidCases) {
-        await staleDaysInput.fill(value)
+        await staleDaysInput.click()
+        await page.keyboard.press('Control+A')
+        await page.keyboard.press('Delete')
+        await staleDaysInput.pressSequentially(value, { delay: 20 })
+        const landedValue = await staleDaysInput.inputValue()
         await page.getByRole('button', { name: '保存项目总览', exact: true }).click()
         await page.waitForTimeout(150)
         const alert = page.locator('#overview-settings .alert')
         const alertText = (await alert.count() > 0) ? (await alert.first().innerText()).trim() : '(no alert)'
-        item3Notes.push(`invalid staleDays="${value}" -> alert="${alertText}"`)
+        item3Notes.push(`invalid staleDays input="${value}" landedInField="${landedValue}" -> alert="${alertText}"`)
       }
       await shot(page, 'stale-threshold-invalid-values')
       // restore to 7 for later phases
-      await staleDaysInput.fill('7')
+      await staleDaysInput.click()
+      await page.keyboard.press('Control+A')
+      await page.keyboard.press('Delete')
+      await staleDaysInput.pressSequentially('7', { delay: 20 })
       await page.getByRole('button', { name: '保存项目总览', exact: true }).click()
       await page.waitForTimeout(150)
 
@@ -498,7 +580,7 @@ async function phaseArchived(handle) {
     await waitForOverviewSettled(page)
     const shot1 = await shot(page, 'overview-archived-hidden-by-default')
     const visibleDefault = await page.locator('.overview-row', { has: page.locator('.waiting-title-text', { hasText: archived.picked }) }).count()
-    const countsTextBefore = await page.locator('.waiting-summary').innerText().catch(() => '')
+    const countsTextBefore = await page.locator('.page.overview .waiting-summary').innerText().catch(() => '')
 
     await gotoSettings(page)
     const toggle = page.locator('#overview-settings input[type="checkbox"]')
@@ -509,12 +591,13 @@ async function phaseArchived(handle) {
     await waitForOverviewSettled(page)
     const shot2 = await shot(page, 'overview-archived-shown-in-group')
     const group = page.locator('details.archived-group')
-    const groupExists = await group.count() > 0
+    const groupExists = await waitForChipPresent(group)
     const groupCollapsed = groupExists ? !(await group.first().evaluate(el => el.open)) : null
     const rowInGroup = group.locator('.overview-row', { has: page.locator('.waiting-title-text', { hasText: archived.picked }) })
     const rowInGroupVisible = await rowInGroup.count() > 0
     const chipText = rowInGroupVisible ? (await rowInGroup.locator('.chip').allInnerTexts()).join(',') : null
-    const countsTextAfter = await page.locator('.waiting-summary').innerText().catch(() => '')
+    const countsTextAfter = await page.locator('.page.overview .waiting-summary').innerText().catch(() => '')
+    const shownStateDebugHtml = groupExists ? '' : await debugHtml(page, '.page.overview')
 
     // toggle back off
     await gotoSettings(page)
@@ -527,8 +610,9 @@ async function phaseArchived(handle) {
     const visibleAfterToggleOff = await page.locator('.overview-row', { has: page.locator('.waiting-title-text', { hasText: archived.picked }) }).count()
 
     const ok = visibleDefault === 0 && groupExists && groupCollapsed === true && rowInGroupVisible && chipText === '已归档' && visibleAfterToggleOff === 0
+    const debugSuffix = shownStateDebugHtml ? ` | debug .page.overview HTML when showArchived was on: ${shownStateDebugHtml}` : ''
     record('B3', ok ? 'PASS' : 'FAIL', {
-      notes: `visibleByDefault=${visibleDefault} groupExists=${groupExists} groupCollapsedByDefault=${groupCollapsed} chip="${chipText}" countsBefore="${countsTextBefore}" countsAfter="${countsTextAfter}" visibleAfterToggleOff=${visibleAfterToggleOff}`,
+      notes: `visibleByDefault=${visibleDefault} groupExists=${groupExists} groupCollapsedByDefault=${groupCollapsed} chip="${chipText}" countsBefore="${countsTextBefore}" countsAfter="${countsTextAfter}" visibleAfterToggleOff=${visibleAfterToggleOff}${debugSuffix}`,
       repro: `关注列表加 ${archived.picked}（atom/atom）→ 默认不出现 → 设置里开『显示已归档的仓库』→ 出现在折叠的『已归档』分组，仅灰色『已归档』标签 → 关闭开关后再次消失`,
       evidence: [shot1, shot2, shot3]
     })
@@ -558,33 +642,39 @@ async function phaseStaleGroup(handle) {
     await page.waitForTimeout(150)
     await gotoOverview(page)
     await waitForOverviewSettled(page)
-    const summaryBefore = await page.locator('.waiting-summary').innerText().catch(() => '')
+    const summaryBefore = await page.locator('.page.overview .waiting-summary').innerText().catch(() => '')
     const shot1 = await shot(page, 'overview-stale-group-collapsed')
 
     const group = page.locator('details.stale-group')
-    const groupExists = await group.count() > 0
-    const collapsedByDefault = groupExists ? !(await group.first().evaluate(el => el.open)) : null
+    const groupExists = await waitForChipPresent(group)
+    const groupMissingDebugHtml = groupExists ? '' : await debugHtml(page, '.page.overview')
+    let collapsedByDefault = null, rowInGroupVisibleCollapsed = false, shot2 = null
+    let expandedNow = null, rowVisibleExpanded = false, chipTexts = [], noDuplicateStaleChip = true, collapsedAgain = null
     const rowInGroup = group.locator('.overview-row', { has: page.locator('.waiting-title-text', { hasText: stale.picked }) })
-    const rowInGroupVisibleCollapsed = await rowInGroup.isVisible().catch(() => false)
+    if (groupExists) {
+      collapsedByDefault = !(await group.first().evaluate(el => el.open))
+      rowInGroupVisibleCollapsed = await rowInGroup.isVisible().catch(() => false)
 
-    await group.first().locator('summary').click()
-    await page.waitForTimeout(150)
-    const shot2 = await shot(page, 'overview-stale-group-expanded')
-    const expandedNow = groupExists ? await group.first().evaluate(el => el.open) : null
-    const rowVisibleExpanded = await rowInGroup.isVisible().catch(() => false)
-    const chipTexts = rowVisibleExpanded ? await rowInGroup.locator('.chip').allInnerTexts() : []
-    const noDuplicateStaleChip = !chipTexts.some(t => t.includes('陈旧'))
+      await group.first().locator('summary').click()
+      await page.waitForTimeout(150)
+      shot2 = await shot(page, 'overview-stale-group-expanded')
+      expandedNow = await group.first().evaluate(el => el.open)
+      rowVisibleExpanded = await rowInGroup.isVisible().catch(() => false)
+      chipTexts = rowVisibleExpanded ? await rowInGroup.locator('.chip').allInnerTexts() : []
+      noDuplicateStaleChip = !chipTexts.some(t => t.includes('陈旧'))
 
-    await group.first().locator('summary').click()
-    await page.waitForTimeout(150)
-    const collapsedAgain = groupExists ? !(await group.first().evaluate(el => el.open)) : null
+      await group.first().locator('summary').click()
+      await page.waitForTimeout(150)
+      collapsedAgain = !(await group.first().evaluate(el => el.open))
+    }
 
     const ok = groupExists && collapsedByDefault === true && !rowInGroupVisibleCollapsed &&
       expandedNow === true && rowVisibleExpanded && noDuplicateStaleChip && collapsedAgain === true
+    const debugSuffix = groupMissingDebugHtml ? ` | debug .page.overview HTML: ${groupMissingDebugHtml}` : ''
     record('B2', ok ? 'PASS' : 'FAIL', {
-      notes: `staleRepoDays temporarily set to ${neededThreshold} (repo pushedDays=${stale.snapshot.pushedDays}); groupExists=${groupExists} collapsedByDefault=${collapsedByDefault} expandable=${expandedNow} rowChips=[${chipTexts.join(',')}] noDuplicateStaleChip=${noDuplicateStaleChip} collapsedAgain=${collapsedAgain}; header summary before="${summaryBefore}"`,
+      notes: `staleRepoDays temporarily set to ${neededThreshold} (repo pushedDays=${stale.snapshot.pushedDays}); groupExists=${groupExists} collapsedByDefault=${collapsedByDefault} expandable=${expandedNow} rowChips=[${chipTexts.join(',')}] noDuplicateStaleChip=${noDuplicateStaleChip} collapsedAgain=${collapsedAgain}; header summary before="${summaryBefore}"${debugSuffix}`,
       repro: `设置陈旧天数=${neededThreshold}，关注列表加 ${stale.picked}（0 个开放 PR、无 CI，纯陈旧样例）→ 项目总览里的『陈旧』分组默认折叠，点击展开/收起，组内行不重复陈旧标签`,
-      evidence: [shot1, shot2]
+      evidence: shot2 ? [shot1, shot2] : [shot1]
     })
 
     // restore staleRepoDays to default 90 for subsequent phases.
@@ -644,7 +734,7 @@ async function phaseCountsAndPrBadge(handle) {
     await gotoOverview(page)
     await waitForOverviewSettled(page)
     const shotName = await shot(page, 'overview-counts-check')
-    const summary = await page.locator('.waiting-summary').innerText().catch(() => '')
+    const summary = await page.locator('.page.overview .waiting-summary').innerText().catch(() => '')
     const match = summary.match(/(\d+) 个仓库 · (\d+) 个需要看一眼/)
     const displayedRepos = match ? Number(match[1]) : null
     const displayedAttention = match ? Number(match[2]) : null
@@ -811,37 +901,56 @@ async function phaseNarrowWindow(handle) {
 // ---------------------------------------------------------------------------------
 async function phaseAuthScreens(handle) {
   if (handle?.app) await handle.app.close().catch(() => {})
-  resetUserData()
+  await resetUserData()
 
   // b6a: empty watch list, valid token -> "还没有可显示的仓库" + focus behaviour.
+  let b6aApp = null
   try {
     const { app, page } = await launch({ GITHUB_TOKEN })
+    b6aApp = app
     await gotoOverview(page)
     await waitForOverviewSettled(page)
+    // First refresh on a brand-new profile: give whichever terminal state (empty,
+    // auth-alert, or a populated list) up to 20s extra to actually land before reading it.
+    await page.waitForSelector('.overview-empty, .auth-alert, .overview-list', { timeout: 20_000 }).catch(() => {})
     const shot1 = await shot(page, 'overview-empty-watchlist-with-token')
     const emptyMsg = await page.locator('.overview-empty p').innerText().catch(() => null)
     const goButton = page.locator('.overview-empty button.primary')
-    const hasGoButton = await goButton.count() > 0
-    await goButton.click()
-    await page.waitForSelector('#overview-settings', { timeout: 10_000 })
-    const focused = await page.evaluate(() => document.activeElement?.id)
-    const shot2 = await shot(page, 'settings-focused-watch-input-from-empty-state')
-    const ok = emptyMsg === '还没有可显示的仓库' && hasGoButton && focused === 'watched-repo'
-    record('B6-empty', ok ? 'PASS' : 'FAIL', {
-      notes: `emptyMsg="${emptyMsg}" hasGoButton=${hasGoButton} focusedElementId=${focused}`,
-      repro: '关注列表为空、token 有效 → 项目总览显示「还没有可显示的仓库」→ 点击「去设置添加关注的仓库」→ 设置页关注仓库输入框获得焦点',
-      evidence: [shot1, shot2]
-    })
+    const hasGoButton = await waitForChipPresent(goButton, 5000)
+    if (!hasGoButton) {
+      const html = await debugHtml(page, '.page.overview')
+      record('B6-empty', 'FAIL', {
+        notes: `emptyMsg="${emptyMsg}" hasGoButton=false — .overview-empty go-button not found; actual .page.overview HTML: ${html}`,
+        repro: '关注列表为空、token 有效 → 项目总览显示「还没有可显示的仓库」→ 点击「去设置添加关注的仓库」→ 设置页关注仓库输入框获得焦点',
+        evidence: [shot1]
+      })
+    } else {
+      await goButton.click()
+      await page.waitForSelector('#overview-settings', { timeout: 10_000 })
+      const focused = await page.evaluate(() => document.activeElement?.id)
+      const shot2 = await shot(page, 'settings-focused-watch-input-from-empty-state')
+      const ok = emptyMsg === '还没有可显示的仓库' && focused === 'watched-repo'
+      record('B6-empty', ok ? 'PASS' : 'FAIL', {
+        notes: `emptyMsg="${emptyMsg}" hasGoButton=${hasGoButton} focusedElementId=${focused}`,
+        repro: '关注列表为空、token 有效 → 项目总览显示「还没有可显示的仓库」→ 点击「去设置添加关注的仓库」→ 设置页关注仓库输入框获得焦点',
+        evidence: [shot1, shot2]
+      })
+    }
     await app.close()
+    b6aApp = null
   } catch (error) {
     record('B6-empty', 'FAIL', { notes: `Exception: ${error instanceof Error ? error.stack : String(error)}` })
+  } finally {
+    if (b6aApp) await b6aApp.close().catch(() => {})
   }
 
   // b6b: no token at all -> "未配置 GitHub 认证"
-  resetUserData()
+  await resetUserData()
+  let b6bApp = null
   try {
     const env = { GITHUB_TOKEN: '', GH_TOKEN: '' }
     const { app, page } = await launch(env)
+    b6bApp = app
     await gotoOverview(page)
     await waitForOverviewSettled(page)
     const shotName = await shot(page, 'overview-no-token')
@@ -853,14 +962,19 @@ async function phaseAuthScreens(handle) {
       evidence: [shotName]
     })
     await app.close()
+    b6bApp = null
   } catch (error) {
     record('B6-no-token', 'FAIL', { notes: `Exception: ${error instanceof Error ? error.stack : String(error)}` })
+  } finally {
+    if (b6bApp) await b6bApp.close().catch(() => {})
   }
 
   // b6c: invalid token pasted via Settings UI -> "GitHub 认证无效或已过期"
-  resetUserData()
+  await resetUserData()
+  let b6cApp = null
   try {
     const { app, page } = await launch({ GITHUB_TOKEN: '', GH_TOKEN: '' })
+    b6cApp = app
     await gotoSettings(page)
     const patInput = page.locator('#github-pat')
     await patInput.fill('ghp_Vf9QzXk2LmP4rT8wYb6nHc3JdA1sE7uG0oKi')
@@ -877,8 +991,11 @@ async function phaseAuthScreens(handle) {
       evidence: [shotName]
     })
     await app.close()
+    b6cApp = null
   } catch (error) {
     record('B6-invalid-token', 'FAIL', { notes: `Exception: ${error instanceof Error ? error.stack : String(error)}` })
+  } finally {
+    if (b6cApp) await b6cApp.close().catch(() => {})
   }
 }
 
@@ -905,18 +1022,53 @@ async function main() {
       if (!results.some(r => r.id === id)) record(id, 'BLOCKED', { notes: 'Ephemeral GITHUB_TOKEN could not read public GitHub data (see token-sanity).' })
     }
   }
-
-  writeFileSync(path.join(EVIDENCE_DIR, 'results.json'), JSON.stringify(results, null, 2))
-  const md = ['# Evidence index', '', '| # | file | description |', '|---|---|---|']
-  evidenceIndex.forEach((e, i) => md.push(`| ${i + 1} | ${e.file} | ${e.description} |`))
-  md.push('', '# Results', '', '| id | status | notes |', '|---|---|---|')
-  results.forEach(r => md.push(`| ${r.id} | ${r.status} | ${r.notes.replace(/\|/g, '\\|').slice(0, 500)} |`))
-  writeFileSync(path.join(EVIDENCE_DIR, 'index.md'), md.join('\n'))
-  log('DONE. Results written to', path.join(EVIDENCE_DIR, 'results.json'))
 }
 
-main().catch(error => {
-  console.error('[run] fatal:', error)
-  writeFileSync(path.join(EVIDENCE_DIR, 'results.json'), JSON.stringify(results.concat([{ id: 'fatal', status: 'FAIL', notes: String(error) }]), null, 2))
-  process.exitCode = 1
-})
+// Writes whatever evidence has been collected so far and then forcibly terminates the
+// process. A plain `return`/unhandled-promise exit is not safe here: on Windows, an
+// Electron/Chromium child process left open (e.g. because a phase threw before
+// app.close()) can keep this step's stdio pipe alive and hang the whole CI job long
+// past this script's own logical completion — this happened for real (57 extra minutes
+// swallowed by the job's own timeout) before this safeguard was added.
+async function writeEvidenceAndExit(code) {
+  if (currentApp) {
+    await currentApp.close().catch(() => {})
+  }
+  try {
+    writeFileSync(path.join(EVIDENCE_DIR, 'results.json'), JSON.stringify(results, null, 2))
+    const md = ['# Evidence index', '', '| # | file | description |', '|---|---|---|']
+    evidenceIndex.forEach((e, i) => md.push(`| ${i + 1} | ${e.file} | ${e.description} |`))
+    md.push('', '# Results', '', '| id | status | notes |', '|---|---|---|')
+    results.forEach(r => md.push(`| ${r.id} | ${r.status} | ${r.notes.replace(/\|/g, '\\|').slice(0, 500)} |`))
+    writeFileSync(path.join(EVIDENCE_DIR, 'index.md'), md.join('\n'))
+    log('Evidence written to', EVIDENCE_DIR)
+  } catch (writeError) {
+    console.error('[run] failed to write final evidence:', writeError)
+  }
+  process.exit(code)
+}
+
+// Internal time budget, deliberately well under the workflow job's own
+// timeout-minutes, so a slow real-world GitHub API round trip (or any other
+// unexpectedly long step) still leaves enough headroom to write out whatever
+// evidence has been collected before the job's hard timeout would otherwise
+// cancel everything and discard it.
+const GLOBAL_DEADLINE_MS = 40 * 60_000
+const watchdog = setTimeout(() => {
+  console.error(`[run] global ${GLOBAL_DEADLINE_MS / 60_000}-minute time budget exceeded; writing partial evidence and exiting.`)
+  record('time-budget', 'FAIL', { notes: `Script did not finish within ${GLOBAL_DEADLINE_MS / 60_000} minutes; remaining/incomplete checks were not attempted.` })
+  void writeEvidenceAndExit(1)
+}, GLOBAL_DEADLINE_MS)
+watchdog.unref()
+
+main()
+  .then(() => {
+    clearTimeout(watchdog)
+    return writeEvidenceAndExit(0)
+  })
+  .catch(error => {
+    clearTimeout(watchdog)
+    console.error('[run] fatal:', error)
+    record('fatal', 'FAIL', { notes: error instanceof Error ? (error.stack ?? error.message) : String(error) })
+    return writeEvidenceAndExit(1)
+  })
