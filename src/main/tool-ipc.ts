@@ -10,6 +10,7 @@ import {
   pickToolFolder,
   toolExampleText
 } from './tool-actions.js'
+import { rehearsePreview } from './tool-rehearse.js'
 import { normalizeActionId, normalizeParamInput, previewStoredAction } from './tool-request.js'
 import { ToolRunner } from './tool-runner.js'
 import { validateToolShelfText } from './tool-validate.js'
@@ -67,7 +68,7 @@ export function registerToolIpc(options: {
     guard(event)
     return exportToolShelfFile(options.getWindow(), json)
   })
-  ipcMain.handle(IpcChannel.previewTool, (event, actionId: unknown, params: unknown) => {
+  ipcMain.handle(IpcChannel.previewTool, async (event, actionId: unknown, params: unknown) => {
     guard(event)
     try {
       const preview = previewStoredAction(
@@ -77,6 +78,7 @@ export function registerToolIpc(options: {
         process.cwd(),
         knownRepos()
       )
+      if (preview.type === 'run-command') preview.rehearsal = await rehearsePreview(preview)
       return { ok: true as const, data: preview }
     } catch (error) {
       return { ok: false as const, error: error instanceof Error ? error.message : '无法预览' }

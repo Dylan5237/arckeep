@@ -75,7 +75,7 @@ export function screenshotWindowSize(scene: ScreenshotScene): { width: number, h
   if (scene === 'tools-running' || scene === 'tools-success' || scene === 'tools-failed' || scene === 'tools-aborted') {
     return { width: 1120, height: 900 }
   }
-  if (scene === 'tools-preview' || scene === 'tools-params' || scene === 'tools-copied') {
+  if (scene === 'tools-preview' || scene === 'tools-preview-failed' || scene === 'tools-params' || scene === 'tools-copied') {
     return { width: 1120, height: 860 }
   }
   if (scene === 'tools-invalid') return { width: 1120, height: 980 }

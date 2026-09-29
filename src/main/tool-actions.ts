@@ -40,7 +40,12 @@ export async function confirmToolAction(options: {
   params: unknown
   baseCwd?: string
   knownRepos?: readonly KnownRepo[]
-}): Promise<IpcResult<{ kind: 'run', runId: string } | { kind: 'open-url' } | { kind: 'open-folder' } | { kind: 'template' }>> {
+}): Promise<IpcResult<
+  | { kind: 'run', runId: string }
+  | { kind: 'open-url' }
+  | { kind: 'open-folder' }
+  | { kind: 'template', text: string }
+>> {
   let actionId: string
   let params: Record<string, string>
   try {
@@ -68,7 +73,7 @@ export async function confirmToolAction(options: {
     }
     if (preview.type === 'template') {
       clipboard.writeText(preview.text)
-      return { ok: true, data: { kind: 'template' } }
+      return { ok: true, data: { kind: 'template', text: preview.text } }
     }
     if (preview.type === 'open-folder') {
       await openFolder(preview)
@@ -82,7 +87,7 @@ export async function confirmToolAction(options: {
     if (preview.shell === 'powershell' && process.platform !== 'win32') {
       throw new Error('PowerShell 只能在 Windows 上运行')
     }
-    // preview.text is the confirmed command. preview.dryRun is display-only.
+    // Confirm runs preview.text. The dry-run script is only executed while building the preview.
     const plan = planShell(preview.shell, preview.text)
     const runId = options.runner.start(plan, preview.cwd)
     return { ok: true, data: { kind: 'run', runId } }
