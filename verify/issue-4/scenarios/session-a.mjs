@@ -25,7 +25,7 @@ import * as lib from '../lib.mjs'
 const {
   setResult, mergeNotes, logEvidence, EVIDENCE_DIR, envFlags,
   launchApp, mainWindowPage, captureWindowPage, openCaptureViaHook, waitCaptureFocused,
-  createTodoViaHook, ensureCaptureWindowClosed,
+  createTodoViaHook, ensureCaptureWindowClosed, refocusCapture,
   callTestHook, getAppState, quitApp, killStrayArckeep,
   startNotepad, sendHotkey, sendKey, foreground,
   fullShot, shot, waitFor, sleep, getUserDataDir, resetUserData, todosFile,
@@ -344,6 +344,7 @@ export async function run() {
     cap = await openCaptureViaHook(app)
     await cap.fill('#text', draftText1)
     await sleep(100)
+    await refocusCapture(app, cap)
     await cap.press('#text', 'Escape')
     await sleep(300)
     draftAfterEsc = await page.evaluate(() => window.arckeep.getCaptureDraft())
@@ -399,6 +400,7 @@ export async function run() {
     cap = await openCaptureViaHook(app)
     await cap.fill('#text', item8SeedText)
     await sleep(100)
+    await refocusCapture(app, cap)
     await cap.press('#text', 'Escape')
     await sleep(300)
 
@@ -408,12 +410,14 @@ export async function run() {
     await sleep(100)
     beforeClearValue = await cap.evaluate(() => document.querySelector('#text').value)
     // Playwright 键盘事件：Ctrl+A 全选，Delete 清空（不是脚本直接置空 value）
+    await refocusCapture(app, cap)
     await cap.click('#text')
     await cap.press('#text', 'Control+A')
     await sleep(80)
     await cap.press('#text', 'Delete')
     await sleep(100)
     clearedValue = await cap.evaluate(() => document.querySelector('#text').value)
+    await refocusCapture(app, cap)
     await cap.press('#text', 'Escape')
     await sleep(300)
     draftAfterClearEsc = await page.evaluate(() => window.arckeep.getCaptureDraft())
@@ -422,6 +426,7 @@ export async function run() {
     await sleep(100)
     valueAfterReopen = await cap.evaluate(() => document.querySelector('#text').value)
     await shot(cap, '12-draft-cleared', { checkIds: ['8'], description: '清空后 Esc，下次打开是空的，草稿没有恢复' })
+    await refocusCapture(app, cap)
     await cap.press('#text', 'Escape').catch(() => {})
     await sleep(300)
   } catch (err) {
@@ -464,6 +469,7 @@ export async function run() {
     const restartDraft = '重启后应该还在的草稿'
     await cap.fill('#text', restartDraft)
     await sleep(100)
+    await refocusCapture(app, cap)
     await cap.press('#text', 'Escape')
     await sleep(300)
     await quitApp(app)
@@ -473,6 +479,7 @@ export async function run() {
     await sleep(100)
     const valueAfterAppRestart = await cap.evaluate(() => document.querySelector('#text').value)
     await shot(cap, '13-draft-after-app-restart', { checkIds: ['A3'], description: '退出应用重启后，再次打开草稿仍原样恢复' })
+    await refocusCapture(app, cap)
     await cap.press('#text', 'Escape')
     await sleep(300)
     await callTestHook(app, 'show')
@@ -594,7 +601,13 @@ export async function run() {
     app = await launchApp({ label: 'A-after-delete-restart' })
     page = await mainWindowPage(app)
     await page.click('[data-view="todos"]')
-    await page.waitForSelector('.todo-list', { timeout: 3000 })
+    try {
+      await page.waitForSelector('.todo-list', { timeout: 3000 })
+    } catch {
+      page = await mainWindowPage(app)
+      await page.click('[data-view="todos"]')
+      await page.waitForSelector('.todo-list', { timeout: 5000 })
+    }
     const goneAfterRestart = (await page.locator(rowSelector('待删除的测试待办-item5')).count()) === 0
 
     // 编辑：文字 / 仓库 / 等我

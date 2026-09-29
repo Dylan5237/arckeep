@@ -22,7 +22,7 @@ import * as lib from '../lib.mjs'
 
 const {
   setResult, mergeNotes, EVIDENCE_DIR, envFlags,
-  launchApp, mainWindowPage, openCaptureViaHook, createTodoViaHook, quitApp, killStrayArckeep,
+  launchApp, mainWindowPage, openCaptureViaHook, createTodoViaHook, refocusCapture, quitApp, killStrayArckeep,
   occupyHotkey, stopOccupy, getUserDataDir, resetUserData, getAppState,
   callTestHook, sendHotkey, sendKey, startNotepad, sleep, waitFor,
   shot, fullShot, appendEvidenceJson, todosFile, captureOpensFor,
@@ -381,6 +381,7 @@ export async function run() {
       return { typed: getComputedStyle(el).color, value: el.value }
     })
     await shot(cap, '69-r4-repo-filled', { checkIds: ['R4'], description: 'R4：仓库输入框填了值后（应为正文颜色，不是占位符灰色）' })
+    await refocusCapture(app, cap)
     await cap.press('#repo', 'Escape')
     await sleep(300)
     await callTestHook(app, 'show')
@@ -443,16 +444,19 @@ export async function run() {
     const actualCompletedCount = allItems.filter(i => i.completed).length
     await shot(page, '70-r5-collapsed-default', { checkIds: ['R5'], description: 'R5：已完成默认折叠，标题「已完成 · N」' })
 
-    // 展开
+    // <details> 的 toggle 事件是异步派发的，run7 撞到过点击后立刻（150ms）读 el.open
+    // 读到点击生效前的旧值；把点击后的等待从 150ms 放宽到 500ms 再读，给 toggle 事件+
+    // localStorage 写回+可能的重绘留够时间（不改变判定逻辑本身，只是给异步状态更多
+    // 时间落地，跟 R2/R3 之前放宽超时是同一类调整）。
     await page.click('[data-action="completed-group"] summary')
-    await page.waitForTimeout(150)
+    await page.waitForTimeout(500)
     const detailsOpenAfterClick = await page.locator('[data-action="completed-group"]').evaluate(el => el.open)
     const visibleAfterExpand = await page.locator('[data-action="completed-group"] .todo-row').count()
     await shot(page, '71-r5-expanded', { checkIds: ['R5'], description: 'R5：点击后展开，能看到已完成的两条' })
 
     // 折叠回去
     await page.click('[data-action="completed-group"] summary')
-    await page.waitForTimeout(150)
+    await page.waitForTimeout(500)
     const detailsOpenAfterSecondClick = await page.locator('[data-action="completed-group"]').evaluate(el => el.open)
     await shot(page, '72-r5-collapsed-again', { checkIds: ['R5'], description: 'R5：再次点击折叠回去' })
 

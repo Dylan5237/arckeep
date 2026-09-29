@@ -234,6 +234,34 @@ export async function openCaptureViaHook(app, opts) {
 }
 
 /**
+ * 捕获窗口失焦 200ms 后会自动关闭并存草稿（src/main/capture-window.ts 的
+ * blurTimer——这是产品故意做的行为，不是 bug：真实用户点击窗口外面就应该这样）。
+ * 这份 CI 的 Windows 虚拟桌面上，Playwright/CDP 层面的操作不会主动帮我们保住
+ * OS 级窗口焦点，偶尔会在这个窗口打开后的一小段时间内被某个跟这次测试无关的
+ * 事件（比如别的窗口一闪而过抢到焦点）顶掉，导致本来只是想验证「打字/清空/Esc」
+ * 这些跟失焦机制无关的逻辑时，窗口却提前被那个失焦计时器关掉了——run7 就在
+ * session-a.mjs 的 case1/Item8/A3-重启 和 session-e-review.mjs 的 R4 都撞到过
+ * 一次「page.press: Target page, context or browser has been closed」。
+ * 在任何一次“不是故意测失焦”的按键操作前，显式重新 focus 一次窗口，把这类跟
+ * 被测逻辑本身无关的环境抖动挡掉；如果窗口这时已经真的被关掉了，评估会自己
+ * 报错/no-op，不掩盖真实的失败。
+ */
+export async function refocusCapture(app, cap) {
+  try {
+    const bw = await app.browserWindow(cap)
+    await bw.evaluate(win => {
+      if (win.isDestroyed()) return
+      if (!win.isVisible()) win.show()
+      win.moveTop()
+      win.focus()
+    })
+  } catch {
+    // 窗口这时可能已经被关掉了——留给调用方后面的 press/evaluate 自己因为
+    // "Target page has been closed" 报错，不在这里吞掉真实信号。
+  }
+}
+
+/**
  * 用测试钩子打开捕获窗口，Playwright 打字，然后用 `#capture-form` 的 requestSubmit()
  * 直接提交表单（不依赖「在输入框里按 Enter 会不会触发浏览器原生的隐式表单提交」这件事）。
  *
