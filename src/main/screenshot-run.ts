@@ -263,6 +263,31 @@ export async function presentScreenshot(options: {
       && document.querySelector('#hotkey-banner')?.hidden === false
       && document.body.innerText.includes('等我处理')
     `, 'hotkey banner')
+  } else if (scene === 'settings-launch-hide') {
+    await waitUntil(contents, `
+      document.body.innerText.includes('启动时隐藏主窗口，只留托盘')
+      && document.body.innerText.includes('托盘会留着，双击托盘图标或托盘菜单可以打开窗口。')
+    `, '启动时隐藏主窗口')
+    const placed = await contents.executeJavaScript(`
+      (() => {
+        const card = [...document.querySelectorAll('section.card')].find(section => section.querySelector('h2')?.textContent === '窗口')
+        if (!(card instanceof HTMLElement)) return 'missing card'
+        card.scrollIntoView({ block: 'center' })
+        const hint = card.querySelector('.hint')
+        const box = card.querySelector('input[type="checkbox"]')
+        const label = card.querySelector('label.check')
+        if (!(hint instanceof HTMLElement) || !(box instanceof HTMLInputElement) || !(label instanceof HTMLElement)) return 'missing controls'
+        const cardRect = card.getBoundingClientRect()
+        const hintRect = hint.getBoundingClientRect()
+        if (box.checked) return 'checked'
+        if (label.textContent !== '启动时隐藏主窗口，只留托盘') return 'label ' + label.textContent
+        if (hint.textContent !== '托盘会留着，双击托盘图标或托盘菜单可以打开窗口。') return 'hint ' + hint.textContent
+        if (cardRect.top < 0 || hintRect.top < 0 || hintRect.bottom > window.innerHeight) return 'clipped'
+        return 'ok'
+      })()
+    `)
+    if (placed !== 'ok') throw new Error(`launch hide settings: ${placed}`)
+    await assertSmallLogo(contents)
   } else if (scene === 'hotkey-save-conflict') {
     await waitUntil(contents, `document.querySelector('#hotkey-save') !== null`, 'hotkey save')
     const saved = await contents.executeJavaScript(`

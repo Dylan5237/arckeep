@@ -24,7 +24,8 @@ const scenes = [
   ['todos-split', 'todos-split-actions.png'],
   ['waiting', 'waiting-todo.png'],
   ['hotkey-banner', 'hotkey-banner.png'],
-  ['hotkey-save-conflict', 'hotkey-save-conflict.png']
+  ['hotkey-save-conflict', 'hotkey-save-conflict.png'],
+  ['settings-launch-hide', 'settings-launch-hide.png']
 ]
 
 for (const [scene, filename] of scenes) {

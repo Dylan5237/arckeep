@@ -10,6 +10,7 @@ export const SCREENSHOT_SCENES = [
   'hotkey-conflict',
   'hotkey-banner',
   'hotkey-save-conflict',
+  'settings-launch-hide',
   'narrow',
   'capture-empty',
   'capture-opened',
@@ -109,6 +110,7 @@ function screenshotFrame(scene: ScreenshotScene): { width: number, height: numbe
   if (scene === 'hotkey-banner' || scene === 'hotkey-save-conflict') {
     return { width: 1120, height: 760 }
   }
+  if (scene === 'settings-launch-hide') return { width: 800, height: 900 }
   return { width: 1120, height: 900 }
 }
 
@@ -118,6 +120,7 @@ export function screenshotOpensSettings(scene: ScreenshotScene): boolean {
     || scene === 'connected'
     || scene === 'hotkey-conflict'
     || scene === 'hotkey-save-conflict'
+    || scene === 'settings-launch-hide'
     || scene === 'overview-settings'
     || scene === 'tools-invalid'
 }
