@@ -350,6 +350,8 @@ export interface TextHit {
   rule: string
   excerpt: string
   at: string | null
+  /** The hit is the signed-in user's own latest explicit request. */
+  own?: boolean
 }
 
 function clipSentence(sentence: string): string {
@@ -439,7 +441,7 @@ function scanPlace(text: string, at: string | null, config: WaitingConfig, viewe
 function ownRequest(text: string, at: string | null, config: WaitingConfig, viewer: string, names: readonly RegExp[]): TextHit | null {
   for (const sentence of splitSentences(text)) {
     const request = explicitRequest(sentence.text, config, viewer, names)
-    if (request) return { rule: '明确请求', excerpt: request, at }
+    if (request) return { rule: '明确请求', excerpt: request, at, own: true }
   }
   return null
 }

@@ -137,8 +137,8 @@ function quietOpenPrSignal(record: GithubRecord, days: number): WaitingSignal {
 
 function ensureExcerpt(signal: WaitingSignal): WaitingSignal {
   const excerpt = signal.excerpt.trim()
-  if (excerpt) return { rule: signal.rule, excerpt }
-  return { rule: signal.rule, excerpt: signal.rule || '等待' }
+  const kept = excerpt ? { rule: signal.rule, excerpt } : { rule: signal.rule, excerpt: signal.rule || '等待' }
+  return signal.own ? { ...kept, own: true } : kept
 }
 
 function fallbackUpdated(reason: string, record: GithubRecord, at: string | null): ClassifiedReason {
@@ -236,7 +236,7 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
   if (showText && text && textReason) {
     reasons.push(fallbackUpdated(textReason, record, text.at))
     tier = 'strong'
-    if (!review) signal = { rule: text.rule, excerpt: text.excerpt }
+    if (!review) signal = text.own ? { rule: text.rule, excerpt: text.excerpt, own: true } : { rule: text.rule, excerpt: text.excerpt }
     else signal = { rule: signal?.rule ?? text.rule, excerpt: `${signal?.excerpt ?? reviewExcerpt(record)}。${text.excerpt}` }
   }
   if (label && (humanAllowed || record.kind === 'pr')) {

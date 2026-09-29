@@ -4,6 +4,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { userDataDir, waitingDismissalPath } from '../src/main/paths.js'
 import { assembleWaiting } from '../src/shared/waiting/assemble.js'
+import { ownRequestLabel } from '../src/renderer/waiting-page.js'
 import { classifyRecord } from '../src/shared/waiting/classify.js'
 import { repoIsParked } from '../src/shared/waiting/text-scan.js'
 import { effectiveHiddenRepos } from '../src/shared/waiting/snooze.js'
@@ -1379,6 +1380,30 @@ describe('synthetic fixtures for each waiting rule', () => {
       labels: ['bug']
     }), rules, NOW)
     expect(missed).toBeNull()
+  })
+
+  it('labels the signed-in user\'s own latest request and leaves someone else\'s unmarked', () => {
+    const sentence = '请确认能否合入'
+    const own = main({
+      kind: 'issue',
+      number: 32,
+      title: 'Own ask',
+      viewerLogin: 'ada',
+      comments: [{ body: sentence, authorLogin: 'ada', createdAt: '2026-09-22T00:00:00.000Z' }]
+    })
+    expect(ownRequestLabel(own ?? {})).toBe('你写的')
+    expect(own?.signal.excerpt).toBe(sentence)
+    expect(own?.signal.excerpt.includes('你写的')).toBe(false)
+    const other = main({
+      kind: 'issue',
+      number: 33,
+      title: 'Their ask',
+      viewerLogin: 'ada',
+      comments: [{ body: sentence, authorLogin: 'mina', createdAt: '2026-09-22T00:00:00.000Z' }]
+    })
+    expect(ownRequestLabel(other ?? {})).toBeNull()
+    expect(other?.signal.excerpt).toBe(sentence)
+    expect(other?.signal.own).toBeUndefined()
   })
 
   it('uses the configured request verbs, including 定夺', () => {

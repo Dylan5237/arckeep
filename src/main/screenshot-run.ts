@@ -408,6 +408,20 @@ export async function presentScreenshot(options: {
                         ? '可能相关 · 6'
                         : '速率限制'
     await waitUntil(contents, includesText(expected), expected)
+    if (scene === 'waiting') {
+      await contents.executeJavaScript(`
+        const own = [...document.querySelectorAll('.waiting-reason')].find(node => node.querySelector('.chip-own'))
+        if (!own) throw new Error('own request label missing')
+        const label = own.querySelector('.chip-own')?.textContent?.trim() ?? ''
+        if (label !== '你写的') throw new Error('own label: ' + label)
+        const text = own.textContent ?? ''
+        if (!text.includes('请确认这一版能否合入')) throw new Error('own excerpt missing: ' + text)
+        const foreign = [...document.querySelectorAll('.waiting-reason')].find(node => (node.textContent ?? '').includes('请求 @ada review'))
+        if (!foreign) throw new Error('other request missing')
+        if (foreign.querySelector('.chip-own')) throw new Error('other request labeled 你写的')
+        true
+      `)
+    }
     if (scene === 'waiting-related' || scene === 'waiting-related-open' || scene === 'waiting-maybe-only' || scene === 'waiting-maybe-collapsed') {
       await contents.executeJavaScript(`
         const details = document.querySelector('details.maybe-related')

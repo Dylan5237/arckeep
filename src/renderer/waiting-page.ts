@@ -14,6 +14,15 @@ const ACTION_CLASS: Record<string, string> = {
 /** Mention-only rows are not a request to act. */
 export const MENTION_ONLY_LABEL = '只是提及'
 
+/** The main-list excerpt is the signed-in user's own latest request. */
+export const OWN_REQUEST_LABEL = '你写的'
+
+export function ownRequestLabel(row: { tier?: 'strong' | 'weak', ownRequest?: boolean, signal?: { own?: boolean } }): string | null {
+  const own = row.ownRequest === true || row.signal?.own === true
+  if ((row.tier ?? 'strong') !== 'strong' || !own) return null
+  return OWN_REQUEST_LABEL
+}
+
 export interface MaybeSectionMemory {
   whenEmpty: boolean | null
   whenListed: boolean | null
@@ -336,8 +345,12 @@ function renderRow(row: WaitingRow, handlers: {
   const body: Array<Node | string | null> = [days, title, chip, meta, actions]
   if (via) body.splice(3, 0, via)
   const excerpt = row.signalText.trim()
+  const ownLabel = ownRequestLabel(row)
   const reason = excerpt
-    ? el('p', { class: 'waiting-reason' }, [excerpt])
+    ? el('p', { class: 'waiting-reason' }, [
+      ...(ownLabel ? [el('span', { class: 'chip chip-own' }, [ownLabel])] : []),
+      excerpt
+    ])
     : row.tier === 'weak'
       ? null
       : el('p', { class: 'waiting-reason' }, [row.reasons.join(' · ') || '等待'])

@@ -67,7 +67,7 @@ export function sampleWaitingRows(): WaitingRow[] {
   const days = [
     64, 58, 51, 44, 41, 36, 33, 30, 27, 24,
     22, 21, 19, 18, 16, 15, 14, 13, 12, 11,
-    10, 9, 8, 7, 6, 6, 5, 5, 4, 4,
+    60, 9, 8, 7, 6, 6, 5, 5, 4, 4,
     3, 3, 2, 2, 2, 1, 1, 1, 1, 0,
     0, 0, 45, 39, 28, 17, 9, 4, 62, 3,
     8, 1
@@ -126,6 +126,7 @@ export function sampleWaitingRows(): WaitingRow[] {
       waitingDays,
       daysEstimated: index % 7 === 0,
       signalText,
+      ownRequest: tier === 'strong' && signalText === '请确认这一版能否合入',
       tier,
       updatedAt: '2026-09-01T00:00:00.000Z',
       ignored: false

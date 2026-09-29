@@ -107,6 +107,7 @@ export function partitionDismissals(
       parent: draft.parent,
       childCount: 0,
       signalText: draft.tier === 'weak' ? draft.signal.excerpt.trim() : (draft.signal.excerpt || draft.signal.rule),
+      ownRequest: draft.tier === 'strong' && draft.signal.own === true,
       tier: draft.tier
     })
   }
