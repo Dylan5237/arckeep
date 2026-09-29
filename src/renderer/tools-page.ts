@@ -1,5 +1,14 @@
-import type { ToolFixture } from '../shared/tools/fixture'
+import type { ToolFixture, ToolFixtureInvalid } from '../shared/tools/fixture'
+import { paramKind } from '../shared/tools/params'
 import { createRunGate, formatDuration } from '../shared/tools/preview'
+import { copyFeedback, filterActions, runStatus } from '../shared/tools/present'
+import {
+  directoryChoices,
+  findKnownRepo,
+  knownRepoSourceLabel,
+  openTargetForRepo,
+  type KnownRepo
+} from '../shared/tools/repos'
 import { SHELL_LABEL, TOOL_TYPE_LABEL, type ActionPreview, type ToolAction, type ToolRunEvent } from '../shared/tools/types'
 
 type Gate = ReturnType<typeof createRunGate>
@@ -20,9 +29,25 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 interface Line { stream: 'stdout' | 'stderr', text: string }
 
-interface Shelf { mode: 'shelf', actions: ToolAction[] }
-interface Params { mode: 'params', actions: ToolAction[], action: ToolAction, values: Record<string, string>, error?: string }
-interface PreviewState { mode: 'preview', actions: ToolAction[], action: ToolAction, values: Record<string, string>, preview: ActionPreview, gate: Gate }
+interface Shelf { mode: 'shelf', actions: ToolAction[], query: string }
+interface Params {
+  mode: 'params'
+  actions: ToolAction[]
+  action: ToolAction
+  values: Record<string, string>
+  knownRepos: KnownRepo[]
+  error?: string
+}
+interface PreviewState {
+  mode: 'preview'
+  actions: ToolAction[]
+  action: ToolAction
+  values: Record<string, string>
+  knownRepos: KnownRepo[]
+  preview: ActionPreview
+  gate: Gate
+  notice?: string
+}
 interface Running {
   mode: 'running'
   actions: ToolAction[]
@@ -36,12 +61,13 @@ interface Running {
   error?: string
   notice?: string
 }
+interface Copied { mode: 'copied', actions: ToolAction[], title: string, text: string, notice: string }
 interface Quiet { mode: 'quiet', actions: ToolAction[], message: string }
 interface Problem { mode: 'problem', error: string }
 interface Empty { mode: 'empty' }
 interface Loading { mode: 'loading' }
 
-type Session = Loading | Problem | Empty | Shelf | Params | PreviewState | Running | Quiet
+type Session = Loading | Problem | Empty | Shelf | Params | PreviewState | Running | Copied | Quiet
 
 let session: Session = { mode: 'loading' }
 let host: HTMLElement | null = null
@@ -78,43 +104,59 @@ function applyRunEvent(event: ToolRunEvent): void {
   }
 }
 
-function statusText(state: Running): string {
-  if (state.phase === 'running') return '运行中'
-  if (state.phase === 'aborted') return '已终止'
-  const code = state.exitCode === null ? '无' : String(state.exitCode)
-  return `退出码 ${code} · 用时 ${formatDuration(state.durationMs)}`
-}
-
 function outputText(lines: Line[]): string {
   return lines.map(line => line.text).join('')
 }
 
-function paintShelf(page: HTMLElement, actions: ToolAction[], narrow = false): void {
-  page.classList.toggle('tools-narrow', narrow)
+function paintShelf(
+  page: HTMLElement,
+  actions: ToolAction[],
+  options: { narrow?: boolean, query?: string, onQuery?: (query: string) => void, onOpen?: (action: ToolAction) => void } = {}
+): void {
+  page.classList.toggle('tools-narrow', Boolean(options.narrow))
+  const query = options.query ?? ''
+  const shown = filterActions(actions, query)
   page.append(
     el('h1', {}, ['工具架']),
-    el('p', { class: 'lede' }, [`${actions.length} 个动作。先填参数，再看展开结果，确认才会执行。`])
+    el('p', { class: 'lede' }, [`${actions.length} 个动作。输入即筛选。确认前不会执行。`])
   )
+  const search = el('input', {
+    type: 'search',
+    class: 'tool-search',
+    placeholder: '搜索动作',
+    'aria-label': '搜索动作'
+  })
+  search.value = query
+  search.addEventListener('input', () => options.onQuery?.(search.value))
+  page.append(el('label', { class: 'tool-search-label' }, ['搜索', search]))
+  if (shown.length === 0) {
+    page.append(el('p', { class: 'hint' }, ['没有匹配的动作']))
+    return
+  }
   const list = el('div', { class: 'tool-list' })
-  for (const action of actions) {
-    const use = el('button', { type: 'button', class: 'primary' }, ['使用'])
-    use.addEventListener('click', () => { void openAction(action, actions) })
-    list.append(el('article', { class: 'tool-card' }, [
-      el('div', { class: 'tool-top' }, [
-        el('h2', {}, [action.title]),
+  for (const action of shown) {
+    const card = el('button', { type: 'button', class: 'tool-card' }, [
+      el('span', { class: 'tool-top' }, [
+        el('span', { class: 'tool-title' }, [action.title]),
         el('span', { class: `chip chip-tool chip-${action.type}` }, [TOOL_TYPE_LABEL[action.type]])
       ]),
-      el('p', {}, [action.description ?? '']),
-      use
-    ]))
+      el('span', { class: 'tool-desc' }, [action.description ?? ''])
+    ])
+    card.addEventListener('click', () => options.onOpen?.(action))
+    list.append(card)
   }
   page.append(list)
 }
 
 async function openAction(action: ToolAction, actions: ToolAction[]): Promise<void> {
   const params = action.params ?? []
+  const needsRepos = params.some(param => {
+    const kind = paramKind(param)
+    return kind === 'repo' || kind === 'directory'
+  })
+  const knownRepos = needsRepos ? await window.arckeep.getKnownRepos() : []
   if (params.length > 0) {
-    session = { mode: 'params', actions, action, values: defaults(action) }
+    session = { mode: 'params', actions, action, values: defaults(action), knownRepos }
     if (host) paint(host)
     return
   }
@@ -124,14 +166,28 @@ async function openAction(action: ToolAction, actions: ToolAction[]): Promise<vo
 async function showPreview(action: ToolAction, actions: ToolAction[], values: Record<string, string>): Promise<void> {
   const result = await window.arckeep.previewTool(action.id, values)
   if (!result.ok) {
-    session = { mode: 'params', actions, action, values, error: result.error }
+    const knownRepos = session.mode === 'params' ? session.knownRepos : []
+    session = { mode: 'params', actions, action, values, knownRepos, error: result.error }
     if (host) paint(host)
     return
   }
   const gate = createRunGate()
   gate.stage()
-  session = { mode: 'preview', actions, action, values, preview: result.data, gate }
+  const knownRepos = session.mode === 'params' ? session.knownRepos : []
+  session = { mode: 'preview', actions, action, values, knownRepos, preview: result.data, gate }
   if (host) paint(host)
+}
+
+function choiceValue(kind: ReturnType<typeof paramKind>, repo: KnownRepo): string {
+  if (kind === 'directory') return repo.path ?? ''
+  return repo.id
+}
+
+function repoOpenHint(repos: readonly KnownRepo[], value: string): string {
+  const repo = findKnownRepo(repos, value)
+  if (!repo) return '从已知仓库里选一个。列表来自关注列表、GitHub 拉到的仓库和本地路径。'
+  const target = openTargetForRepo(repo)
+  return target.type === 'open-url' ? `将打开 ${target.text}` : `将打开文件夹 ${target.text}`
 }
 
 function paintParams(page: HTMLElement, state: Params): void {
@@ -140,55 +196,134 @@ function paintParams(page: HTMLElement, state: Params): void {
     el('p', { class: 'lede' }, ['填写参数。下一步只生成预览，还不会执行。'])
   )
   const form = el('section', { class: 'card' }, [el('h2', {}, ['参数'])])
-  const inputs = new Map<string, HTMLTextAreaElement>()
+  const values: Record<string, string> = { ...state.values }
+  const fields = new Map<string, HTMLInputElement | HTMLTextAreaElement>()
   for (const param of state.action.params ?? []) {
-    const input = el('textarea', { 'aria-label': param.label, rows: '2' })
-    input.value = state.values[param.key] ?? ''
-    inputs.set(param.key, input)
-    form.append(el('label', { class: 'tool-field' }, [param.label, input]))
+    const kind = paramKind(param)
+    const block = el('div', { class: 'tool-field' }, [el('span', {}, [param.label])])
+    if (kind === 'repo' || kind === 'directory') {
+      const repos = kind === 'directory' ? directoryChoices(state.knownRepos) : state.knownRepos
+      const extra: KnownRepo[] = []
+      const current = values[param.key] ?? ''
+      if (kind === 'directory' && current && !repos.some(repo => repo.path === current)) {
+        extra.push({ id: current, label: current, github: null, path: current, sources: ['local'] })
+      }
+      const group = el('div', { class: 'repo-choices', role: 'radiogroup', 'aria-label': param.label })
+      const choices = [...repos, ...extra]
+      if (choices.length === 0) {
+        group.append(el('p', { class: 'hint' }, [
+          kind === 'directory'
+            ? '还没有已知的本地路径，可以浏览文件夹。'
+            : '还没有已知仓库。它们来自关注列表、GitHub 拉到的仓库和设置里的本地路径。'
+        ]))
+      }
+      for (const repo of choices) {
+        const value = choiceValue(kind, repo)
+        const radio = el('input', { type: 'radio', name: `param-${param.key}`, value }) as HTMLInputElement
+        radio.checked = current === value || current === repo.id || (repo.github !== null && current === repo.github)
+        radio.addEventListener('change', () => {
+          values[param.key] = value
+          const hint = block.querySelector('.repo-open-hint')
+          if (hint && kind === 'repo') hint.textContent = repoOpenHint(state.knownRepos, value)
+        })
+        group.append(el('label', { class: 'repo-choice' }, [
+          radio,
+          el('span', { class: 'repo-choice-label' }, [repo.label]),
+          el('span', { class: 'repo-choice-source' }, [knownRepoSourceLabel(repo.sources)])
+        ]))
+      }
+      block.append(group)
+      if (kind === 'repo') block.append(el('p', { class: 'hint repo-open-hint' }, [repoOpenHint(state.knownRepos, current)]))
+      if (kind === 'directory') {
+        const browse = el('button', { type: 'button', class: 'ghost' }, ['浏览文件夹'])
+        browse.addEventListener('click', () => {
+          void window.arckeep.pickFolder().then(result => {
+            if (!result.ok || result.data.cancelled) return
+            values[param.key] = result.data.path
+            state.values = { ...values }
+            if (host) paint(host)
+          })
+        })
+        block.append(browse)
+      }
+    } else if (kind === 'multiline') {
+      const input = el('textarea', { 'aria-label': param.label, rows: '6' })
+      input.value = values[param.key] ?? ''
+      fields.set(param.key, input)
+      block.append(input)
+    } else {
+      const input = el('input', { type: 'text', 'aria-label': param.label })
+      input.value = values[param.key] ?? ''
+      fields.set(param.key, input)
+      block.append(input)
+    }
+    form.append(block)
   }
   if (state.error) form.append(el('div', { class: 'alert error', role: 'alert' }, [state.error]))
   const back = el('button', { type: 'button', class: 'ghost' }, ['返回'])
   const next = el('button', { type: 'button', class: 'primary' }, ['预览'])
   back.addEventListener('click', () => {
-    session = { mode: 'shelf', actions: state.actions }
+    session = { mode: 'shelf', actions: state.actions, query: '' }
     if (host) paint(host)
   })
   next.addEventListener('click', () => {
-    const values: Record<string, string> = {}
-    for (const [key, input] of inputs) values[key] = input.value
+    for (const [key, input] of fields) values[key] = input.value
     void showPreview(state.action, state.actions, values)
   })
   form.append(el('div', { class: 'actions' }, [back, next]))
   page.append(form)
 }
 
+function previewBody(preview: ActionPreview): HTMLElement[] {
+  const nodes: HTMLElement[] = []
+  if (preview.shell) nodes.push(el('p', { class: 'hint' }, [`shell: ${SHELL_LABEL[preview.shell]}`]))
+  if (preview.cwd && preview.type === 'run-command') nodes.push(el('p', { class: 'hint' }, [`工作目录: ${preview.cwd}`]))
+  if (preview.type === 'run-command' && preview.dryRun) {
+    nodes.push(el('h3', {}, ['预览（不会改动文件）']))
+    nodes.push(el('pre', { class: 'tool-pre' }, [preview.dryRun]))
+    nodes.push(el('h3', {}, ['确认后将执行的命令']))
+    nodes.push(el('pre', { class: 'tool-pre' }, [preview.text]))
+    return nodes
+  }
+  if (preview.type === 'run-command') nodes.push(el('h3', {}, ['确认后将执行的命令']))
+  if (preview.type === 'template') nodes.push(el('h3', {}, ['将复制到剪贴板']))
+  nodes.push(el('pre', { class: 'tool-pre' }, [preview.text]))
+  return nodes
+}
+
 function paintPreview(page: HTMLElement, state: PreviewState): void {
-  paintShelf(page, state.actions)
-  const lines = [state.preview.text]
-  if (state.preview.shell) lines.unshift(`shell: ${SHELL_LABEL[state.preview.shell]}`)
-  if (state.preview.type === 'run-command' && state.preview.cwd) lines.splice(state.preview.shell ? 1 : 0, 0, `工作目录: ${state.preview.cwd}`)
+  const isTemplate = state.preview.type === 'template'
   const cancel = el('button', { type: 'button', class: 'ghost' }, ['取消'])
-  const confirm = el('button', { type: 'button', class: 'primary' }, ['确认执行'])
+  const confirm = el('button', { type: 'button', class: 'primary' }, [isTemplate ? '复制' : '确认执行'])
   cancel.addEventListener('click', () => {
     state.gate.cancel()
+    removeEscape?.()
     session = state.action.params?.length
-      ? { mode: 'params', actions: state.actions, action: state.action, values: state.values }
-      : { mode: 'shelf', actions: state.actions }
+      ? {
+          mode: 'params',
+          actions: state.actions,
+          action: state.action,
+          values: state.values,
+          knownRepos: state.knownRepos
+        }
+      : { mode: 'shelf', actions: state.actions, query: '' }
     if (host) paint(host)
   })
   confirm.addEventListener('click', () => { void confirmPreview(state, confirm) })
   const dialog = el('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': '即将执行' }, [
-    el('h2', {}, ['即将执行']),
-    el('p', { class: 'hint' }, ['下面是展开后的内容。取消不会运行。']),
-    el('pre', { class: 'tool-pre' }, [lines.join('\n')]),
+    el('h2', {}, [isTemplate ? '复制到剪贴板' : '即将执行']),
+    el('p', { class: 'hint' }, [isTemplate ? '确认前不会写入剪贴板。' : '取消不会运行。确认前不会改动文件。']),
+    ...previewBody(state.preview),
     el('div', { class: 'actions' }, [cancel, confirm])
   ])
-  page.append(el('div', { class: 'modal-backdrop' }, [dialog]))
+  if (state.notice) dialog.append(el('p', { class: 'run-status run-ok', role: 'status' }, [state.notice]))
+  page.append(
+    el('h1', {}, [state.action.title]),
+    el('div', { class: 'modal-backdrop' }, [dialog])
+  )
   removeEscape?.()
   const onKey = (event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
-    removeEscape?.()
     cancel.click()
   }
   document.addEventListener('keydown', onKey)
@@ -221,25 +356,67 @@ async function confirmPreview(state: PreviewState, button: HTMLButtonElement): P
       durationMs: 0
     }
   } else if (result.data.kind === 'template') {
-    session = { mode: 'quiet', actions: state.actions, message: '已复制' }
+    session = {
+      mode: 'copied',
+      actions: state.actions,
+      title: state.action.title,
+      text: state.preview.text,
+      notice: copyFeedback(true)
+    }
   } else {
     session = { mode: 'quiet', actions: state.actions, message: '已打开' }
   }
   if (host) paint(host)
 }
 
+function paintCopied(page: HTMLElement, state: Copied): void {
+  const again = el('button', { type: 'button', class: 'primary' }, ['复制'])
+  again.addEventListener('click', async () => {
+    const copied = await window.arckeep.copyText(state.text)
+    state.notice = copyFeedback(copied.ok)
+    if (host) paint(host)
+  })
+  const close = el('button', { type: 'button', class: 'ghost' }, ['返回工具架'])
+  close.addEventListener('click', () => {
+    session = { mode: 'shelf', actions: state.actions, query: '' }
+    if (host) paint(host)
+  })
+  page.append(
+    el('h1', {}, [state.title]),
+    el('p', { class: `run-status ${state.notice === '已复制' ? 'run-ok' : 'run-failed'}`, role: 'status' }, [state.notice]),
+    el('section', { class: 'card' }, [
+      el('h2', {}, ['将复制到剪贴板']),
+      el('pre', { class: 'tool-pre' }, [state.text]),
+      el('div', { class: 'actions' }, [again, close])
+    ])
+  )
+}
+
+function streamBlock(title: string, text: string, stderr: boolean): HTMLElement[] {
+  return [
+    el('h2', {}, [title]),
+    el('pre', { class: stderr ? 'tool-pre tool-live tool-stderr' : 'tool-pre tool-live' }, [text || '（无）'])
+  ]
+}
+
 function paintRunning(page: HTMLElement, state: Running): void {
+  const status = runStatus(state.phase, state.exitCode)
   const stdout = state.lines.filter(line => line.stream === 'stdout').map(line => line.text).join('')
   const stderr = state.lines.filter(line => line.stream === 'stderr').map(line => line.text).join('')
   page.append(
     el('h1', {}, [state.action.title]),
-    el('p', { class: 'waiting-summary' }, [statusText(state)]),
-    el('pre', { class: 'tool-pre' }, [state.preview.text])
+    el('p', { class: `run-status run-${status.tone}`, role: 'status' }, [status.label])
   )
+  if (state.phase !== 'running' && state.durationMs > 0) {
+    page.append(el('p', { class: 'hint' }, [`用时 ${formatDuration(state.durationMs)}`]))
+  }
+  page.append(el('pre', { class: 'tool-pre' }, [state.preview.text]))
   if (state.error) page.append(el('div', { class: 'alert error', role: 'alert' }, [state.error]))
   const output = el('section', { class: 'card tool-output-card' })
-  output.append(el('h2', {}, ['标准输出']), el('pre', { class: 'tool-pre tool-live', id: 'tool-stdout' }, [stdout || '（无）']))
-  output.append(el('h2', {}, ['标准错误']), el('pre', { class: 'tool-pre tool-live tool-stderr', id: 'tool-stderr' }, [stderr || '（无）']))
+  const blocks = status.stderrFirst
+    ? streamBlock('标准错误', stderr, true).concat(streamBlock('标准输出', stdout, false))
+    : streamBlock('标准输出', stdout, false).concat(streamBlock('标准错误', stderr, true))
+  output.append(...blocks)
   const actions = el('div', { class: 'actions' })
   if (state.phase === 'running') {
     const stop = el('button', { type: 'button', class: 'danger' }, ['中止'])
@@ -254,7 +431,7 @@ function paintRunning(page: HTMLElement, state: Running): void {
     })
     const close = el('button', { type: 'button', class: 'ghost' }, ['关闭'])
     close.addEventListener('click', () => {
-      session = { mode: 'shelf', actions: state.actions }
+      session = { mode: 'shelf', actions: state.actions, query: '' }
       if (host) paint(host)
     })
     actions.append(copy, close)
@@ -283,10 +460,30 @@ function paint(target: HTMLElement): void {
         settingsButton()
       ])
     )
-  } else if (session.mode === 'shelf') paintShelf(page, session.actions)
-  else if (session.mode === 'params') paintParams(page, session)
+  } else if (session.mode === 'shelf') {
+    paintShelf(page, session.actions, {
+      query: session.query,
+      onQuery: query => {
+        session = { mode: 'shelf', actions: session.mode === 'shelf' ? session.actions : [], query }
+        if (host) {
+          paint(host)
+          const input = host.querySelector<HTMLInputElement>('.tool-search')
+          if (input) {
+            input.focus()
+            const end = input.value.length
+            input.setSelectionRange(end, end)
+          }
+        }
+      },
+      onOpen: action => {
+        const actions = session.mode === 'shelf' ? session.actions : []
+        void openAction(action, actions)
+      }
+    })
+  } else if (session.mode === 'params') paintParams(page, session)
   else if (session.mode === 'preview') paintPreview(page, session)
   else if (session.mode === 'running') paintRunning(page, session)
+  else if (session.mode === 'copied') paintCopied(page, session)
   else if (session.mode === 'quiet') {
     const actions = session.actions
     page.append(
@@ -295,7 +492,7 @@ function paint(target: HTMLElement): void {
       el('div', { class: 'actions' }, [(() => {
         const back = el('button', { type: 'button', class: 'primary' }, ['返回工具架'])
         back.addEventListener('click', () => {
-          session = { mode: 'shelf', actions }
+          session = { mode: 'shelf', actions, query: '' }
           if (host) paint(host)
         })
         return back
@@ -311,7 +508,7 @@ function settingsButton(): HTMLButtonElement {
   return button
 }
 
-function paintFixture(target: HTMLElement, fixture: Exclude<ToolFixture, { page: 'settings' }>): void {
+function paintFixture(target: HTMLElement, fixture: Exclude<ToolFixture, ToolFixtureInvalid>): void {
   const page = el('section', { class: 'page tools' })
   if (fixture.scene === 'empty') {
     page.append(
@@ -323,13 +520,14 @@ function paintFixture(target: HTMLElement, fixture: Exclude<ToolFixture, { page:
       ])
     )
   } else if (fixture.scene === 'shelf' || fixture.scene === 'narrow') {
-    paintShelf(page, fixture.actions, fixture.scene === 'narrow')
+    paintShelf(page, fixture.actions, { narrow: fixture.scene === 'narrow', query: fixture.query ?? '' })
   } else if (fixture.scene === 'params') {
     paintParams(page, {
       mode: 'params',
       actions: [fixture.action],
       action: fixture.action,
-      values: fixture.values
+      values: fixture.values,
+      knownRepos: fixture.knownRepos
     })
   } else if (fixture.scene === 'preview') {
     const gate = createRunGate()
@@ -341,18 +539,35 @@ function paintFixture(target: HTMLElement, fixture: Exclude<ToolFixture, { page:
       actions: [action],
       action,
       values: {},
+      knownRepos: [],
       gate,
       preview: {
         actionId: action.id,
         title: action.title,
         type: 'run-command',
         text: fixture.previewText,
+        dryRun: fixture.dryRun,
         shell: 'powershell',
         cwd: fixture.cwd
       }
     })
-  } else if (fixture.scene === 'running' || fixture.scene === 'exit' || fixture.scene === 'aborted') {
+  } else if (fixture.scene === 'copied') {
+    paintCopied(page, {
+      mode: 'copied',
+      actions: [],
+      title: fixture.title,
+      text: fixture.text,
+      notice: copyFeedback(true)
+    })
+  } else if (
+    fixture.scene === 'running'
+    || fixture.scene === 'success'
+    || fixture.scene === 'failed'
+    || fixture.scene === 'aborted'
+  ) {
     const action = shelfStub(fixture.title)
+    const phase = fixture.scene === 'running' ? 'running' : fixture.scene === 'aborted' ? 'aborted' : 'done'
+    const exitCode = fixture.scene === 'failed' ? 3 : fixture.scene === 'success' ? 0 : null
     paintRunning(page, {
       mode: 'running',
       actions: [],
@@ -367,9 +582,9 @@ function paintFixture(target: HTMLElement, fixture: Exclude<ToolFixture, { page:
       },
       runId: 'fixture',
       lines: fixture.lines,
-      phase: fixture.scene === 'running' ? 'running' : fixture.scene === 'aborted' ? 'aborted' : 'done',
-      exitCode: fixture.scene === 'exit' ? 3 : null,
-      durationMs: fixture.scene === 'exit' ? 1400 : 0
+      phase,
+      exitCode,
+      durationMs: fixture.scene === 'failed' || fixture.scene === 'success' ? 1400 : 0
     })
   }
   target.replaceChildren(page)
@@ -396,10 +611,10 @@ export async function renderTools(target: HTMLElement, settings: () => void): Pr
   }
   if (session.mode === 'loading' || session.mode === 'shelf' || session.mode === 'empty' || session.mode === 'problem') {
     const catalog = await window.arckeep.getToolCatalog()
+    const query = session.mode === 'shelf' ? session.query : ''
     if (!catalog.ok) session = { mode: 'problem', error: catalog.error }
     else if (catalog.actions.length === 0) session = { mode: 'empty' }
-    else if (session.mode !== 'shelf') session = { mode: 'shelf', actions: catalog.actions }
-    else session = { mode: 'shelf', actions: catalog.actions }
+    else session = { mode: 'shelf', actions: catalog.actions, query }
   }
   paint(target)
 }

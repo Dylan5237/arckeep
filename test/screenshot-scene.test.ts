@@ -29,11 +29,14 @@ describe('screenshot fixtures', () => {
     expect(parseScreenshotScene('waiting-hidden')).toBe('waiting-hidden')
     expect(parseScreenshotScene('waiting-family')).toBe('waiting-family')
     expect(screenshotOpensSettings('waiting-watch')).toBe(false)
-    expect(screenshotWindowSize('tools-narrow')).toEqual({ width: 800, height: 1500 })
+    expect(screenshotWindowSize('tools-narrow')).toEqual({ width: 800, height: 760 })
+    expect(screenshotWindowSize('tools')).toEqual({ width: 1120, height: 760 })
     expect(screenshotOpensSettings('tools')).toBe(false)
     expect(screenshotOpensSettings('tools-invalid')).toBe(true)
     expect(parseScreenshotScene('not-a-scene')).toBe('nav')
-    expect(parseScreenshotScene('tools-exit')).toBe('tools-exit')
+    expect(parseScreenshotScene('tools-failed')).toBe('tools-failed')
+    expect(parseScreenshotScene('tools-success')).toBe('tools-success')
+    expect(parseScreenshotScene('tools-copied')).toBe('tools-copied')
   })
 
   it('builds mocked auth states without writing the stand-in secrets as plaintext', async () => {

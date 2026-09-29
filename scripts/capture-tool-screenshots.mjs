@@ -15,10 +15,11 @@ const scenes = [
   ['tools-params', 'tools-params.png'],
   ['tools-preview', 'tools-preview.png'],
   ['tools-running', 'tools-running.png'],
-  ['tools-exit', 'tools-exit.png'],
+  ['tools-success', 'tools-success.png'],
+  ['tools-failed', 'tools-failed.png'],
   ['tools-aborted', 'tools-aborted.png'],
+  ['tools-copied', 'tools-copied.png'],
   ['tools-invalid', 'tools-invalid-json.png'],
-  ['tools-empty', 'tools-empty.png'],
   ['tools-narrow', 'tools-narrow.png']
 ]
 

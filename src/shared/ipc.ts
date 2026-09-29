@@ -20,6 +20,8 @@ export const IpcChannel = {
   setToolShelf: 'tools:set-config',
   getToolExample: 'tools:example',
   getToolCatalog: 'tools:catalog',
+  getKnownRepos: 'tools:known-repos',
+  pickFolder: 'tools:pick-folder',
   importToolShelf: 'tools:import',
   exportToolShelf: 'tools:export',
   previewTool: 'tools:preview',

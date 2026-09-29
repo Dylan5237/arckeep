@@ -22,7 +22,8 @@
         "key": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,40}$" },
         "label": { "type": "string", "minLength": 1, "maxLength": 80 },
         "default": { "type": "string", "maxLength": 4000 },
-        "required": { "type": "boolean" }
+        "required": { "type": "boolean" },
+        "input": { "enum": ["line", "multiline", "directory", "repo"] }
       }
     },
     "action": {
@@ -45,6 +46,7 @@
         "shell": { "enum": ["cmd", "powershell", "git-bash"] },
         "cwd": { "type": "string", "maxLength": 4000 },
         "command": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "previewCommand": { "type": "string", "minLength": 1, "maxLength": 4000 },
         "text": { "type": "string", "minLength": 1, "maxLength": 8000 }
       },
       "allOf": [
@@ -61,6 +63,7 @@
               "shell": false,
               "cwd": false,
               "command": false,
+              "previewCommand": false,
               "text": false
             }
           }
@@ -77,6 +80,7 @@
               "shell": false,
               "cwd": false,
               "command": false,
+              "previewCommand": false,
               "text": false
             }
           }
@@ -109,7 +113,8 @@
               "editor": false,
               "shell": false,
               "cwd": false,
-              "command": false
+              "command": false,
+              "previewCommand": false
             }
           }
         }

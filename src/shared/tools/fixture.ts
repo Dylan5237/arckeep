@@ -1,9 +1,11 @@
+import type { KnownRepo } from './repos.js'
 import type { ToolAction } from './types.js'
 
 export interface ToolFixtureShelf {
   page: 'tools'
   scene: 'shelf' | 'narrow'
   actions: ToolAction[]
+  query?: string
 }
 
 export interface ToolFixtureParams {
@@ -11,6 +13,7 @@ export interface ToolFixtureParams {
   scene: 'params'
   action: ToolAction
   values: Record<string, string>
+  knownRepos: KnownRepo[]
 }
 
 export interface ToolFixturePreview {
@@ -18,17 +21,25 @@ export interface ToolFixturePreview {
   scene: 'preview'
   action: ToolAction
   previewText: string
+  dryRun?: string
   cwd: string
   shellLabel: string
 }
 
 export interface ToolFixtureRun {
   page: 'tools'
-  scene: 'running' | 'exit' | 'aborted'
+  scene: 'running' | 'success' | 'failed' | 'aborted'
   title: string
   command: string
   lines: Array<{ stream: 'stdout' | 'stderr', text: string }>
   status: string
+}
+
+export interface ToolFixtureCopied {
+  page: 'tools'
+  scene: 'copied'
+  title: string
+  text: string
 }
 
 export interface ToolFixtureEmpty {
@@ -41,6 +52,7 @@ export interface ToolFixtureInvalid {
   scene: 'invalid'
   draft: string
   error: string
+  line: number
 }
 
 export type ToolFixture =
@@ -48,5 +60,6 @@ export type ToolFixture =
   | ToolFixtureParams
   | ToolFixturePreview
   | ToolFixtureRun
+  | ToolFixtureCopied
   | ToolFixtureEmpty
   | ToolFixtureInvalid

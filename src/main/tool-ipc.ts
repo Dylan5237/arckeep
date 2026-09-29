@@ -1,25 +1,39 @@
 import { clipboard, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { IpcChannel } from '../shared/ipc.js'
+import { collectKnownRepos, type KnownRepo } from '../shared/tools/repos.js'
 import { buildToolFixture } from './screenshot-tools.js'
 import type { SettingsService } from './settings-service.js'
 import {
   confirmToolAction,
   exportToolShelfFile,
   importToolShelfFile,
+  pickToolFolder,
   toolExampleText
 } from './tool-actions.js'
 import { normalizeActionId, normalizeParamInput, previewStoredAction } from './tool-request.js'
 import { ToolRunner } from './tool-runner.js'
 import { validateToolShelfText } from './tool-validate.js'
 
+export interface KnownRepoLookup {
+  observedGithubRepos(): readonly string[]
+  observedLocalLinks(): readonly { github: string, path: string }[]
+}
+
 export function registerToolIpc(options: {
   guard: (event: IpcMainInvokeEvent) => void
   getWindow: () => BrowserWindow | null
   settings: SettingsService
   runner: ToolRunner
+  repos?: KnownRepoLookup | null
   screenshotScene?: string
 }): void {
   const { guard, settings, runner } = options
+  const knownRepos = (): KnownRepo[] => collectKnownRepos({
+    watchedRepos: settings.getSettings().watchedRepos,
+    githubRepos: options.repos?.observedGithubRepos() ?? [],
+    localPaths: settings.getSettings().waiting.localRepoDirs,
+    linked: options.repos?.observedLocalLinks() ?? []
+  })
   ipcMain.handle(IpcChannel.setToolShelf, (event, json: unknown) => {
     guard(event)
     return settings.setToolShelfJson(json)
@@ -27,6 +41,14 @@ export function registerToolIpc(options: {
   ipcMain.handle(IpcChannel.getToolExample, event => {
     guard(event)
     return toolExampleText()
+  })
+  ipcMain.handle(IpcChannel.getKnownRepos, event => {
+    guard(event)
+    return knownRepos()
+  })
+  ipcMain.handle(IpcChannel.pickFolder, event => {
+    guard(event)
+    return pickToolFolder(options.getWindow())
   })
   ipcMain.handle(IpcChannel.getToolCatalog, event => {
     guard(event)
@@ -49,7 +71,8 @@ export function registerToolIpc(options: {
         settings.getSettings().toolShelfJson,
         normalizeActionId(actionId),
         normalizeParamInput(params),
-        process.cwd()
+        process.cwd(),
+        knownRepos()
       )
       return { ok: true as const, data: preview }
     } catch (error) {
@@ -58,7 +81,7 @@ export function registerToolIpc(options: {
   })
   ipcMain.handle(IpcChannel.runTool, (event, actionId: unknown, params: unknown) => {
     guard(event)
-    return confirmToolAction({ settings, runner, actionId, params })
+    return confirmToolAction({ settings, runner, actionId, params, knownRepos: knownRepos() })
   })
   ipcMain.handle(IpcChannel.abortTool, (event, runId: unknown) => {
     guard(event)

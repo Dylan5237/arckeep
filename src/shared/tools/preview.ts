@@ -1,4 +1,5 @@
-import { assertPlaceholders, expandCommand, expandRaw, powershellLaunchScript } from './quote.js'
+import { findKnownRepo, openTargetForRepo, type KnownRepo } from './repos.js'
+import { assertPlaceholders, expandCommand, expandRaw } from './quote.js'
 import type { ActionPreview, ToolAction } from './types.js'
 
 export function formatDuration(ms: number): string {
@@ -55,10 +56,24 @@ export function buildPreview(
   action: ToolAction,
   input: Readonly<Record<string, string>>,
   baseCwd: string,
-  powershellExecutable = 'powershell.exe'
+  knownRepos?: readonly KnownRepo[]
 ): ActionPreview {
   const params = collectParams(action, input)
   if (action.type === 'open-url') {
+    const repoParam = (action.params ?? []).find(param => param.input === 'repo')
+    if (repoParam && knownRepos) {
+      const repo = findKnownRepo(knownRepos, params[repoParam.key] ?? '')
+      if (!repo) throw new Error('请从已知仓库里选一个')
+      const target = openTargetForRepo(repo)
+      return {
+        actionId: action.id,
+        title: action.title,
+        type: target.type,
+        text: target.text,
+        argv: target.type === 'open-folder' ? target.argv : undefined,
+        cwd: target.type === 'open-folder' ? target.text : undefined
+      }
+    }
     return {
       actionId: action.id,
       title: action.title,
@@ -91,13 +106,18 @@ export function buildPreview(
   }
   const script = expandCommand(action.command, params, action.shell)
   if (!script.trim()) throw new Error('命令是空的')
+  const dryRun = action.previewCommand
+    ? expandCommand(action.previewCommand, params, action.shell)
+    : undefined
+  if (dryRun !== undefined && !dryRun.trim()) throw new Error('预览命令是空的')
   const cwd = action.cwd ? expandRaw(action.cwd, params) : baseCwd
   if (!cwd.trim() || /[\0\r\n]/.test(cwd)) throw new Error('工作目录无效')
   return {
     actionId: action.id,
     title: action.title,
     type: action.type,
-    text: action.shell === 'powershell' ? powershellLaunchScript(script, powershellExecutable) : script,
+    text: script,
+    dryRun,
     shell: action.shell,
     cwd
   }

@@ -1,6 +1,6 @@
 import type { ToolFixture } from '../shared/tools/fixture.js'
-import { buildPreview, formatDuration } from '../shared/tools/preview.js'
-import { powershellLaunchScript } from '../shared/tools/quote.js'
+import { buildPreview } from '../shared/tools/preview.js'
+import type { KnownRepo } from '../shared/tools/repos.js'
 import type { ToolAction } from '../shared/tools/types.js'
 import { validateToolShelfText } from './tool-validate.js'
 
@@ -9,8 +9,10 @@ export const TOOL_SCREENSHOT_SCENES = [
   'tools-params',
   'tools-preview',
   'tools-running',
-  'tools-exit',
+  'tools-success',
+  'tools-failed',
   'tools-aborted',
+  'tools-copied',
   'tools-invalid',
   'tools-empty',
   'tools-narrow'
@@ -18,17 +20,38 @@ export const TOOL_SCREENSHOT_SCENES = [
 
 export type ToolScreenshotScene = (typeof TOOL_SCREENSHOT_SCENES)[number]
 
+const knownRepos: KnownRepo[] = [
+  {
+    id: 'example/demo',
+    label: 'example/demo · C:\\work\\demo',
+    github: 'example/demo',
+    path: 'C:\\work\\demo',
+    sources: ['watched', 'local']
+  },
+  {
+    id: 'north/atlas',
+    label: 'north/atlas',
+    github: 'north/atlas',
+    path: null,
+    sources: ['github']
+  },
+  {
+    id: 'C:\\work\\notes',
+    label: 'C:\\work\\notes',
+    github: null,
+    path: 'C:\\work\\notes',
+    sources: ['local']
+  }
+]
+
 const shelfActions: ToolAction[] = [
   {
-    id: 'open-arckeep',
-    title: '打开 Arckeep 仓库',
-    description: '在浏览器中打开仓库页面。',
+    id: 'open-repo',
+    title: '打开仓库',
+    description: '从已知仓库里选一个打开。',
     type: 'open-url',
-    url: 'https://github.com/{{owner}}/{{repo}}',
-    params: [
-      { key: 'owner', label: '所有者', default: 'Dylan5237' },
-      { key: 'repo', label: '仓库', default: 'arckeep' }
-    ]
+    url: 'https://github.com/{{repo}}',
+    params: [{ key: 'repo', label: '仓库', required: true, input: 'repo' }]
   },
   {
     id: 'open-folder-editor',
@@ -37,19 +60,20 @@ const shelfActions: ToolAction[] = [
     type: 'open-folder',
     editor: 'code',
     path: '{{folder}}',
-    params: [{ key: 'folder', label: '文件夹', default: 'C:\\work\\demo' }]
+    params: [{ key: 'folder', label: '文件夹', required: true, input: 'directory', default: 'C:\\work\\demo' }]
   },
   {
-    id: 'apo-init-dry-run',
-    title: 'apo 项目初始化（演练）',
-    description: 'apo init --dry-run，确认前不会运行。',
+    id: 'apo-init',
+    title: 'apo 项目初始化',
+    description: '预览用 --dry-run，确认后真正初始化。',
     type: 'run-command',
     shell: 'powershell',
     cwd: '{{cwd}}',
-    command: 'apo init --dry-run --name {{name}}',
+    previewCommand: 'apo init --dry-run --name {{name}}',
+    command: 'apo init --name {{name}}',
     params: [
-      { key: 'cwd', label: '工作目录', default: 'C:\\work\\demo' },
-      { key: 'name', label: '项目名', default: 'demo' }
+      { key: 'cwd', label: '工作目录', required: true, input: 'directory', default: 'C:\\work\\demo' },
+      { key: 'name', label: '项目名', required: true, default: 'demo' }
     ]
   },
   {
@@ -88,7 +112,7 @@ const shelfActions: ToolAction[] = [
     description: '在文件管理器中打开日志目录。',
     type: 'open-folder',
     path: '{{folder}}',
-    params: [{ key: 'folder', label: '日志目录', default: 'C:\\work\\demo\\logs' }]
+    params: [{ key: 'folder', label: '日志目录', input: 'directory', default: 'C:\\work\\demo\\logs' }]
   },
   {
     id: 'smoke-test',
@@ -99,7 +123,7 @@ const shelfActions: ToolAction[] = [
     cwd: '{{cwd}}',
     command: 'echo smoke-{{name}}',
     params: [
-      { key: 'cwd', label: '工作目录', default: 'C:\\work\\demo' },
+      { key: 'cwd', label: '工作目录', input: 'directory', default: 'C:\\work\\demo' },
       { key: 'name', label: '名称', default: 'north' }
     ]
   },
@@ -137,69 +161,111 @@ const invalidDraft = `{
 `
 
 function apoAction(): ToolAction {
-  const action = shelfActions.find(item => item.id === 'apo-init-dry-run')
-  if (!action) throw new Error('missing apo fixture')
+  const action = shelfActions.find(item => item.id === 'apo-init')
+  if (!action || action.type !== 'run-command') throw new Error('missing apo fixture')
+  return action
+}
+
+function openRepoAction(): ToolAction {
+  const action = shelfActions.find(item => item.id === 'open-repo')
+  if (!action) throw new Error('missing open-repo fixture')
   return action
 }
 
 export function buildToolFixture(scene: string): ToolFixture | null {
   if (scene === 'tools' || scene === 'tools-narrow') {
-    return { page: 'tools', scene: scene === 'tools-narrow' ? 'narrow' : 'shelf', actions: shelfActions }
+    return {
+      page: 'tools',
+      scene: scene === 'tools-narrow' ? 'narrow' : 'shelf',
+      actions: shelfActions,
+      query: ''
+    }
   }
   if (scene === 'tools-empty') return { page: 'tools', scene: 'empty' }
   if (scene === 'tools-params') {
-    const action = apoAction()
     return {
       page: 'tools',
       scene: 'params',
-      action,
-      values: { cwd: 'C:\\work\\demo', name: 'demo' }
+      action: openRepoAction(),
+      values: { repo: 'north/atlas' },
+      knownRepos
     }
   }
   if (scene === 'tools-preview') {
     const action = apoAction()
-    const preview = buildPreview(action, { cwd: 'C:\\work\\demo', name: 'demo' }, 'C:\\work\\demo')
+    const preview = buildPreview(action, { cwd: 'C:\\work\\demo', name: '北区' }, 'C:\\work\\demo')
     return {
       page: 'tools',
       scene: 'preview',
       action,
       previewText: preview.text,
+      dryRun: preview.dryRun,
       cwd: 'C:\\work\\demo',
       shellLabel: 'PowerShell'
     }
   }
-  const command = powershellLaunchScript("apo init --dry-run --name '北区'")
-  const lines = [
-    { stream: 'stdout' as const, text: '正在编译北区' },
-    { stream: 'stderr' as const, text: '警告：示例输出，没有真正执行' }
-  ]
+  const command = "apo init --name '北区'"
   if (scene === 'tools-running') {
-    return { page: 'tools', scene: 'running', title: 'apo 项目初始化（演练）', command, lines, status: '运行中' }
-  }
-  if (scene === 'tools-exit') {
     return {
       page: 'tools',
-      scene: 'exit',
-      title: 'apo 项目初始化（演练）',
+      scene: 'running',
+      title: 'apo 项目初始化',
       command,
-      lines,
-      status: `退出码 3 · 用时 ${formatDuration(1400)}`
+      lines: [{ stream: 'stdout', text: '正在初始化北区' }],
+      status: '运行中'
+    }
+  }
+  if (scene === 'tools-success') {
+    return {
+      page: 'tools',
+      scene: 'success',
+      title: 'apo 项目初始化',
+      command,
+      lines: [{ stream: 'stdout', text: '已创建项目 北区' }],
+      status: '完成'
+    }
+  }
+  if (scene === 'tools-failed') {
+    return {
+      page: 'tools',
+      scene: 'failed',
+      title: 'apo 项目初始化',
+      command,
+      lines: [
+        { stream: 'stdout', text: '正在准备北区' },
+        { stream: 'stderr', text: '初始化失败：目标目录不为空' }
+      ],
+      status: '失败（退出码 3）'
     }
   }
   if (scene === 'tools-aborted') {
     return {
       page: 'tools',
       scene: 'aborted',
-      title: 'apo 项目初始化（演练）',
+      title: 'apo 项目初始化',
       command,
-      lines: [{ stream: 'stdout', text: '正在编译北区' }],
+      lines: [{ stream: 'stdout', text: '正在初始化北区' }],
       status: '已终止'
+    }
+  }
+  if (scene === 'tools-copied') {
+    return {
+      page: 'tools',
+      scene: 'copied',
+      title: '派工说明',
+      text: '派工说明\n项目：北区\n任务：补齐验收步骤\n截止：本周五\n请按上面的范围处理，完成后回复结果。'
     }
   }
   if (scene === 'tools-invalid') {
     const validated = validateToolShelfText(invalidDraft)
     if (validated.ok) throw new Error('invalid fixture unexpectedly passed schema')
-    return { page: 'settings', scene: 'invalid', draft: invalidDraft, error: validated.error }
+    return {
+      page: 'settings',
+      scene: 'invalid',
+      draft: invalidDraft,
+      error: validated.error,
+      line: validated.line
+    }
   }
   return null
 }
@@ -207,20 +273,25 @@ export function buildToolFixture(scene: string): ToolFixture | null {
 export function toolScreenshotExpectation(scene: string): string | null {
   switch (scene) {
     case 'tools':
+      return '打开发布说明'
     case 'tools-narrow':
       return '打开发布说明'
     case 'tools-params':
-      return '项目名'
+      return 'north/atlas'
     case 'tools-preview':
-      return '确认执行'
+      return '确认后将执行的命令'
     case 'tools-running':
-      return '正在编译北区'
-    case 'tools-exit':
-      return '退出码 3'
+      return '正在初始化北区'
+    case 'tools-success':
+      return '完成'
+    case 'tools-failed':
+      return '失败（退出码 3）'
     case 'tools-aborted':
       return '已终止'
+    case 'tools-copied':
+      return '已复制'
     case 'tools-invalid':
-      return '不在允许的取值里'
+      return '只能是 open-url、open-folder、run-command、template 其中之一'
     case 'tools-empty':
       return '工具架还是空的'
     default:

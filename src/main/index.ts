@@ -240,6 +240,12 @@ async function captureScreenshot(window: BrowserWindow, file: string, scene: str
     await new Promise(resolve => setTimeout(resolve, 50))
   }
   if (!seen) throw new Error(`screenshot scene ${scene} did not show ${expected}`)
+  if (scene.startsWith('tools')) {
+    const leaked = await window.webContents.executeJavaScript(
+      `document.body.innerText.includes('LASTEXITCODE')`
+    )
+    if (leaked) throw new Error(`screenshot scene ${scene} showed a shell exit wrapper`)
+  }
   if (scene === 'waiting-hover') {
     await window.webContents.executeJavaScript(`
       const row = document.querySelector('.waiting-row')
@@ -375,6 +381,7 @@ if (!gotLock) {
       getWindow: () => mainWindow,
       settings: service,
       runner: toolRunner,
+      repos: waiting,
       screenshotScene
     })
     mainWindow = createWindow()
