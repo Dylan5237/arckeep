@@ -409,11 +409,13 @@ export async function saveToolShelfJson(page, json) {
  * 所以要先点掉当前这条动作里「返回工具架」/「关闭」/「取消」之类的收尾按钮，再点导航。
  * 真机上观察到：如果上一条 run-command 动作真的还在跑（.run-status 显示「运行中」），这时候
  * 唯一能点的按钮是「中止」，不在上面这组收尾按钮里——如果不管它，会一直等不到任何收尾按钮，
- * 6 次重试全部落空。这里额外兜底：看到「运行中」且只有「中止」按钮时，主动点一次中止，
- * 把这条判定为「异常卡住的动作」而不是让后面所有 session 都被拖累连环失败。 */
-export async function gotoTools(page) {
-  let abortedStuckRun = false
-  for (let attempt = 0; attempt < 6; attempt += 1) {
+ * 重试全部落空。这里额外兜底：看到「运行中」且只有「中止」按钮时，每隔至少 2 秒重新点一次
+ * 「中止」（直到超时预算用完），把这条判定为「异常卡住的动作」而不是让后面所有 session 都被
+ * 拖累连环失败；如果最终仍然回不到列表页，会连带把界面文字 dump 成证据文件方便排查。 */
+export async function gotoTools(page, { timeoutMs = 25000 } = {}) {
+  const start = Date.now()
+  let lastAbortAttemptAt = 0
+  while (Date.now() - start < timeoutMs) {
     if (await page.locator('.tool-search').count() > 0) return
     const backButtons = [
       page.locator('button:has-text("返回工具架")'),
@@ -429,22 +431,33 @@ export async function gotoTools(page) {
         break
       }
     }
-    if (!clicked && !abortedStuckRun) {
+    if (!clicked) {
       const stillRunning = await page.locator('.run-status').innerText().catch(() => '')
       const abortBtn = page.locator('button.danger:has-text("中止")')
-      if (stillRunning.includes('运行中') && await abortBtn.count() > 0) {
-        abortedStuckRun = true
+      // 每隔至少 2 秒才重新点一次「中止」（给上一次点击留出真正生效的时间），
+      // 而不是只在整个函数生命周期里尝试一次——真机上观察到单次点击后 500ms
+      // 有时候还没等到状态真正翻转，一次不够就直接放弃会导致后面所有 session 连环被拖累。
+      if (stillRunning.includes('运行中') && await abortBtn.count() > 0 && Date.now() - lastAbortAttemptAt > 2000) {
+        lastAbortAttemptAt = Date.now()
         await abortBtn.first().click().catch(() => {})
-        await sleep(500)
         clicked = true
       }
     }
     await page.click('[data-view="tools"]').catch(() => {})
-    await sleep(120)
-    if (!clicked) await sleep(120)
+    await sleep(clicked ? 400 : 200)
   }
-  await page.waitForSelector('.tool-search', { timeout: 8000 })
-  await sleep(80)
+  try {
+    await page.waitForSelector('.tool-search', { timeout: 10000 })
+    await sleep(80)
+  } catch (err) {
+    // 兜底诊断：把最后的界面状态记下来，方便不必再等一整轮 CI 才能看出卡在哪。
+    const diagName = `gototools-timeout-${Date.now()}`
+    try { await page.screenshot({ path: path.join(EVIDENCE_DIR, `${diagName}.png`) }) } catch { /* ignore */ }
+    const domText = await pageText(page).catch(() => '<读取失败>')
+    const runStatusText = await page.locator('.run-status').innerText().catch(() => '<无 .run-status>')
+    appendEvidenceJson(diagName, { domText, runStatusText })
+    throw err
+  }
 }
 
 export async function openCardByTitle(page, title) {

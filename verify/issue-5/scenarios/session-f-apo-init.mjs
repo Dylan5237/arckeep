@@ -15,7 +15,7 @@ import * as lib from '../lib.mjs'
 const {
   setResult, mergeNotes, launchApp, mainWindowPage, quitApp, killStrayArckeep,
   shot, sleep, freshAppData, saveToolShelfJson, gotoTools, openCardByTitle,
-  mkdtemp, waitFor, appendEvidenceJson, findNewPidByName, getCommandLine,
+  mkdtemp, waitFor, appendEvidenceJson, findNewPidByName,
   decodePowershellEncodedCommand, __dirname
 } = lib
 
@@ -92,6 +92,10 @@ export async function run() {
     await shot(page, '82-p2-preview-command-expanded', { checkIds: ['P2', 'C2'], description: '展开「查看命令」：预演阶段展示的真实将执行命令文本' })
 
     // 「点确认」前后按进程名做差集，抓住刚起的 powershell 宿主，解码它真正的 -EncodedCommand 脚本文本。
+    // 注意：commandLine 直接取自 SnapshotPids 那一刻的快照（win.ps1 的 Win32_Process 查询本身就带
+    // CommandLine 字段），不要再额外调一次 GetCommandLine——这条假 apo 命令跑得极快（node 起停 +
+    // 写两个文件通常远小于 1 秒），如果再等一次单独的 WMI 往返，宿主进程很可能已经退出，
+    // 之前就是栽在这个「进程已经没了所以 GetCommandLine 查不到」的竞态上。
     const diff = await findNewPidByName('powershell,pwsh', async () => {
       await page.click('.modal button.primary')
     }, { settleMs: 500 })
@@ -99,8 +103,7 @@ export async function run() {
     let decodedPid = null
     if (diff.newOnes[0]) {
       decodedPid = diff.newOnes[0].pid
-      const cl = getCommandLine(decodedPid)
-      decoded = cl.found ? decodePowershellEncodedCommand(cl.commandLine) : null
+      decoded = diff.newOnes[0].commandLine ? decodePowershellEncodedCommand(diff.newOnes[0].commandLine) : null
     }
 
     await waitFor(async () => /完成|失败/.test(await page.locator('.run-status').innerText().catch(() => '')), { timeoutMs: 40000, intervalMs: 150 })

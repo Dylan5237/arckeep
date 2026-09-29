@@ -430,13 +430,14 @@ export async function run() {
     const summaryMentionsCwd = summaryText.includes(cwdDryRun)
 
     // 找到刚起的 powershell 宿主，解码它的真实 EncodedCommand，核对和「查看命令」展开内容一致，且没有 --dry-run
+    // commandLine 直接取自差集快照那一刻（win.ps1 的 SnapshotPids 本身就带 CommandLine），不要再单独
+    // 调一次 GetCommandLine 二次往返——命令跑得快时，宿主进程可能在这次单独往返期间就已经退出。
     const diff = await lib.findNewPidByName('powershell,pwsh', async () => {
       await page.click('.modal button.primary')
     }, { settleMs: 400 })
     let decoded = null
     if (diff.newOnes[0]) {
-      const cl = lib.getCommandLine(diff.newOnes[0].pid)
-      decoded = cl.found ? lib.decodePowershellEncodedCommand(cl.commandLine) : null
+      decoded = diff.newOnes[0].commandLine ? lib.decodePowershellEncodedCommand(diff.newOnes[0].commandLine) : null
     }
     await waitFor(async () => (await page.locator('.run-status').innerText().catch(() => '')).includes('完成'), { timeoutMs: 40000, intervalMs: 150 })
     const realFilesCreated = fs.existsSync(path.join(cwdDryRun, 'alpha.txt')) && fs.existsSync(path.join(cwdDryRun, 'beta.txt'))

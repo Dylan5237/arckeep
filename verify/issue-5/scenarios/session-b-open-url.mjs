@@ -111,7 +111,8 @@ export async function run() {
     // 给保存 IPC 往返足够时间；顺手记一下捕获窗口是否显示了报错（诊断用，不参与判定）。
     await sleep(1200)
     const captureErrorText = await cap.locator('#error').innerText().catch(() => '<读取失败>')
-    const captureStillOpen = await cap.isClosed().then(() => false).catch(() => true)
+    // Page.isClosed() 是同步返回 boolean，不是 Promise——之前误当成异步调用导致抛异常。
+    const captureStillOpen = !cap.isClosed()
     const todosAfterCapture = await callTestHook(app, 'todos').catch(err => ({ error: String(err) }))
     appendEvidenceJson('p1-capture-diagnostic', { captureErrorText, captureStillOpen, todosAfterCapture })
 
