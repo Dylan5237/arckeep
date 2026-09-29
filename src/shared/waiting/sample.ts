@@ -66,15 +66,20 @@ export function sampleWaitingRows(): WaitingRow[] {
   return days.map((waitingDays, index) => {
     const repo = REPOS[index % REPOS.length] ?? 'northwind/ledger'
     const reasons = REASON_SETS[index % REASON_SETS.length] ?? ['要人动手']
-    const signalText = reasons.includes('待你审/合')
-      ? '3 天无动静'
-      : reasons.includes('请求 review')
-        ? '请求 review'
-        : reasons.includes('指派')
-          ? '指派'
-          : reasons.includes('要人动手')
-            ? '请确认这一版'
-            : reasons[0] ?? '等待'
+    const tier = index % 9 === 0 ? 'weak' as const : 'strong' as const
+    const signalText = tier === 'weak'
+      ? '正文里提到了截图，没有明确请求'
+      : reasons.includes('待你审/合')
+        ? '最近活动 2026-09-20，已连续 3 天没有 push、评论或 review'
+        : reasons.includes('请求 review')
+          ? 'mina 在 2026-09-18 请求 @ada review'
+          : reasons.includes('指派')
+            ? 'mina 在 2026-09-12 把这件事指派给你'
+            : reasons.includes('要人动手')
+              ? '请确认这一版能否合入'
+              : reasons.includes('提及')
+                ? '@你 出现在最新评论里'
+                : reasons[0] ?? '等待'
     const type = reasons.includes('待办')
       ? 'todo' as const
       : reasons.includes('待你审/合') || reasons.includes('请求 review')
@@ -106,6 +111,7 @@ export function sampleWaitingRows(): WaitingRow[] {
       waitingDays,
       daysEstimated: index % 7 === 0,
       signalText,
+      tier,
       updatedAt: '2026-09-01T00:00:00.000Z',
       ignored: false
     }

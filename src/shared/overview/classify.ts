@@ -164,7 +164,8 @@ export function classifyRepo(
   const stale = group === 'stale'
   const activityAt = recentActivityAt(facts)
   const stalledDays = stallBasis.at ? waitingDays(stallBasis.at, now) : 0
-  const stalled = group === 'active' && !empty && Boolean(stallBasis.at) && stalledDays >= config.staleDays
+  const stallElapsed = stallBasis.at ? now.getTime() - Date.parse(stallBasis.at) : 0
+  const stalled = group === 'active' && !empty && Boolean(stallBasis.at) && stallElapsed > config.staleDays * 86_400_000
   const stuck = facts.pullRequests
     .filter(pr => isReviewStuck(pr, config, now))
     .map(pr => ({ pr, days: waitingDays(pr.createdAt, now) }))

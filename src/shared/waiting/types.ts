@@ -76,8 +76,18 @@ export interface WaitingConfig {
   otherActors: string[]
   /** Checklist text that means the author still owes the step. */
   selfStepPhrases: string[]
+  /** Verbs that start an explicit request, such as 请 / 需 / please. */
+  requestVerbs: string[]
+  /** Actions that complete an explicit request, such as 确认 / review. */
+  requestActions: string[]
+  /** ACK counts only beside one of these tokens, a request verb, and the user or a role. */
+  ackTokens: string[]
+  /** Description or topic markers for a parked repository. */
+  parkedMarkers: string[]
   showIgnored: boolean
 }
+
+export type WaitingTier = 'strong' | 'weak'
 
 /** One GitHub issue or PR after a batched query, before reasons are merged. */
 export interface GithubRecord {
@@ -93,7 +103,11 @@ export interface GithubRecord {
   updatedAt: string
   isDraft: boolean
   labels: string[]
-  comments: { body: string, createdAt: string }[]
+  comments: { body: string, createdAt: string, authorLogin?: string }[]
+  repoDescription: string
+  repoTopics: string[]
+  reviewRequestedBy: string | null
+  assignedBy: string | null
   parentNumber: number | null
   assignedAt: string | null
   reviewRequestedAt: string | null
@@ -186,6 +200,10 @@ export interface WaitingDraft {
   childCount: number
   /** Why this row is waiting. Existing fields stay; this one is extra. */
   signal: WaitingSignal
+  /** strong: main list. weak: collapsed 「可能相关」. */
+  tier: WaitingTier
+  /** Repository description or topics match a parked marker. */
+  parked: boolean
 }
 
 export interface WaitingJsonRow {
@@ -221,6 +239,7 @@ export interface WaitingRow {
   childCount: number
   /** One line explaining why this row is here. Same text as the JSON signal excerpt. */
   signalText: string
+  tier: WaitingTier
 }
 
 export interface SourceError {

@@ -1,10 +1,11 @@
 import { primaryAction } from './action.js'
-import { earlierIso, laterIso, waitingDays } from './days.js'
-import { actionableProse, explainHumanWait, isSpecIssue, waitingExcerpt, type WaitScan } from './human-text.js'
+import { laterIso, waitingDays } from './days.js'
+import { isSpecIssue, waitingExcerpt } from './human-text.js'
 import { escapeRegex } from './parse-github.js'
 import { compileUserRegexList } from './rules.js'
-import { explainAction, evaluateSignals } from './signals.js'
-import { WAITING_REASONS, type GithubRecord, type ReasonDetail, type WaitingConfig, type WaitingDraft, type WaitingSignal } from './types.js'
+import { evaluateSignals } from './signals.js'
+import { commentCloses, labelMatches, latestOtherComment, matchedLabel, repoIsParked, strongText, weakKeyword, whenLabel } from './text-scan.js'
+import { WAITING_REASONS, type GithubRecord, type ReasonDetail, type WaitingConfig, type WaitingDraft, type WaitingSignal, type WaitingTier } from './types.js'
 
 export interface ClassifiedReason {
   reason: string
@@ -124,160 +125,20 @@ export function openPrActivityAt(record: GithubRecord): string | null {
   return laterIso(at, record.lastReviewAt ?? null)
 }
 
-function literalWord(value: string): RegExp {
-  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  if (/^[A-Za-z0-9_ -]+$/.test(value)) return new RegExp(`\\b${escaped}\\b`, 'i')
-  return new RegExp(escaped, 'i')
-}
-
-function waitScan(record: GithubRecord, config: WaitingConfig): WaitScan {
-  const roles = compileUserRegexList(config.roleNames, '角色称呼')
-  const login = record.viewerLogin ? [literalWord(record.viewerLogin)] : []
-  return {
-    roles,
-    asks: compileUserRegexList(config.roleAskPhrases, '角色请求'),
-    headers: config.statusHeaders,
-    userWords: [...roles, ...login, literalWord('用户'), literalWord('user'), /你/u],
-    otherActors: compileUserRegexList(config.otherActors, '非用户负责人'),
-    selfSteps: compileUserRegexList(config.selfStepPhrases, '自己未完成的步骤'),
-    specIssue: record.kind === 'issue' && isSpecIssue(record.title, record.labels, record.body, config.specMarkers)
-  }
-}
-
-function latestCommentResolved(record: GithubRecord, keywords: readonly RegExp[], resolved: readonly RegExp[]): boolean {
-  const latest = record.comments[record.comments.length - 1]
-  if (!latest) return false
-  return evaluateSignals(actionableProse(latest.body), keywords, resolved) === 'resolved'
-}
-
-/**
- * An ask in the title, body, or any comment, using the same action, negation,
- * and closing-comment judgment as other human waits.
- */
-function openPrAsk(record: GithubRecord, config: WaitingConfig): { signal: WaitingSignal, at: string | null } | null {
-  const keywords = compileUserRegexList(config.humanKeywords, '人工动作关键词')
-  const resolved = compileUserRegexList(config.resolvedSignals, '已解决信号')
-  if (latestCommentResolved(record, keywords, resolved)) return null
-  const scan = waitScan(record, config)
-  const title = explainAction(record.title, keywords, resolved)
-  if (title) return { signal: { rule: title.rule, excerpt: title.excerpt }, at: record.createdAt || null }
-  const body = explainHumanWait(record.body, currentHumanText(record), [], new Set(), keywords, resolved, scan)
-  if (body) {
-    const comment = currentComment(record)
-    const at = body.source === 'current' && comment ? comment.createdAt : record.createdAt || null
-    return { signal: { rule: body.rule, excerpt: body.excerpt }, at }
-  }
-  for (let index = record.comments.length - 1; index >= 0; index -= 1) {
-    const comment = record.comments[index]
-    if (!comment) continue
-    const hit = explainAction(actionableProse(comment.body), keywords, resolved)
-    if (hit) return { signal: { rule: hit.rule, excerpt: hit.excerpt }, at: comment.createdAt || null }
-  }
-  return null
-}
-
-function quietOpenPrSignal(days: number): WaitingSignal {
+function quietOpenPrSignal(record: GithubRecord, days: number): WaitingSignal {
   const rule = `${days} 天无动静`
-  return { rule, excerpt: rule }
+  const activity = openPrActivityAt(record)
+  const when = whenLabel(activity)
+  return {
+    rule,
+    excerpt: `最近活动 ${when}，已连续 ${days} 天没有 push、评论或 review`
+  }
 }
 
 function ensureExcerpt(signal: WaitingSignal): WaitingSignal {
   const excerpt = signal.excerpt.trim()
   if (excerpt) return { rule: signal.rule, excerpt }
   return { rule: signal.rule, excerpt: signal.rule || '等待' }
-}
-
-function isQuietRule(rule: string): boolean {
-  return /^\d+ 天无动静$/u.test(rule)
-}
-
-function classifyBlanketOpenPr(
-  record: GithubRecord,
-  config: WaitingConfig,
-  now: Date
-): (ClassifiedReason & { signal: WaitingSignal }) | null {
-  if (!blanketOpenPr(record, config)) return null
-  if (!openPrNeedsGate(record)) {
-    const at = laterIso(record.lastPushedAt, record.updatedAt)
-    const ask = openPrAsk(record, config)
-    const signal = ask
-      ? { rule: WAITING_REASONS.openPr, excerpt: `${WAITING_REASONS.openPr} · ${ask.signal.excerpt}` }
-      : { rule: WAITING_REASONS.openPr, excerpt: WAITING_REASONS.openPr }
-    return { reason: WAITING_REASONS.openPr, at, estimated: !at, signal }
-  }
-  const ask = openPrAsk(record, config)
-  if (ask) {
-    return {
-      reason: WAITING_REASONS.openPr,
-      at: ask.at,
-      estimated: !ask.at,
-      signal: ask.signal
-    }
-  }
-  const activity = openPrActivityAt(record)
-  const quietDays = config.openPrQuietDays
-  // Whole days: N days of silence counts. Anything newer is still in progress.
-  if (activity && waitingDays(activity, now) < quietDays) return null
-  return {
-    reason: WAITING_REASONS.openPr,
-    at: activity,
-    estimated: !activity,
-    signal: quietOpenPrSignal(quietDays)
-  }
-}
-
-export function humanSignal(record: GithubRecord, config: WaitingConfig): (ClassifiedReason & { signal: WaitingSignal }) | null {
-  if (record.kind !== 'issue') return null
-  const keywords = compileUserRegexList(config.humanKeywords, '人工动作关键词')
-  const resolved = compileUserRegexList(config.resolvedSignals, '已解决信号')
-  const wanted = new Set(config.humanLabels.map(label => label.toLowerCase()))
-  const hit = explainHumanWait(record.body, currentHumanText(record), record.labels, wanted, keywords, resolved, waitScan(record, config))
-  if (!hit) return null
-  const comment = currentComment(record)
-  let at: string | null = null
-  let estimated = false
-  if (hit.source === 'current' && comment) {
-    at = comment.createdAt
-  } else if (hit.source !== 'label') {
-    at = record.createdAt
-  }
-  if (hit.source === 'label' || hit.rule === '标签') {
-    const event = record.labelEvents.find(item => wanted.has(item.name.toLowerCase()))
-    const labelAt = event?.at ?? null
-    if (!at) {
-      at = labelAt
-      estimated = !labelAt
-      if (!at) at = record.updatedAt
-    } else if (labelAt) {
-      at = earlierIso(at, labelAt)
-    }
-  }
-  if (!at) {
-    at = record.updatedAt
-    estimated = true
-  }
-  return {
-    reason: WAITING_REASONS.human,
-    at,
-    estimated,
-    signal: { rule: hit.rule, excerpt: hit.excerpt }
-  }
-}
-
-function authorNeedsAction(record: GithubRecord, config: WaitingConfig): (ClassifiedReason & { signal: WaitingSignal }) | null {
-  if (!record.fromAuthor || record.repoAccess !== 'watch') return null
-  const keywords = compileUserRegexList(config.humanKeywords, '人工动作关键词')
-  const resolved = compileUserRegexList(config.resolvedSignals, '已解决信号')
-  const hit = explainHumanWait(record.body, currentHumanText(record), [], new Set(), keywords, resolved, waitScan(record, config))
-  if (!hit || hit.rule === '标签') return null
-  const comment = currentComment(record)
-  const fromComment = hit.source === 'current' && comment
-  return {
-    reason: WAITING_REASONS.human,
-    at: fromComment ? comment.createdAt : record.createdAt || record.updatedAt,
-    estimated: !fromComment && !record.createdAt,
-    signal: { rule: hit.rule, excerpt: hit.excerpt }
-  }
 }
 
 function fallbackUpdated(reason: string, record: GithubRecord, at: string | null): ClassifiedReason {
@@ -290,58 +151,133 @@ function repoHumanAllowed(record: GithubRecord): boolean {
   return (record.repoAccess ?? 'unknown') !== 'watch'
 }
 
+function reviewExcerpt(record: GithubRecord): string {
+  const who = record.reviewRequestedBy?.trim() || '有人'
+  const when = whenLabel(record.reviewRequestedAt)
+  const viewer = (record.viewerLogin ?? '').trim()
+  const target = viewer ? ` @${viewer}` : '你'
+  return `${who} 在 ${when} 请求${target} review`
+}
+
+function assignExcerpt(record: GithubRecord): string {
+  const who = record.assignedBy?.trim() || '有人'
+  return `${who} 在 ${whenLabel(record.assignedAt)} 把这件事指派给你`
+}
+
+function labelExcerpt(record: GithubRecord, name: string): { excerpt: string, at: string | null } {
+  const event = [...record.labelEvents].reverse().find(item => item.name.toLowerCase() === name.toLowerCase())
+    ?? record.labelEvents.find(item => labelMatches(item.name, [name]))
+  const at = event?.at ?? null
+  return { excerpt: `标签 ${name}，标于 ${whenLabel(at)}`, at }
+}
+
+function quietPull(record: GithubRecord, config: WaitingConfig, now: Date): (ClassifiedReason & { signal: WaitingSignal }) | null {
+  if (!blanketOpenPr(record, config) || !openPrNeedsGate(record)) return null
+  const activity = openPrActivityAt(record)
+  if (activity && waitingDays(activity, now) < config.openPrQuietDays) return null
+  return {
+    reason: WAITING_REASONS.openPr,
+    at: activity,
+    estimated: !activity,
+    signal: quietOpenPrSignal(record, config.openPrQuietDays)
+  }
+}
+
 export function classifyRecord(record: GithubRecord, config: WaitingConfig, now: Date): WaitingDraft | null {
+  const comment = latestOtherComment(record)
+  const closed = Boolean(comment && commentCloses(comment.text, config))
+  const text = closed ? null : strongText(record, config)
+  const labelName = closed || !config.sources.humanIssues ? null : matchedLabel(record.labels, config.humanLabels)
+  const label = labelName && (repoHumanAllowed(record) || record.repoAccess !== 'watch')
+    ? labelExcerpt(record, labelName)
+    : null
+  const review = config.sources.reviewRequested && record.fromReview && record.kind === 'pr'
+  const assigned = config.sources.assignee && record.fromAssignee
+  const quiet = closed ? null : quietPull(record, config, now)
+  const watchedAuthor = !closed
+    && record.fromAuthor
+    && record.repoAccess === 'watch'
+    && record.kind === 'pr'
+    && text !== null
+  const humanAllowed = config.sources.humanIssues && (repoHumanAllowed(record) || watchedAuthor)
+  const prTextAllowed = record.kind === 'pr' && (
+    blanketOpenPr(record, config)
+    || record.fromAuthor
+    || record.fromReview
+    || record.repoAccess === 'maintain'
+    || record.repoAccess === 'unknown'
+  )
+  const textReason = watchedAuthor
+    ? WAITING_REASONS.human
+    : record.kind === 'pr'
+      ? WAITING_REASONS.openPr
+      : WAITING_REASONS.human
+  const showText = Boolean(text && (record.kind === 'issue' ? humanAllowed : prTextAllowed))
+  const optedOpen = !closed && blanketOpenPr(record, config) && !openPrNeedsGate(record)
+
   const reasons: ClassifiedReason[] = []
-  if (config.sources.assignee && record.fromAssignee) {
-    reasons.push(fallbackUpdated(WAITING_REASONS.assignee, record, record.assignedAt))
-  }
-  if (config.sources.reviewRequested && record.fromReview && record.kind === 'pr') {
+  let tier: WaitingTier = 'weak'
+  let signal: WaitingSignal | null = null
+
+  if (review) {
     reasons.push(fallbackUpdated(WAITING_REASONS.review, record, record.reviewRequestedAt))
+    tier = 'strong'
+    signal = { rule: WAITING_REASONS.review, excerpt: reviewExcerpt(record) }
   }
-  let mentionSignal: WaitingSignal | null = null
-  if (config.sources.mentions && mentionQualifies(record, config, now)) {
+  if (assigned && (showText || label || review)) {
+    reasons.push(fallbackUpdated(WAITING_REASONS.assignee, record, record.assignedAt))
+    tier = 'strong'
+  } else if (assigned && !quiet) {
+    reasons.push(fallbackUpdated(WAITING_REASONS.assignee, record, record.assignedAt))
+    signal = signal ?? { rule: WAITING_REASONS.assignee, excerpt: assignExcerpt(record) }
+  }
+  if (showText && text && textReason) {
+    reasons.push(fallbackUpdated(textReason, record, text.at))
+    tier = 'strong'
+    if (!review) signal = { rule: text.rule, excerpt: text.excerpt }
+    else signal = { rule: signal?.rule ?? text.rule, excerpt: `${signal?.excerpt ?? reviewExcerpt(record)}。${text.excerpt}` }
+  }
+  if (label && (humanAllowed || record.kind === 'pr')) {
+    reasons.push(fallbackUpdated(record.kind === 'pr' ? WAITING_REASONS.openPr : WAITING_REASONS.human, record, label.at))
+    tier = 'strong'
+    signal = signal ?? { rule: '标签', excerpt: label.excerpt }
+  }
+  if (quiet && !reasons.some(reason => reason.reason === WAITING_REASONS.openPr)) {
+    reasons.push(quiet)
+    tier = 'strong'
+    if (!signal || signal.rule === WAITING_REASONS.assignee) signal = quiet.signal
+  }
+  if (optedOpen && !reasons.some(reason => reason.reason === WAITING_REASONS.openPr)) {
+    const at = laterIso(record.lastPushedAt, record.updatedAt)
+    reasons.push(fallbackUpdated(WAITING_REASONS.openPr, record, at))
+    tier = 'strong'
+    signal = signal ?? {
+      rule: WAITING_REASONS.openPr,
+      excerpt: `关注仓库里的非草稿 PR，最近更新 ${whenLabel(at)}`
+    }
+  }
+  if (tier !== 'strong' && config.sources.mentions && mentionQualifies(record, config, now)) {
     reasons.push(fallbackUpdated(WAITING_REASONS.mention, record, record.mentionedAt))
     const keywords = compileUserRegexList(config.humanKeywords, '人工动作关键词')
     const resolved = compileUserRegexList(config.resolvedSignals, '已解决信号')
     const excerpt = waitingExcerpt(record.body, record.comments, keywords, resolved)
-    const recentMention = withinRecent(record.mentionedAt, now, config.mentionRecentDays)
-      || record.comments.some(comment => withinRecent(comment.createdAt, now, config.mentionRecentDays))
-    const mentionRule = recentMention || config.mentionPolicy === 'any' ? '提及' : '过时提及旁仍有等待'
-    mentionSignal = { rule: mentionRule, excerpt: excerpt || mentionRule }
+    signal = signal ?? { rule: '提及', excerpt: excerpt || '提及了你' }
   }
-  let openPrSignal: WaitingSignal | null = null
-  const openPr = classifyBlanketOpenPr(record, config, now)
-  if (openPr) {
-    reasons.push(openPr)
-    openPrSignal = openPr.signal
+  const spec = record.kind === 'issue' && isSpecIssue(record.title, record.labels, record.body, config.specMarkers)
+  if (tier !== 'strong' && !closed && humanAllowed && !spec) {
+    const keyword = weakKeyword(record, config)
+    if (keyword) {
+      reasons.push(fallbackUpdated(WAITING_REASONS.human, record, record.updatedAt))
+      signal = signal ?? { rule: '动作关键词', excerpt: keyword }
+    }
   }
-  if (config.sources.humanIssues && repoHumanAllowed(record)) {
-    const human = humanSignal(record, config)
-    if (human) reasons.push(human)
+  if (assigned && (quiet || optedOpen) && !reasons.some(reason => reason.reason === WAITING_REASONS.assignee)) {
+    reasons.unshift(fallbackUpdated(WAITING_REASONS.assignee, record, record.assignedAt))
   }
-  const authored = authorNeedsAction(record, config)
-  if (authored && !reasons.some(reason => reason.reason === WAITING_REASONS.human)) reasons.push(authored)
   if (reasons.length === 0) return null
-  const humanReason = reasons.find(reason => reason.reason === WAITING_REASONS.human) as (ClassifiedReason & { signal?: WaitingSignal }) | undefined
-  const textSignal = humanReason?.signal
-    ?? (openPrSignal && !isQuietRule(openPrSignal.rule) && openPrSignal.rule !== WAITING_REASONS.openPr ? openPrSignal : null)
-  const reviewReason = reasons.some(reason => reason.reason === WAITING_REASONS.review)
-  const assigneeReason = reasons.some(reason => reason.reason === WAITING_REASONS.assignee)
-  let signal: WaitingSignal
-  if (reviewReason && !humanReason?.signal) {
-    signal = {
-      rule: WAITING_REASONS.review,
-      excerpt: textSignal ? `${WAITING_REASONS.review} · ${textSignal.excerpt}` : WAITING_REASONS.review
-    }
-  } else if (assigneeReason && !humanReason?.signal && !mentionSignal) {
-    signal = {
-      rule: WAITING_REASONS.assignee,
-      excerpt: textSignal ? `${WAITING_REASONS.assignee} · ${textSignal.excerpt}` : WAITING_REASONS.assignee
-    }
-  } else {
-    signal = humanReason?.signal ?? mentionSignal ?? openPrSignal ?? { rule: reasons[0]?.reason ?? '等待', excerpt: '' }
+  if (tier === 'strong' && review && text) {
+    signal = { rule: WAITING_REASONS.review, excerpt: `${reviewExcerpt(record)}。${text.excerpt}` }
   }
-  signal = ensureExcerpt(signal)
   return draftFromReasons({
     id: `${record.kind}:${record.repo}#${record.number}`,
     repo: record.repo,
@@ -352,7 +288,9 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
     updatedAt: record.updatedAt,
     parentNumber: record.parentNumber,
     reasons,
-    signal
+    signal: signal ?? undefined,
+    tier,
+    parked: repoIsParked(record.repoDescription ?? '', record.repoTopics ?? [], config.parkedMarkers)
   }, now)
 }
 
@@ -367,6 +305,8 @@ export function draftFromReasons(input: {
   parentNumber?: number | null
   reasons: ClassifiedReason[]
   signal?: WaitingSignal
+  tier?: WaitingTier
+  parked?: boolean
 }, now: Date): WaitingDraft {
   const unique: ClassifiedReason[] = []
   for (const reason of input.reasons) {
@@ -399,7 +339,9 @@ export function draftFromReasons(input: {
     parentNumber: input.parentNumber ?? null,
     parent: null,
     childCount: 0,
-    signal: ensureExcerpt(input.signal ?? { rule: reasons[0] ?? '等待', excerpt: '' })
+    signal: ensureExcerpt(input.signal ?? { rule: reasons[0] ?? '等待', excerpt: '' }),
+    tier: input.tier ?? 'strong',
+    parked: input.parked === true
   }
 }
 

@@ -2,18 +2,19 @@ import { githubData, githubGraphql } from '../github/client.js'
 import { parseIssueTree, parseRepoNode, parseSearchPayload, type RepoBatchItem } from '../shared/waiting/parse-github.js'
 import { tasklistIssueRefs } from '../shared/waiting/sub-issues.js'
 import { keywordToSearchTerms, chunkSearchText } from '../shared/waiting/rules.js'
+import { repoIsParked } from '../shared/waiting/text-scan.js'
 import { GithubAuthError, GithubRateLimitError, earlierReset } from '../shared/waiting/rate-limit.js'
 import type { GithubRecord, SourceError, WaitingConfig } from '../shared/waiting/types.js'
 
 const ISSUE_FIELDS = `
-  number title url body createdAt updatedAt
+  number title url body state createdAt updatedAt
   author { login }
   labels(first: 20) { nodes { name } }
-  comments(last: 8) { nodes { body createdAt } }
+  comments(last: 8) { nodes { body createdAt author { login } } }
   timelineItems(last: 20, itemTypes: [ASSIGNED_EVENT, LABELED_EVENT]) {
     nodes {
       __typename
-      ... on AssignedEvent { createdAt assignee { ... on User { login } } }
+      ... on AssignedEvent { createdAt actor { login } assignee { ... on User { login } } }
       ... on LabeledEvent { createdAt label { name } }
     }
   }
@@ -22,6 +23,7 @@ const ISSUE_FIELDS = `
 interface IssueSchema {
   withParent: boolean
   withSubIssues: boolean
+  withTopics: boolean
 }
 
 function issueSelection(schema: IssueSchema): string {
@@ -31,7 +33,7 @@ function issueSelection(schema: IssueSchema): string {
         number title url body state createdAt updatedAt
         author { login }
         labels(first: 10) { nodes { name } }
-        comments(last: 4) { nodes { body createdAt } }
+        comments(last: 4) { nodes { body createdAt author { login } } }
         ${parent}
       } }`
     : ''
@@ -39,6 +41,10 @@ function issueSelection(schema: IssueSchema): string {
 }
 
 function relaxSchema(message: string, schema: IssueSchema): boolean {
+  if (schema.withTopics && /repositoryTopics|RepositoryTopic/i.test(message)) {
+    schema.withTopics = false
+    return true
+  }
   if (schema.withSubIssues && /subIssues/i.test(message)) {
     schema.withSubIssues = false
     return true
@@ -54,14 +60,14 @@ const PR_FIELDS = `
   number title url body createdAt updatedAt isDraft
   author { login }
   labels(first: 10) { nodes { name } }
-  comments(last: 8) { nodes { body createdAt } }
+  comments(last: 8) { nodes { body createdAt author { login } } }
   commits(last: 1) { nodes { commit { pushedDate committedDate } } }
   reviews(last: 5) { nodes { submittedAt } }
   timelineItems(last: 20, itemTypes: [ASSIGNED_EVENT, REVIEW_REQUESTED_EVENT, LABELED_EVENT]) {
     nodes {
       __typename
-      ... on AssignedEvent { createdAt assignee { ... on User { login } } }
-      ... on ReviewRequestedEvent { createdAt requestedReviewer { ... on User { login } } }
+      ... on AssignedEvent { createdAt actor { login } assignee { ... on User { login } } }
+      ... on ReviewRequestedEvent { createdAt actor { login } requestedReviewer { ... on User { login } } }
       ... on LabeledEvent { createdAt label { name } }
     }
   }
@@ -77,11 +83,11 @@ function searchQuery(schema: IssueSchema): string {
           __typename
           ... on Issue {
             ${issueFields}
-            repository { nameWithOwner isEmpty pushedAt isFork viewerPermission owner { login } }
+            repository { ${REPO_META} }
           }
           ... on PullRequest {
             ${PR_FIELDS}
-            repository { nameWithOwner isEmpty pushedAt isFork viewerPermission owner { login } }
+            repository { ${REPO_META} }
           }
         }
       }
@@ -104,9 +110,10 @@ export interface GithubLoadResult {
   notices: string[]
   rateLimitResetAt: string | null
   auth: 'ok' | 'invalid'
+  parkedRepos: string[]
 }
 
-const REPO_META = 'nameWithOwner isEmpty pushedAt isFork viewerPermission owner { login }'
+const REPO_META = 'nameWithOwner description isEmpty pushedAt isFork viewerPermission owner { login } repositoryTopics(first: 20) { nodes { topic { name } } }'
 
 interface ScopeRepo {
   owner: string
@@ -119,6 +126,8 @@ interface ScopeRepo {
   viewerOwns: boolean
   queryIssues: boolean
   queryPulls: boolean
+  description: string
+  topics: string[]
 }
 
 function splitRepo(full: string): { owner: string, name: string } | null {
@@ -213,8 +222,27 @@ function readScopeNode(
     isFork,
     viewerOwns: origin === 'owned' ? true : viewerOwns,
     queryIssues: false,
-    queryPulls: false
+    queryPulls: false,
+    description: 'description' in node && typeof node.description === 'string' ? node.description : '',
+    topics: topicsFromNode(node)
   }
+}
+
+function topicsFromNode(node: object): string[] {
+  if (!('repositoryTopics' in node)) return []
+  const connection = node.repositoryTopics
+  if (!connection || typeof connection !== 'object' || !('nodes' in connection) || !Array.isArray(connection.nodes)) return []
+  const names: string[] = []
+  for (const item of connection.nodes) {
+    if (!item || typeof item !== 'object') continue
+    const topic = 'topic' in item && item.topic && typeof item.topic === 'object' && 'name' in item.topic && typeof item.topic.name === 'string'
+      ? item.topic.name
+      : 'name' in item && typeof item.name === 'string'
+        ? item.name
+        : ''
+    if (topic && !names.includes(topic)) names.push(topic)
+  }
+  return names
 }
 
 async function discoverRepos(
@@ -320,6 +348,8 @@ function contentQuery(count: number, schema: IssueSchema, includePulls: boolean)
     fields.push(`
       r${index}: repository(owner: $o${index}, name: $n${index}) {
         nameWithOwner
+        description
+        repositoryTopics(first: 20) { nodes { topic { name } } }
         isEmpty
         pushedAt
         issues(states: OPEN, first: 40, after: $ia${index}, orderBy: {field: UPDATED_AT, direction: DESC}) {
@@ -567,7 +597,7 @@ export async function loadGithubRecords(options: {
     openPrs: false,
     humanIssues: false
   }
-  const searchState: IssueSchema = { withParent: true, withSubIssues: true }
+  const searchState: IssueSchema = { withParent: true, withSubIssues: true, withTopics: true }
   let login = ''
   try {
     login = await viewerLogin(options.token, fetchImpl)
@@ -579,7 +609,8 @@ export async function loadGithubRecords(options: {
       errors: [failure.error],
       notices: [],
       rateLimitResetAt: failure.resetAt,
-      auth: failure.auth ? 'invalid' : 'ok'
+      auth: failure.auth ? 'invalid' : 'ok',
+      parkedRepos: []
     }
   }
 
@@ -660,7 +691,9 @@ export async function loadGithubRecords(options: {
       inScopeRepo: true,
       repoAccess: known.access,
       isFork: known.isFork,
-      viewerOwnsRepo: known.viewerOwns
+      viewerOwnsRepo: known.viewerOwns,
+      repoDescription: record.repoDescription || known.description,
+      repoTopics: record.repoTopics.length > 0 ? record.repoTopics : known.topics
     }
   })
 
@@ -772,12 +805,21 @@ export async function loadGithubRecords(options: {
   bySource.openPrs = markScope(bySource.openPrs)
   bySource.humanIssues = markScope(bySource.humanIssues)
 
+  const parked = new Set<string>()
+  for (const repo of scope) {
+    if (repoIsParked(repo.description, repo.topics, options.config.parkedMarkers)) parked.add(repo.full)
+  }
+  for (const record of Object.values(bySource).flat()) {
+    if (repoIsParked(record.repoDescription, record.repoTopics, options.config.parkedMarkers)) parked.add(record.repo)
+  }
+
   return {
     bySource,
     fresh,
     errors: bucket.errors,
     notices: bucket.notices,
     rateLimitResetAt: bucket.resetAt,
-    auth: bucket.authInvalid ? 'invalid' : 'ok'
+    auth: bucket.authInvalid ? 'invalid' : 'ok',
+    parkedRepos: [...parked]
   }
 }

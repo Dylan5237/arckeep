@@ -60,9 +60,9 @@ function hiddenRepos(env: NodeJS.ProcessEnv): string[] {
 }
 
 function withoutHidden(drafts: WaitingDraft[], repos: readonly string[], includeHidden: boolean): WaitingDraft[] {
-  if (includeHidden || repos.length === 0) return drafts
+  if (includeHidden) return drafts
   const hidden = new Set(repos.map(repo => repo.toLowerCase()))
-  return drafts.filter(draft => !hidden.has(draft.repo.toLowerCase()))
+  return drafts.filter(draft => !draft.parked && !hidden.has(draft.repo.toLowerCase()))
 }
 
 export async function runCli(argv: readonly string[], io: CliIo): Promise<number> {

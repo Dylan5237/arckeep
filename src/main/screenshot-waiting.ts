@@ -21,7 +21,7 @@ function base(partial: Partial<WaitingSnapshot>): WaitingSnapshot {
 }
 
 export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapshot {
-  if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover' || scene === 'waiting-ignore') {
+  if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover' || scene === 'waiting-ignore' || scene === 'waiting-related' || scene === 'waiting-related-open') {
     const rows = sampleWaitingRows().sort((left, right) => right.waitingDays - left.waitingDays || left.title.localeCompare(right.title))
     return base({ rows, hiddenCount: 4 })
   }

@@ -285,7 +285,9 @@ export async function presentScreenshot(options: {
     || scene === 'waiting-no-token'
     || scene === 'waiting-invalid-token'
     || scene === 'waiting-loading'
-    || scene === 'waiting-rate-limit'
+    ||     scene === 'waiting-rate-limit'
+    || scene === 'waiting-related'
+    || scene === 'waiting-related-open'
   ) {
     const expected = scene === 'waiting' || scene === 'waiting-narrow'
       ? '验收北区截图'
@@ -303,8 +305,20 @@ export async function presentScreenshot(options: {
                   ? 'GitHub 认证无效或已过期'
                   : scene === 'waiting-loading'
                     ? '正在刷新'
+                    : scene === 'waiting-related' || scene === 'waiting-related-open'
+                    ? '可能相关'
                     : '速率限制'
     await waitUntil(contents, includesText(expected), expected)
+    if (scene === 'waiting-related' || scene === 'waiting-related-open') {
+      await contents.executeJavaScript(`
+        const details = document.querySelector('details.maybe-related')
+        if (!(details instanceof HTMLDetailsElement)) throw new Error('maybe section missing')
+        details.open = ${scene === 'waiting-related-open' ? 'true' : 'false'}
+        details.scrollIntoView({ block: 'start' })
+        true
+      `)
+      await new Promise(resolve => setTimeout(resolve, 80))
+    }
     movePointer(main, 24, 80)
     await new Promise(resolve => setTimeout(resolve, 120))
     if (scene !== 'waiting-empty' && scene !== 'waiting-no-token' && scene !== 'waiting-invalid-token' && scene !== 'waiting-loading') {

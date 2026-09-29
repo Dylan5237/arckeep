@@ -520,6 +520,22 @@ textarea {
   margin: 12px 0;
 }
 
+.maybe-related {
+  margin-top: 18px;
+  border-top: 1px solid var(--arckeep-soft-stone);
+  padding-top: 8px;
+}
+
+.maybe-related summary {
+  cursor: pointer;
+  font-weight: 650;
+  padding: 4px 8px;
+}
+
+.maybe-related .hint {
+  margin: 4px 8px 8px;
+}
+
 .auth-alert {
   display: flex;
   align-items: center;
