@@ -17,6 +17,9 @@ export const SCREENSHOT_SCENES = [
   'waiting-rate-limit',
   'waiting-narrow',
   'waiting-hover',
+  'waiting-watch',
+  'waiting-hidden',
+  'waiting-family',
   ...TOOL_SCREENSHOT_SCENES
 ] as const
 
@@ -48,6 +51,7 @@ export function screenshotWindowSize(scene: ScreenshotScene): { width: number, h
   }
   if (scene === 'tools-invalid') return { width: 1120, height: 980 }
   if (scene === 'waiting-hover') return { width: 1180, height: 900 }
+  if (scene === 'waiting-watch' || scene === 'waiting-hidden' || scene === 'waiting-family') return { width: 1180, height: 720 }
   if (scene === 'narrow') return { width: 800, height: 760 }
   if (scene === 'waiting' || scene === 'waiting-rate-limit') return { width: 1180, height: 1680 }
   if (scene === 'nav') return { width: 1120, height: 760 }

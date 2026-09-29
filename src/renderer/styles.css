@@ -367,16 +367,10 @@ textarea {
   flex: 0 0 auto;
 }
 
-.reason-chips {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 4px;
-  align-items: center;
-}
-
 .chip {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   padding: 1px 6px;
   border-radius: 999px;
   font-size: 11px;
@@ -385,15 +379,39 @@ textarea {
   white-space: nowrap;
 }
 
-.chip-assign { background: #E4E6D4; color: #3E4128; }
-.chip-review { background: #D9E4F2; color: #1E3A5F; }
-.chip-mention { background: #D5EBE6; color: #1A4A42; }
-.chip-open-pr { background: #F3E4C8; color: #6A4A16; }
-.chip-human { background: #F3D9D2; color: #7A2E22; }
-.chip-doc { background: #E3E1EA; color: #3D3A55; }
-.chip-local { background: #E8DDF0; color: #4C3268; }
-.chip-todo { background: #DCECD4; color: #2C5324; }
-.chip-other { background: var(--arckeep-soft-stone); color: var(--arckeep-deep-charcoal); }
+.chip-act-do { background: #F3D9D2; color: #7A2E22; }
+.chip-act-review { background: #F3E4C8; color: #6A4A16; }
+.chip-act-push { background: #E8DDF0; color: #4C3268; }
+.chip-act-todo { background: #DCECD4; color: #2C5324; }
+
+.waiting-via {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--arckeep-muted-graphite);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hidden-repos {
+  margin: 8px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--arckeep-soft-stone);
+  border-radius: 10px;
+}
+
+.hidden-repos h2 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.hidden-repo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
 
 .waiting-meta {
   flex: 0 1 auto;
@@ -416,8 +434,6 @@ textarea {
   pointer-events: none;
 }
 
-.waiting-row:hover .row-actions,
-.waiting-row:focus-within .row-actions,
 .waiting-row.show-actions .row-actions {
   opacity: 1;
   pointer-events: auto;
@@ -476,11 +492,16 @@ main:has(.waiting) {
 }
 
 @media (max-width: 860px) {
-  .app { grid-template-columns: 84px minmax(0, 1fr); }
-  .nav { align-items: stretch; padding: 16px 8px; }
-  .brand { display: flex; justify-content: center; padding: 4px 0 14px; }
-  .brand-word { display: none; }
-  .brand-symbol { display: block; }
+  .app { grid-template-columns: 148px minmax(0, 1fr); }
+  .nav { align-items: stretch; padding: 16px 8px; overflow: hidden; }
+  .brand { display: block; min-width: 0; padding: 4px 0 14px; }
+  .brand img.brand-word {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+  }
+  .brand img.brand-symbol { display: none; }
   main { min-width: 0; padding: 16px; }
   #nav button, #settings-button {
     padding: 8px 4px;

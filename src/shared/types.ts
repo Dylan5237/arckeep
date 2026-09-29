@@ -49,6 +49,8 @@ export interface ArckeepApi {
   snoozeWaiting(id: string, days: 1 | 3 | 7): Promise<IpcResult<WaitingSnapshot>>
   ignoreWaiting(id: string): Promise<IpcResult<WaitingSnapshot>>
   restoreWaiting(id: string): Promise<IpcResult<WaitingSnapshot>>
+  hideWaitingRepo(repo: string): Promise<IpcResult<WaitingSnapshot>>
+  unhideWaitingRepo(repo: string): Promise<IpcResult<WaitingSnapshot>>
   setShowIgnored(show: boolean): Promise<IpcResult<WaitingSnapshot>>
   setWaiting(config: WaitingConfig): Promise<IpcResult<AppState>>
   openExternal(url: string): Promise<IpcResult<true>>

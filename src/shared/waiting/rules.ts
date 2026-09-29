@@ -1,4 +1,4 @@
-import type { StatusDocRule, WaitingConfig, WaitingSources } from './types.js'
+import type { MentionPolicy, OpenPrScope, StatusDocRule, WaitingConfig, WaitingSources } from './types.js'
 
 export class WaitingConfigError extends Error {
   constructor(message: string) {
@@ -37,6 +37,9 @@ const DEFAULT_RESOLVED = [
 /** Enough for a large personal account. Hitting it shows a notice instead of dropping repos quietly. */
 export const DEFAULT_MAX_SCOPE_REPOS = 400
 
+/** Comments newer than this still count as a live mention without an action signal. */
+export const DEFAULT_MENTION_RECENT_DAYS = 14
+
 export function defaultWaitingSources(): WaitingSources {
   return {
     assignee: true,
@@ -59,6 +62,9 @@ export function defaultWaitingConfig(): WaitingConfig {
     statusDocRules: [],
     localRepoDirs: [],
     maxScopeRepos: DEFAULT_MAX_SCOPE_REPOS,
+    openPrScope: 'maintain',
+    mentionPolicy: 'action-or-recent',
+    mentionRecentDays: DEFAULT_MENTION_RECENT_DAYS,
     showIgnored: false
   }
 }
@@ -98,6 +104,20 @@ export function compileUserRegex(pattern: string, label: string): RegExp {
 
 export function compileUserRegexList(patterns: readonly string[], label: string): RegExp[] {
   return patterns.map(pattern => compileUserRegex(pattern, label))
+}
+
+function choice<T extends string>(value: unknown, allowed: readonly T[], fallback: T, label: string): T {
+  if (value === undefined) return fallback
+  if (typeof value === 'string' && (allowed as readonly string[]).includes(value)) return value as T
+  throw new WaitingConfigError(`${label}无效`)
+}
+
+function dayWindow(value: unknown, fallback: number): number {
+  if (value === undefined) return fallback
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 365) {
+    throw new WaitingConfigError('提及的最近天数应为 1 到 365 的整数')
+  }
+  return value
 }
 
 function scopeRepoLimit(value: unknown, fallback: number): number {
@@ -174,6 +194,9 @@ export function parseWaitingConfig(input: unknown, options?: { validatePatterns?
     statusDocRules,
     localRepoDirs,
     maxScopeRepos: scopeRepoLimit(input.maxScopeRepos, defaults.maxScopeRepos),
+    openPrScope: choice<OpenPrScope>(input.openPrScope, ['maintain', 'watching'], defaults.openPrScope, '待你审/合范围'),
+    mentionPolicy: choice<MentionPolicy>(input.mentionPolicy, ['action-or-recent', 'any'], defaults.mentionPolicy, '提及规则'),
+    mentionRecentDays: dayWindow(input.mentionRecentDays, defaults.mentionRecentDays),
     showIgnored: bool(input.showIgnored, false)
   }
   if (options?.validatePatterns) validateWaitingPatterns(config)
