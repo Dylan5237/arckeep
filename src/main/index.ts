@@ -62,6 +62,7 @@ import { createSafeStorageBox } from './token-store.js'
 import type { HotkeyRegistrar } from './hotkey.js'
 import { registerToolIpc } from './tool-ipc.js'
 import { ToolRunner } from './tool-runner.js'
+import { createToolRehearsals } from './tool-rehearse.js'
 import { createUrlGuard, isTrustedBrowserUrl } from './url-trust.js'
 import { hardenedWebPreferences } from './window-prefs.js'
 
@@ -94,6 +95,8 @@ const toolRunner = new ToolRunner(event => {
   if (!win || win.isDestroyed()) return
   win.webContents.send(IpcChannel.toolEvent, event)
 })
+const toolRehearsals = createToolRehearsals()
+let toolIpcLifecycle: ReturnType<typeof registerToolIpc> | null = null
 
 const devServerOrigin = process.env.ARCKEEP_DEV === '1' ? process.env.VITE_DEV_SERVER_URL ?? null : null
 const rendererDir = path.join(__dirname, '../renderer')
@@ -616,11 +619,12 @@ if (!gotLock) {
       })
     }
     registerIpc(service, todos)
-    registerToolIpc({
+    toolIpcLifecycle = registerToolIpc({
       guard: event => requireSender(event, mainWindow?.webContents ?? null),
       getWindow: () => mainWindow,
       settings: service,
       runner: toolRunner,
+      rehearsals: toolRehearsals,
       repos: waiting,
       todoRepos: () => (todos?.listTodos() ?? []).flatMap(item => item.repo ? [item.repo] : []),
       screenshotScene
@@ -640,7 +644,8 @@ if (!gotLock) {
 
 const handleBeforeQuit = createGracefulShutdownHandler({
   quit: () => app.quit(),
-  shutdown: () => {
+  shutdown: async () => {
+    await toolIpcLifecycle?.shutdown()
     toolRunner.abortAll()
     globalShortcut.unregisterAll()
     tray?.destroy()

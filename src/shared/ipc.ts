@@ -43,6 +43,7 @@ export const IpcChannel = {
   importToolShelf: 'tools:import',
   exportToolShelf: 'tools:export',
   previewTool: 'tools:preview',
+  cancelToolPreview: 'tools:cancel-preview',
   runTool: 'tools:run',
   abortTool: 'tools:abort',
   copyText: 'tools:copy',

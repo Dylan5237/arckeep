@@ -84,6 +84,8 @@ export interface ActionPreview {
   argv?: string[]
   /** Filled when a run-command preview actually rehearses. */
   rehearsal?: Rehearsal
+  /** Opaque, one-time main-process authorization to start the exact previewed command. */
+  confirmationId?: string
 }
 
 export interface ToolRunEvent {

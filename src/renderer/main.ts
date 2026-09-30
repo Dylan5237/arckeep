@@ -7,7 +7,7 @@ import { renderOverview } from './overview-page'
 import { renderOverviewSettings } from './overview-settings'
 import { renderTodos } from './todos-page'
 import { renderToolSettings } from './tool-settings'
-import { renderTools } from './tools-page'
+import { deactivateTools, renderTools } from './tools-page'
 import { renderWaiting } from './waiting-page'
 import { renderWaitingSettings } from './waiting-settings'
 
@@ -338,8 +338,11 @@ async function refreshHotkeyBanner(): Promise<void> {
 }
 
 let leaveTodos: (() => void) | null = null
+let navigationEpoch = 0
 
 async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?: boolean }): Promise<void> {
+  const epoch = ++navigationEpoch
+  if (view !== 'tools') deactivateTools()
   leaveTodos?.()
   leaveTodos = null
   setActive(view)
@@ -356,6 +359,7 @@ async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?:
     await renderOverview(content, (next, nextOptions) => { void show(next, nextOptions) })
   } else if (view === 'tools') {
     await refreshHotkeyBanner()
+    if (epoch !== navigationEpoch) return
     await renderTools(content, () => { void show('settings') })
   }
 }

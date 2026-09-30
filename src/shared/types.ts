@@ -94,8 +94,9 @@ export interface ArckeepApi {
   pickFolder(): Promise<IpcResult<{ cancelled: true } | { cancelled: false, path: string }>>
   importToolShelf(): Promise<IpcResult<{ cancelled: true } | { cancelled: false, text: string }>>
   exportToolShelf(json: string): Promise<IpcResult<{ cancelled: boolean }>>
-  previewTool(actionId: string, params: Record<string, string>): Promise<IpcResult<ActionPreview>>
-  runTool(actionId: string, params: Record<string, string>): Promise<IpcResult<
+  previewTool(actionId: string, params: Record<string, string>, requestId: string): Promise<IpcResult<ActionPreview>>
+  cancelToolPreview(requestId: string): Promise<IpcResult<{ cancelled: true }>>
+  runTool(actionId: string, params: Record<string, string>, confirmationId?: string): Promise<IpcResult<
     | { kind: 'run', runId: string }
     | { kind: 'open-url' }
     | { kind: 'open-folder' }

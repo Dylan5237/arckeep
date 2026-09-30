@@ -10,6 +10,7 @@ import {
 } from '../shared/tools/flow'
 import { paramKind } from '../shared/tools/params'
 import { createRunGate, formatDuration } from '../shared/tools/preview'
+import { createToolRunEventBuffer } from '../shared/tools/run-events'
 import { confirmButtonLabel, copyFeedback, filterActions, runStatus } from '../shared/tools/present'
 import { foldedCommandLines, previewNotice, type Rehearsal } from '../shared/tools/rehearsal'
 import {
@@ -54,6 +55,7 @@ interface PreviewState {
   values: Record<string, string>
   knownRepos: KnownRepo[]
   preview: ActionPreview
+  requestId: string
   gate: Gate
   notice?: string
 }
@@ -80,9 +82,13 @@ type Session = Loading | Problem | Empty | Shelf | Params | PreviewState | Runni
 
 let session: Session = { mode: 'loading' }
 let host: HTMLElement | null = null
+let pageActive = false
+let renderEpoch = 0
 let listening = false
 let goSettings: (() => void) | null = null
 let removeEscape: (() => void) | null = null
+let activePreviewRequestId: string | null = null
+const earlyRunEvents = createToolRunEventBuffer()
 
 function defaults(action: ToolAction): Record<string, string> {
   const values: Record<string, string> = {}
@@ -94,16 +100,17 @@ function ensureListener(): void {
   if (listening) return
   listening = true
   window.arckeep.onToolEvent(event => {
-    applyRunEvent(event)
-    if (host && session.mode === 'running') paint(host)
+    const applied = applyRunEvent(event)
+    if (!applied) earlyRunEvents.push(event)
+    if (applied && pageActive && host && session.mode === 'running' && session.runId === event.runId) paint(host)
   })
 }
 
-function applyRunEvent(event: ToolRunEvent): void {
-  if (session.mode !== 'running' || session.runId !== event.runId) return
+function applyRunEvent(event: ToolRunEvent): boolean {
+  if (session.mode !== 'running' || session.runId !== event.runId) return false
   if (event.type === 'output' && event.text && event.stream) {
     session.lines.push({ stream: event.stream, text: event.text })
-    return
+    return true
   }
   if (event.type === 'done') {
     session.phase = event.aborted ? 'aborted' : 'done'
@@ -111,6 +118,13 @@ function applyRunEvent(event: ToolRunEvent): void {
     session.durationMs = event.durationMs ?? 0
     session.error = event.error
   }
+  return true
+}
+
+function setRunning(state: Running): void {
+  session = state
+  for (const event of earlyRunEvents.take(state.runId)) applyRunEvent(event)
+  if (pageActive && host) paint(host)
 }
 
 function outputText(lines: Line[]): string {
@@ -185,7 +199,11 @@ async function openAction(action: ToolAction, actions: ToolAction[]): Promise<vo
 }
 
 async function showPreview(action: ToolAction, actions: ToolAction[], values: Record<string, string>): Promise<void> {
-  const result = await window.arckeep.previewTool(action.id, values)
+  const requestId = crypto.randomUUID()
+  activePreviewRequestId = requestId
+  const result = await window.arckeep.previewTool(action.id, values, requestId)
+  if (!pageActive || activePreviewRequestId !== requestId) return
+  activePreviewRequestId = null
   if (!result.ok) {
     const knownRepos = session.mode === 'params' ? session.knownRepos : []
     session = { mode: 'params', actions, action, values, knownRepos, error: result.error }
@@ -195,7 +213,7 @@ async function showPreview(action: ToolAction, actions: ToolAction[], values: Re
   const gate = createRunGate()
   if (result.data.rehearsal?.canConfirm !== false) gate.stage()
   const knownRepos = session.mode === 'params' ? session.knownRepos : []
-  session = { mode: 'preview', actions, action, values, knownRepos, preview: result.data, gate }
+  session = { mode: 'preview', actions, action, values, knownRepos, preview: result.data, requestId, gate }
   if (host) paint(host)
 }
 
@@ -348,6 +366,7 @@ function paintPreview(page: HTMLElement, state: PreviewState): void {
   if (!rehearsal.canConfirm) confirm.hidden = true
   cancel.addEventListener('click', () => {
     state.gate.cancel()
+    void window.arckeep.cancelToolPreview(state.requestId)
     removeEscape?.()
     session = state.action.params?.length
       ? {
@@ -407,7 +426,7 @@ async function executeAction(
       notice: copyFeedback(true)
     }
   } else if (result.data.kind === 'run') {
-    session = {
+    setRunning({
       mode: 'running',
       actions,
       action,
@@ -422,7 +441,8 @@ async function executeAction(
       phase: 'running',
       exitCode: null,
       durationMs: 0
-    }
+    })
+    return
   } else {
     session = { mode: 'quiet', actions, message: '已打开' }
   }
@@ -433,8 +453,9 @@ async function confirmPreview(state: PreviewState, button: HTMLButtonElement): P
   if (!rehearsalOf(state.preview).canConfirm) return
   if (!state.gate.confirm()) return
   button.disabled = true
-  const result = await window.arckeep.runTool(state.action.id, state.values)
+  const result = await window.arckeep.runTool(state.action.id, state.values, state.preview.confirmationId)
   if (!result.ok) {
+    if (!pageActive || session.mode !== 'preview' || session.requestId !== state.requestId) return
     const gate = createRunGate()
     gate.stage()
     session = { ...state, gate }
@@ -444,7 +465,7 @@ async function confirmPreview(state: PreviewState, button: HTMLButtonElement): P
     return
   }
   if (result.data.kind === 'run') {
-    session = {
+    setRunning({
       mode: 'running',
       actions: state.actions,
       action: state.action,
@@ -454,7 +475,8 @@ async function confirmPreview(state: PreviewState, button: HTMLButtonElement): P
       phase: 'running',
       exitCode: null,
       durationMs: 0
-    }
+    })
+    return
   } else if (result.data.kind === 'template') {
     session = {
       mode: 'copied',
@@ -641,6 +663,7 @@ function paintFixture(target: HTMLElement, fixture: Exclude<ToolFixture, ToolFix
       values: fixture.values,
       knownRepos: [],
       gate,
+      requestId: 'fixture-preview',
       preview: {
         actionId: action.id,
         title: action.title,
@@ -702,20 +725,49 @@ function shelfStub(title: string): ToolAction {
 }
 
 export async function renderTools(target: HTMLElement, settings: () => void): Promise<void> {
+  pageActive = true
+  const epoch = ++renderEpoch
   host = target
   goSettings = settings
   ensureListener()
   const fixture = await window.arckeep.getToolFixture()
+  if (!pageActive || epoch !== renderEpoch) return
   if (fixture && fixture.page === 'tools') {
     paintFixture(target, fixture)
     return
   }
   if (session.mode === 'loading' || session.mode === 'shelf' || session.mode === 'empty' || session.mode === 'problem') {
     const catalog = await window.arckeep.getToolCatalog()
+    if (!pageActive || epoch !== renderEpoch) return
     const query = session.mode === 'shelf' ? session.query : ''
     if (!catalog.ok) session = { mode: 'problem', error: catalog.error }
     else if (catalog.actions.length === 0) session = { mode: 'empty' }
     else session = { mode: 'shelf', actions: catalog.actions, query }
   }
   paint(target)
+}
+
+export function deactivateTools(): void {
+  pageActive = false
+  renderEpoch += 1
+  host = null
+  removeEscape?.()
+  removeEscape = null
+  const requestIds = new Set<string>()
+  if (activePreviewRequestId) requestIds.add(activePreviewRequestId)
+  activePreviewRequestId = null
+  if (session.mode === 'preview') requestIds.add(session.requestId)
+  for (const requestId of requestIds) void window.arckeep.cancelToolPreview(requestId)
+  if (session.mode === 'preview') {
+    session.gate.cancel()
+    session = {
+      mode: 'params',
+      actions: session.actions,
+      action: session.action,
+      values: session.values,
+      knownRepos: session.knownRepos
+    }
+  } else if (session.mode === 'params' && session.rehearsing) {
+    session = { ...session, rehearsing: false }
+  }
 }

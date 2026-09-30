@@ -4,7 +4,7 @@ import { clipboard, dialog, shell, type BrowserWindow } from 'electron'
 import type { KnownRepo } from '../shared/tools/repos.js'
 import type { ActionPreview, ToolRunEvent } from '../shared/tools/types.js'
 import type { IpcResult } from '../shared/types.js'
-import { planShell } from './tool-launch.js'
+import type { ShellPlan } from './tool-launch.js'
 import { normalizeActionId, normalizeParamInput, previewStoredAction } from './tool-request.js'
 import { ToolRunner } from './tool-runner.js'
 import { toolShelfExampleText } from './tool-assets.js'
@@ -40,6 +40,7 @@ export async function confirmToolAction(options: {
   params: unknown
   baseCwd?: string
   knownRepos?: readonly KnownRepo[]
+  confirmedCommand?: { preview: ActionPreview, plan: ShellPlan }
 }): Promise<IpcResult<
   | { kind: 'run', runId: string }
   | { kind: 'open-url' }
@@ -79,6 +80,9 @@ export async function confirmToolAction(options: {
       await openFolder(preview)
       return { ok: true, data: { kind: 'open-folder' } }
     }
+    if (!options.confirmedCommand) return { ok: false, error: '请先预览要执行的命令' }
+    preview = options.confirmedCommand.preview
+    if (preview.type !== 'run-command') return { ok: false, error: '预览已失效，请重新预览' }
     if (!preview.shell || !preview.cwd) throw new Error('命令缺少 shell 或工作目录')
     if (!existsSync(preview.cwd) || !statSync(preview.cwd).isDirectory()) {
       throw new Error('工作目录不存在')
@@ -87,9 +91,8 @@ export async function confirmToolAction(options: {
     if (preview.shell === 'powershell' && process.platform !== 'win32') {
       throw new Error('PowerShell 只能在 Windows 上运行')
     }
-    // Confirm runs preview.text. The dry-run script is only executed while building the preview.
-    const plan = planShell(preview.shell, preview.text)
-    const runId = options.runner.start(plan, preview.cwd)
+    // Start the exact plan created with the preview; never rebuild it during confirmation.
+    const runId = options.runner.start(options.confirmedCommand.plan, preview.cwd)
     return { ok: true, data: { kind: 'run', runId } }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : '执行失败' }
