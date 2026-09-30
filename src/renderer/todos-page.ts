@@ -39,6 +39,7 @@ let unsubscribe: (() => void) | null = null
 let pendingUndo: DeleteUndo | null = null
 let undoTimer: number | null = null
 let activeDraw: (() => void) | null = null
+let activeUndoExpiry: (() => void) | null = null
 
 function clearUndoTimer(): void {
   if (undoTimer !== null) window.clearTimeout(undoTimer)
@@ -56,7 +57,7 @@ function scheduleUndoExpiry(expected: DeleteUndo): void {
       return
     }
     pendingUndo = null
-    activeDraw?.()
+    activeUndoExpiry?.()
   }, Math.max(0, remaining))
 }
 
@@ -155,7 +156,7 @@ export async function renderTodos(content: HTMLElement): Promise<() => void> {
       },
       onUndo: async requested => {
         if (currentUndo() !== requested) {
-          activeDraw?.()
+          activeUndoExpiry?.()
           return
         }
         try {
@@ -180,6 +181,8 @@ export async function renderTodos(content: HTMLElement): Promise<() => void> {
   })
   unsubscribe = thisUnsubscribe
   activeDraw = draw
+  const expireUndo = (): void => { host.querySelector('.todo-undo')?.remove() }
+  activeUndoExpiry = expireUndo
   const active = currentUndo()
   if (active) scheduleUndoExpiry(active)
   await draw()
@@ -190,6 +193,7 @@ export async function renderTodos(content: HTMLElement): Promise<() => void> {
     thisUnsubscribe?.()
     if (unsubscribe === thisUnsubscribe) unsubscribe = null
     if (activeDraw === draw) activeDraw = null
+    if (activeUndoExpiry === expireUndo) activeUndoExpiry = null
     rows.release()
   }
 }

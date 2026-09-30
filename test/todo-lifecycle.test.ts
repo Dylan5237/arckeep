@@ -56,6 +56,38 @@ afterEach(() => {
 })
 
 describe('todo edit and delete lifecycle', () => {
+  it('keeps the focused editor node, selection and composition when undo expires', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-30T09:30:00.000Z'))
+    const { content, api } = installApi([todo('todo-focus-a', '删除 A'), todo('todo-focus-b', '编辑 B')])
+    const dispose = await renderTodos(content)
+    content.querySelector<HTMLButtonElement>('[data-row-id="todo-focus-a"] [data-action="delete"]')!.click()
+    await flushPromises()
+    const staleUndo = content.querySelector<HTMLButtonElement>('[data-action="undo-delete"]')!
+    content.querySelector<HTMLButtonElement>('[data-row-id="todo-focus-b"] [data-action="edit"]')!.click()
+    await flushPromises()
+    const editor = content.querySelector<HTMLInputElement>('[data-row-id="todo-focus-b"] input[type="text"]')!
+    editor.value = '中文候选草稿'
+    editor.dispatchEvent(new Event('input', { bubbles: true }))
+    editor.focus()
+    editor.setSelectionRange(2, 4)
+    editor.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+    await vi.advanceTimersByTimeAsync(5_100)
+    await flushPromises()
+    expect(content.querySelector('[data-action="undo-delete"]')).toBeNull()
+    expect(editor.isConnected).toBe(true)
+    expect(document.activeElement).toBe(editor)
+    expect(editor.selectionStart).toBe(2)
+    expect(editor.selectionEnd).toBe(4)
+    staleUndo.click()
+    await flushPromises()
+    expect(api.restoreTodo).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(editor)
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true }))
+    expect(api.updateTodo).not.toHaveBeenCalled()
+    dispose()
+  })
+
   it('keeps the original undo deadline when leaving and returning to the page', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-30T10:00:00.000Z'))
