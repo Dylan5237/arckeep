@@ -12,8 +12,13 @@ export function beginDeleteUndo(item: TodoItem, now: number): DeleteUndo {
   return { item: { ...item }, until: now + TODO_DELETE_UNDO_MS }
 }
 
+/** The pending operation, or null once its absolute deadline has passed. */
+export function activeDeleteUndo(pending: DeleteUndo | null, now: number): DeleteUndo | null {
+  if (!pending || now >= pending.until) return null
+  return pending
+}
+
 /** The snapshot to restore, or null once the window has closed. */
 export function deleteUndoItem(pending: DeleteUndo | null, now: number): TodoItem | null {
-  if (!pending || now >= pending.until) return null
-  return pending.item
+  return activeDeleteUndo(pending, now)?.item ?? null
 }
