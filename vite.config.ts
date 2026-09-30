@@ -1,7 +1,11 @@
 import { defineConfig } from 'vite'
 import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+
+const { version } = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as { version: string }
 
 export default defineConfig({
+  define: { __ARCKEEP_VERSION__: JSON.stringify(version) },
   root: resolve(__dirname, 'src/renderer'),
   base: './',
   build: {

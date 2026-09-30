@@ -52,6 +52,9 @@ async function renderSettings(options?: { focusToken?: boolean, focusWatch?: boo
   if (!content) return
   const page = el('section', { class: 'page settings' }, [
     el('h1', {}, ['设置']),
+    el('p', { class: 'hint', 'data-app-version': '' }, [
+      `Arckeep ${typeof __ARCKEEP_VERSION__ === 'string' ? __ARCKEEP_VERSION__ : '开发版'}`
+    ]),
     el('p', { class: 'lede' }, ['GitHub 认证、关注仓库和全局热键保存在本机，重启后仍然在。'])
   ])
   content.replaceChildren(page)

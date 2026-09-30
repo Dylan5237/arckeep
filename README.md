@@ -4,17 +4,24 @@ Arckeep：Dylan 的 AI 原生个人工作台（Windows 桌面应用）。
 
 这个仓库是 Electron + TypeScript，主进程 / preload / 渲染进程分离。「等我处理」「项目总览」「待办」和「工具架」都已经接上。设置、托盘和打包流水线也已经接上。待办写在 userData 里的 `todos.jsonl`（只追加，读的时候折叠）。默认全局热键 `Ctrl+Alt+Space` 打开快速捕获，输入框直接获得焦点。正文里的 `#owner/repo`、能对上的 `#仓库名` 和 `!等我` 会在保存时拆出来。Esc 或点到窗口外不创建待办，草稿写在 `capture-draft.json`，下次热键还会回来。正文被清空后再按 Esc，连仓库标签和等我一起丢掉。可以在设置里改热键。
 
-渲染层用 Vite 打包的普通 TypeScript，没有 UI 框架。页面只有导航和一张设置表单，先不引入组件运行时。
+渲染层用 Vite 打包的普通 TypeScript，没有 UI 框架。
 
 ## 在 Windows 上运行
 
-1. 下载 CI artifact `arckeep-windows` 里的 portable exe（`Arckeep-*-portable.exe`），或运行 NSIS 安装包（`Arckeep-Setup-*.exe`）。
-2. 双击 exe。安装包没有代码签名，SmartScreen 会提示风险：点「更多信息」，再点「仍要运行」。
-3. 窗口打开就能用。关掉窗口会留在托盘；要从托盘菜单选「退出」才会结束进程。
+1. 获取同一版本的 Windows x64 安装包（`Arckeep-Setup-*.exe`）或便携版（`Arckeep-*-portable.exe`）。正式发行附件位于 [Releases](https://github.com/Dylan5237/arckeep/releases)；开发候选来自成功运行的 CI artifact `arckeep-windows`。当前本地 0.1.0 候选尚未正式发布。
+2. 运行安装包并启动 Arckeep，或直接双击便携版。程序未签名，Windows 可能显示 SmartScreen 提示；核对来源和发行附件 SHA256 后再决定是否运行。关闭主窗口会留在托盘，托盘菜单的「退出」会结束应用。
+3. 打开「设置」：已登录的 `gh` 会自动提供认证；也可保存具备目标仓库只读权限的 PAT，点击「测试连接」。添加 `owner/repo` 到关注仓库，再打开「等我处理」查看实际数据。设置页显示应用版本。
+
+## 已知限制
+
+- 当前交付目标为 Windows x64；没有代码签名和自动更新。
+- GitHub 功能只读查询；分类规则可能漏判或误判，仍需核对 GitHub 原始记录。
+- PAT 通过本机安全存储加密保存；安全存储不可用时会提示失败，不保存 PAT。优先复用已有 `gh` 登录。
+- 工具架配置的命令和预演脚本会在本机实际执行，预演也可能产生文件或其他副作用。只有命令需要预览确认；链接、目录和模板按配置直接打开或复制。
 
 ## 开发
 
-需要 Node.js 22。
+需要 Node.js 22.12.0 或更高版本。
 
 ```bash
 npm ci
