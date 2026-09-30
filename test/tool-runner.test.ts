@@ -350,5 +350,75 @@ describe('live PowerShell result and parameter fidelity', () => {
       expect(nativeResult.stdout, `${nativeCommand}\n${nativeResult.stderr}`).toBe(payload)
       rmSync(cwd, { recursive: true, force: true })
     }, 60_000)
+
+    it.skipIf(!available)(`${label} resolves quoted parameters against nested, function, and module commands`, async () => {
+      const cwd = mkdtempSync(path.join(tmpdir(), 'arckeep-powershell-resolution-'))
+      const payload = 'a"b 中文'
+
+      const multipleCommand = expandCommand(
+        'node -e "process.stdout.write(JSON.stringify(process.argv.slice(1)))" {{first}} {{second}}',
+        { first: 'first', second: payload },
+        'powershell'
+      )
+      const multiple = await runPlan(planShell('powershell', multipleCommand, env), cwd)
+      expect(multiple.code, `${multipleCommand}\n${multiple.stderr}`).toBe(0)
+      expect(multiple.stdout, `${multipleCommand}\n${multiple.stderr}`).toBe(JSON.stringify(['first', payload]))
+
+      const blockCommand = expandCommand(
+        'if ($true) { Write-Output prefix; node -e "process.stdout.write(JSON.stringify(process.argv.slice(1)))" {{value}} }',
+        { value: payload },
+        'powershell'
+      )
+      const block = await runPlan(planShell('powershell', blockCommand, env), cwd)
+      expect(block.code, `${blockCommand}\n${block.stderr}`).toBe(0)
+      expect(block.stdout.trimEnd().split(/\r?\n/), `${blockCommand}\n${block.stderr}`).toEqual([
+        'prefix',
+        JSON.stringify([payload])
+      ])
+
+      const functionCommand = expandCommand(
+        'function EchoValue { param($p) [Console]::Out.Write($p) }; EchoValue {{value}}',
+        { value: payload },
+        'powershell'
+      )
+      const functionResult = await runPlan(planShell('powershell', functionCommand, env), cwd)
+      expect(functionResult.code, `${functionCommand}\n${functionResult.stderr}`).toBe(0)
+      expect(functionResult.stdout, `${functionCommand}\n${functionResult.stderr}`).toBe(payload)
+
+      const moduleCommand = expandCommand(
+        'Microsoft.PowerShell.Utility\\Write-Output {{value}}',
+        { value: payload },
+        'powershell'
+      )
+      const moduleResult = await runPlan(planShell('powershell', moduleCommand, env), cwd)
+      expect(moduleResult.code, `${moduleCommand}\n${moduleResult.stderr}`).toBe(0)
+      expect(moduleResult.stdout.trimEnd(), `${moduleCommand}\n${moduleResult.stderr}`).toBe(payload)
+
+      const aliasCommand = expandCommand(
+        'Set-Alias ArckeepProbeNode node; ArckeepProbeNode -e "process.stdout.write(process.argv[1])" {{value}}',
+        { value: payload },
+        'powershell'
+      )
+      const aliasResult = await runPlan(planShell('powershell', aliasCommand, env), cwd)
+      expect(aliasResult.code, `${aliasCommand}\n${aliasResult.stderr}`).toBe(0)
+      expect(aliasResult.stdout, `${aliasCommand}\n${aliasResult.stderr}`).toBe(payload)
+
+      const marker = path.join(cwd, 'dynamic-command-ran')
+      const dynamicCommand = expandCommand(
+        `$exe = 'node'; & $exe -e "require('fs').writeFileSync(process.argv[1], 'ran')" ${quotePowerShellArg(marker)} {{value}}`,
+        { value: payload },
+        'powershell'
+      )
+      const dynamicResult = await runPlan(planShell('powershell', dynamicCommand, env), cwd)
+      expect(dynamicResult.code, `${dynamicCommand}\n${dynamicResult.stderr}`).toBe(1)
+      expect(dynamicResult.stderr, dynamicCommand).toContain('动态命令名')
+      expect(existsSync(marker), dynamicCommand).toBe(false)
+
+      const missingCommand = expandCommand('ArckeepMissingCommand {{value}}', { value: payload }, 'powershell')
+      const missingResult = await runPlan(planShell('powershell', missingCommand, env), cwd)
+      expect(missingResult.code, `${missingCommand}\n${missingResult.stderr}`).toBe(1)
+      expect(missingResult.stderr, missingCommand).toContain('无法解析含双引号参数对应的 PowerShell 命令')
+      rmSync(cwd, { recursive: true, force: true })
+    }, 60_000)
   }
 })

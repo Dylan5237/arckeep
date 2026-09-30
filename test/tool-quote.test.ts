@@ -135,7 +135,7 @@ describe('shell quoting', () => {
   })
 
   it('inserts a quoted word and rejects placeholders inside quotes', () => {
-    for (const sample of samples) {
+    for (const sample of samples.filter(value => !value.includes('"'))) {
       expect(expandCommand('echo {{value}}', { value: sample }, 'powershell')).toBe(`echo ${quotePowerShellArg(sample)}`)
       expect(expandCommand('echo {{value}}', { value: sample }, 'git-bash')).toBe(`echo ${quoteBashArg(sample)}`)
       expect(expandCommand('echo {{value}}', { value: sample }, 'cmd')).toBe(`echo ${quoteCmdArg(sample)}`)
@@ -144,18 +144,21 @@ describe('shell quoting', () => {
     expect(() => expandCommand("echo '{{value}}'", { value: 'x' }, 'git-bash')).toThrow(/引号/)
   })
 
-  it('uses native argv encoding only for native PowerShell commands', () => {
+  it('defers double-quote argument encoding to the resolved PowerShell command', () => {
     const value = 'a"b'
+    const argument = `$(__ArckeepResolvePlaceholderArgument '__ARCKEEP_ARGUMENT_0__' ${quotePowerShellArg(value)} ${quotePowerShellNativeArg(value)})`
     expect(expandCommand('Write-Output {{value}}', { value }, 'powershell'))
-      .toBe('Write-Output ' + quotePowerShellArg(value))
+      .toBe('Write-Output ' + argument)
     expect(expandCommand('Get-Item -LiteralPath {{value}}', { value }, 'powershell'))
-      .toBe('Get-Item -LiteralPath ' + quotePowerShellArg(value))
+      .toBe('Get-Item -LiteralPath ' + argument)
     expect(expandCommand('node {{value}}', { value }, 'powershell'))
-      .toBe('node ' + quotePowerShellNativeArg(value))
+      .toBe('node ' + argument)
     expect(expandCommand('& .\\capture.ps1 {{value}}', { value }, 'powershell'))
-      .toBe('& .\\capture.ps1 ' + quotePowerShellArg(value))
+      .toBe('& .\\capture.ps1 ' + argument)
     expect(expandCommand('node {{value}}; Write-Output {{value}}', { value }, 'powershell'))
-      .toBe('node ' + quotePowerShellNativeArg(value) + '; Write-Output ' + quotePowerShellArg(value))
+      .toBe('node ' + argument + '; Write-Output ' + argument.replace('__ARCKEEP_ARGUMENT_0__', '__ARCKEEP_ARGUMENT_1__'))
+    expect(expandCommand('node {{value}}', { value: 'a b' }, 'powershell')).toBe("node 'a b'")
+    expect(powershellLaunchScript(`node ${argument}`)).toContain('$script:__arckeepArgumentAst = [scriptblock]::Create(')
   })
 
   it('percent-encodes URL parameters and keeps the preview equal to the opened href', () => {

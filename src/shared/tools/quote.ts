@@ -103,6 +103,7 @@ export function powershellLaunchScript(userScript: string, executable = 'powersh
     "$ProgressPreference = 'SilentlyContinue'",
     "$ErrorActionPreference = 'Stop'",
     'try {',
+    ...powershellRuntimeArgumentPrelude(body),
     USER_SCRIPT_START,
     body,
     USER_SCRIPT_END,
@@ -121,11 +122,7 @@ export function quotePowerShellArg(value: string): string {
   return `'${value.replace(/\0/g, '').replace(/'/g, "''")}'`
 }
 
-/**
- * PowerShell 5.1's native binder appends already quoted string values as raw
- * command-line text. Encode native argv only for native commands; cmdlets and
- * PowerShell scripts need the original value as a PowerShell string.
- */
+/** Encode one value for the legacy PowerShell native argument binder. */
 export function quotePowerShellNativeArg(value: string): string {
   const token = windowsNativeArgumentToken(value.replace(/\0/g, ''))
   return `'${token.replace(/'/g, "''")}'`
@@ -142,141 +139,49 @@ export function quoteForShell(shell: ShellKind, value: string, powershellNative 
   return quoteBashArg(value)
 }
 
-const POWERSHELL_ALIASES = new Set([
-  'cat', 'cd', 'chdir', 'clear', 'clc', 'copy', 'cp', 'del', 'dir', 'echo', 'erase', 'fl', 'foreach',
-  'ft', 'gc', 'gci', 'gcm', 'gdr', 'gmo', 'gps', 'group', 'gm', 'iex', 'ii', 'kill', 'ls', 'measure',
-  'md', 'mi', 'mount', 'move', 'mp', 'mv', 'nal', 'ndr', 'ni', 'nsn', 'nv', 'ogv', 'oh', 'popd', 'ps',
-  'pushd', 'pwd', 'r', 'rbp', 'rdr', 'ren', 'ri', 'rm', 'rmdir', 'rni', 'rnp', 'rp', 'rsn', 'rv', 'rwmi',
-  'sajb', 'sal', 'saps', 'sasv', 'sbp', 'sc', 'select', 'set', 'shcm', 'si', 'sl', 'sleep', 'sls', 'sort',
-  'sp', 'spps', 'spsv', 'start', 'stz', 'sv', 'tee', 'where', 'write'
-])
-
-const POWERSHELL_KEYWORDS = new Set([
-  'begin', 'catch', 'class', 'data', 'do', 'dynamicparam', 'else', 'elseif', 'end', 'filter', 'finally',
-  'for', 'foreach', 'function', 'if', 'in', 'param', 'process', 'return', 'switch', 'throw', 'trap', 'try',
-  'until', 'while'
-])
-
-const POWERSHELL_VERBS = /^(?:Add|Approve|Assert|Backup|Block|Build|Checkpoint|Clear|Close|Compare|Complete|Compress|Connect|Convert|Copy|Debug|Deny|Disable|Disconnect|Dismount|Edit|Enable|Enter|Exit|Expand|Export|Find|Format|Get|Grant|Group|Hide|Import|Initialize|Install|Invoke|Join|Limit|Lock|Measure|Merge|Mount|Move|New|Open|Optimize|Out|Pop|Protect|Publish|Push|Read|Receive|Redo|Register|Remove|Rename|Repair|Reset|Resize|Resolve|Restart|Restore|Resume|Revoke|Save|Search|Select|Send|Set|Show|Skip|Split|Start|Step|Stop|Submit|Suspend|Switch|Sync|Test|Trace|Unblock|Undo|Uninstall|Unlock|Unregister|Update|Use|Wait|Watch|Write)-[A-Za-z][A-Za-z0-9]*$/i
-
-function commandToken(segment: string): string {
-  let source = segment.trimStart()
-  source = source.replace(/^&\s*/, '')
-  source = source.replace(/^\.(?=\s)/, '').trimStart()
-  source = source.replace(/^\$[A-Za-z_][\w:]*\s*=\s*/, '')
-  const first = source[0]
-  if (first === "'") {
-    let token = ''
-    for (let i = 1; i < source.length; i += 1) {
-      if (source[i] === "'") {
-        if (source[i + 1] === "'") {
-          token += "'"
-          i += 1
-          continue
-        }
-        return token
-      }
-      token += source[i]
-    }
-    return token
-  }
-  if (first === '"') {
-    let token = ''
-    for (let i = 1; i < source.length; i += 1) {
-      if (source[i] === '`') {
-        token += source[i + 1] ?? ''
-        i += 1
-      } else if (source[i] === '"') {
-        return token
-      } else {
-        token += source[i]
-      }
-    }
-    return token
-  }
-  return source.match(/^[^\s;|&{}()[\]]+/)?.[0] ?? ''
-}
-
-/**
- * Select the Windows native argv encoder only when the placeholder belongs to
- * a native command. PowerShell command separators and quoted strings are
- * tracked so a cmdlet elsewhere in a script does not affect the decision.
- */
-function powershellPlaceholderIsNative(template: string, placeholderOffset: number): boolean {
-  let start = 0
-  let single = false
-  let double = false
-  let escaped = false
-  let parens = 0
-  let brackets = 0
-  let braces = 0
-  for (let i = 0; i < placeholderOffset; i += 1) {
-    const ch = template[i]
-    if (single) {
-      if (ch === "'") {
-        if (template[i + 1] === "'") i += 1
-        else single = false
-      }
-      continue
-    }
-    if (double) {
-      if (escaped) escaped = false
-      else if (ch === '`') escaped = true
-      else if (ch === '"') double = false
-      continue
-    }
-    if (ch === '`') {
-      i += 1
-      continue
-    }
-    if (ch === "'") {
-      single = true
-      continue
-    }
-    if (ch === '"') {
-      double = true
-      continue
-    }
-    if (ch === '{') {
-      braces += 1
-      start = i + 1
-      continue
-    }
-    if (ch === '}') {
-      braces = Math.max(0, braces - 1)
-      start = i + 1
-      continue
-    }
-    if (ch === '(') parens += 1
-    else if (ch === ')') parens = Math.max(0, parens - 1)
-    else if (ch === '[') brackets += 1
-    else if (ch === ']') brackets = Math.max(0, brackets - 1)
-    else if (parens === 0 && brackets === 0 && braces === 0) {
-      if (ch === ';' || ch === '\n' || ch === '\r') {
-        if (ch === '\n' && template[i - 1] === '`') continue
-        start = i + 1
-      } else if (ch === '|') {
-        start = i + (template[i + 1] === '|' ? 2 : 1)
-        if (template[i + 1] === '|') i += 1
-      }
-    }
-  }
-
-  const segment = template.slice(start, placeholderOffset).trimStart()
-  const control = segment.match(/^(begin|catch|data|do|dynamicparam|else|elseif|end|finally|for|foreach|function|if|param|process|switch|throw|trap|try|until|while)\b/i)?.[1]
-  if (control) return false
-  const token = commandToken(segment)
-  if (!token) return false
-  const normalized = token.toLowerCase()
-  if (POWERSHELL_KEYWORDS.has(normalized) || POWERSHELL_ALIASES.has(normalized)) return false
-  if (/\.(?:ps1|psm1|psd1)$/i.test(token)) return false
-  if (/\.(?:exe|com|bat|cmd|sh|py|js|mjs|cjs)$/i.test(token) || /[\\/]/.test(token)) return true
-  if (POWERSHELL_VERBS.test(token)) return false
-  if (/^[$([]/.test(token)) return false
-  return true
-}
-
 const PLACEHOLDER = /\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/g
+
+const POWERSHELL_ARGUMENT_HELPER = '__ArckeepResolvePlaceholderArgument'
+const POWERSHELL_ARGUMENT_ID_PREFIX = '__ARCKEEP_ARGUMENT_'
+
+function quotePowerShellRuntimeArgument(value: string, id: string): string {
+  const plain = quotePowerShellArg(value)
+  const native = quotePowerShellNativeArg(value)
+  return `$(${POWERSHELL_ARGUMENT_HELPER} ${quotePowerShellArg(id)} ${plain} ${native})`
+}
+
+function powershellRuntimeArgumentPrelude(body: string): string[] {
+  if (!body.includes(`${POWERSHELL_ARGUMENT_HELPER} '${POWERSHELL_ARGUMENT_ID_PREFIX}`)) return []
+  return [
+    `$script:__arckeepArgumentAst = [scriptblock]::Create(${quotePowerShellArg(body)}).Ast`,
+    `function ${POWERSHELL_ARGUMENT_HELPER}([string]$id, [string]$plain, [string]$native) {`,
+    '  $helperCall = $script:__arckeepArgumentAst.Find({',
+    '    param($node)',
+    `    if ($node -isnot [System.Management.Automation.Language.CommandAst] -or $node.GetCommandName() -ne '${POWERSHELL_ARGUMENT_HELPER}') { return $false }`,
+    '    foreach ($element in $node.CommandElements) {',
+    '      if ($element -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $element.Value -eq $id) { return $true }',
+    '    }',
+    '    return $false',
+    '  }, $true)',
+    "  if (-not $helperCall) { throw '无法识别含双引号参数的 PowerShell 调用上下文，命令未执行。' }",
+    '  $commandAst = $helperCall.Parent',
+    `  while ($commandAst -and -not ($commandAst -is [System.Management.Automation.Language.CommandAst] -and $commandAst.GetCommandName() -ne '${POWERSHELL_ARGUMENT_HELPER}')) { $commandAst = $commandAst.Parent }`,
+    '  if (-not $commandAst) { return $plain }',
+    '  $commandName = $commandAst.GetCommandName()',
+    "  if (-not $commandName) { throw '含双引号参数的 PowerShell 调用使用动态命令名，命令未执行；请改用静态命令名。' }",
+    '  $resolvedCommand = Microsoft.PowerShell.Core\\Get-Command -Name $commandName -ErrorAction SilentlyContinue',
+    "  if (-not $resolvedCommand) { throw '无法解析含双引号参数对应的 PowerShell 命令，命令未执行。' }",
+    '  for ($i = 0; $resolvedCommand -and $resolvedCommand.CommandType -eq [System.Management.Automation.CommandTypes]::Alias -and $i -lt 16; $i += 1) {',
+    '    $nextCommand = $resolvedCommand.ResolvedCommand',
+    '    if (-not $nextCommand -or $nextCommand -eq $resolvedCommand) { break }',
+    '    $resolvedCommand = $nextCommand',
+    '  }',
+    "  if ($resolvedCommand.CommandType -eq [System.Management.Automation.CommandTypes]::Alias) { throw '无法解析含双引号参数对应的 PowerShell 命令别名，命令未执行。' }",
+    '  if ($resolvedCommand -and $resolvedCommand.CommandType -eq [System.Management.Automation.CommandTypes]::Application) { return $native }',
+    '  return $plain',
+    '}'
+  ]
+}
 
 export function placeholderInsideQuotes(template: string, shell: ShellKind): boolean {
   let mode: 'none' | 'single' | 'double' = 'none'
@@ -355,8 +260,14 @@ export function expandCommand(
   if (shell === 'cmd' && /[\r\n]/.test(template)) {
     throw new Error('cmd 命令模板不能换行')
   }
-  return template.replace(PLACEHOLDER, (_match, key: string, offset: number) => {
-    const native = shell === 'powershell' && powershellPlaceholderIsNative(template, offset)
-    return quoteForShell(shell, params[key] ?? '', native)
+  let argumentIndex = 0
+  return template.replace(PLACEHOLDER, (_match, key: string) => {
+    const value = params[key] ?? ''
+    if (shell === 'powershell' && value.includes('"')) {
+      const id = `${POWERSHELL_ARGUMENT_ID_PREFIX}${argumentIndex}__`
+      argumentIndex += 1
+      return quotePowerShellRuntimeArgument(value, id)
+    }
+    return quoteForShell(shell, value)
   })
 }
