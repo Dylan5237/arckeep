@@ -666,6 +666,9 @@ const handleBeforeQuit = createGracefulShutdownHandler({
 
 app.on('before-quit', event => {
   isQuitting = true
+  toolRunner.close()
+  toolRehearsals.close()
+  toolIpcLifecycle?.close()
   handleBeforeQuit(event)
 })
 

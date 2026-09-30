@@ -28,6 +28,29 @@ function fakeRunner(
 }
 
 describe('tool rehearsal lifecycle', () => {
+  it('refuses new rehearsals while shutdown waits for an existing run', async () => {
+    let emit: ((event: ToolRunEvent) => void) | undefined
+    let starts = 0
+    const rehearsals = createToolRehearsals({
+      platform: 'win32', cwdExists: () => true, timeoutMs: 10_000,
+      createRunner: handler => {
+        emit = handler
+        return { start: () => { starts += 1; return 'run-A' }, abortAll: () => {} }
+      }
+    })
+    const existing = rehearsals.rehearse('shutdown-A', preview)
+    rehearsals.close()
+    const shutdown = rehearsals.cancelAll()
+    const rejected = await rehearsals.rehearse('shutdown-B', preview)
+    expect(rejected.canConfirm).toBe(false)
+    expect(rejected.summary).toContain('关闭')
+    expect(starts).toBe(1)
+    emit?.({ type: 'done', runId: 'run-A', aborted: true, durationMs: 0 })
+    await Promise.all([existing, shutdown])
+    expect((await rehearsals.rehearse('shutdown-C', preview)).canConfirm).toBe(false)
+    expect(starts).toBe(1)
+  })
+
   it('cancels a pending rehearsal and waits for its process completion event', async () => {
     let emit: ((event: ToolRunEvent) => void) | null = null
     let abortCalls = 0

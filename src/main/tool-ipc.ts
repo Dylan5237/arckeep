@@ -38,10 +38,17 @@ export function registerToolIpc(options: {
   /** Repositories already tagged on todos. Invalid tags are dropped later. */
   todoRepos?: () => readonly string[]
   screenshotScene?: string
-}): { shutdown(): Promise<void> } {
+}): { close(): void, shutdown(): Promise<void> } {
   const { guard, settings, runner } = options
   const bindings = new ToolPreviewBindings()
   let configurationRevision = 0
+  let closing = false
+  const close = (): void => {
+    closing = true
+    bindings.clear()
+    runner.close()
+    options.rehearsals.close()
+  }
   const knownRepos = (): KnownRepo[] => collectKnownRepos({
     watchedRepos: settings.getSettings().watchedRepos,
     githubRepos: options.repos?.observedGithubRepos() ?? [],
@@ -83,6 +90,7 @@ export function registerToolIpc(options: {
   })
   ipcMain.handle(IpcChannel.previewTool, async (event, actionId: unknown, params: unknown, rawRequestId: unknown) => {
     guard(event)
+    if (closing) return { ok: false as const, error: '应用正在关闭，不能启动新预览' }
     if (typeof rawRequestId !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(rawRequestId)) {
       return { ok: false as const, error: '预览请求无效，请重新预览' }
     }
@@ -101,6 +109,7 @@ export function registerToolIpc(options: {
       )
       if (preview.type === 'run-command') {
         preview.rehearsal = await options.rehearsals.rehearse(rawRequestId, preview)
+        if (closing) return { ok: false as const, error: '应用正在关闭，预览已取消' }
         const latestConfig = settings.getSettings().toolShelfJson
         const latestRepos = knownRepos()
         if (configurationRevision !== revision || latestConfig !== configJson
@@ -143,6 +152,7 @@ export function registerToolIpc(options: {
   })
   ipcMain.handle(IpcChannel.runTool, async (event, actionId: unknown, params: unknown, confirmationId: unknown) => {
     guard(event)
+    if (closing) return { ok: false as const, error: '应用正在关闭，不能执行动作' }
     let normalizedActionId: string
     let normalizedParams: Record<string, string>
     try {
@@ -200,8 +210,9 @@ export function registerToolIpc(options: {
   })
 
   return {
+    close,
     async shutdown() {
-      bindings.clear()
+      close()
       await options.rehearsals.cancelAll()
     }
   }

@@ -35,6 +35,7 @@ interface ActiveRehearsal {
 }
 
 export interface ToolRehearsals {
+  close(): void
   rehearse(requestId: string, preview: ActionPreview): Promise<Rehearsal>
   cancel(requestId: string): Promise<void>
   cancelAll(): Promise<void>
@@ -107,6 +108,7 @@ export function createToolRehearsals(options: ToolRehearsalManagerOptions = {}):
   const now = options.now ?? Date.now
   const createRunner = options.createRunner ?? (emit => new ToolRunner(emit))
   const timeoutMs = options.timeoutMs ?? 20_000
+  let closing = false
 
   function pruneCancelled(): void {
     const cutoff = now() - 60_000
@@ -121,6 +123,7 @@ export function createToolRehearsals(options: ToolRehearsalManagerOptions = {}):
   }
 
   function run(requestId: string, plan: ShellPlan, cwd: string): Promise<RehearseRunResult> {
+    if (closing) return Promise.reject(new Error('应用正在关闭，不能启动新预演'))
     pruneCancelled()
     if (cancelled.has(requestId)) {
       return Promise.resolve({ code: null, stdout: '', stderr: '', aborted: true, error: '预演已取消' })
@@ -168,7 +171,9 @@ export function createToolRehearsals(options: ToolRehearsalManagerOptions = {}):
   }
 
   return {
+    close() { closing = true },
     async rehearse(requestId, preview) {
+      if (closing) return failed('应用正在关闭，不能启动新预演')
       pruneCancelled()
       if (cancelled.has(requestId)) return failed('预演已取消，请重新预览')
       return rehearsePreview(preview, {

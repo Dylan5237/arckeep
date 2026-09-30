@@ -303,6 +303,7 @@ export class ToolRunner {
         const room = MAX_OUTPUT * 4 - active.powershellStderr.length
         if (text.length > room) {
           active.powershellStderr += text.slice(0, Math.max(0, room))
+  private closing = false
           active.powershellStderrTruncated = true
         } else {
           active.powershellStderr += text
@@ -325,6 +326,7 @@ export class ToolRunner {
       finish({
         type: 'done',
         runId,
+    if (this.closing) throw new Error('应用正在关闭，不能启动新命令')
         exitCode: active.aborted ? null : code,
         durationMs: Date.now() - active.started,
         aborted: active.aborted,
@@ -427,5 +429,9 @@ export function runPlan(
       clearTimeout(timer)
       reject(error)
     }
+  close(): void {
+    this.closing = true
+  }
+
   })
 }
