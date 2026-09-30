@@ -1,0 +1,12 @@
+# Clone-portable remote registry (ADR 0005).
+# authority = GitHub origin (sole write SoT).
+# projection = optional same-history FF mirror (includes ops).
+# export = colleague copy; tree = authority − strip list; not a second write authority.
+# share_export = ADR 0003 alias; same bound-clone push deny as export=.
+authority=origin
+projection=(none)
+projection_url=
+export=(none)
+export_url=
+share_export=(none)
+share_export_url=

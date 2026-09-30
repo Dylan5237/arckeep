@@ -5,3 +5,8 @@ out/
 *.log
 .DS_Store
 Thumbs.db
+.worktrees/
+CLAUDE.local.md
+.env
+.env.*
+!.env.example
