@@ -68,4 +68,38 @@ describe('tool rehearsal lifecycle', () => {
     await Promise.all([shutdown, pending])
     expect(shutdownFinished).toBe(true)
   })
+
+  it('waits for termination after the rehearsal runner emits its done event', async () => {
+    let emit: ((event: ToolRunEvent) => void) | null = null
+    let releaseTermination: () => void = () => {}
+    const termination = new Promise<void>(resolve => { releaseTermination = resolve })
+    let abortCalls = 0
+    const rehearsals = createToolRehearsals({
+      platform: 'win32',
+      cwdExists: () => true,
+      createRunner: handler => {
+        emit = handler
+        return {
+          start: (_plan: ShellPlan, _cwd: string) => 'dry-run-1',
+          abortAll: () => {
+            abortCalls += 1
+            emit?.({ type: 'done', runId: 'dry-run-1', exitCode: null, durationMs: 4, aborted: true })
+          },
+          waitForTermination: () => termination
+        }
+      },
+      timeoutMs: 10_000
+    })
+    const pending = rehearsals.rehearse('request-shutdown-termination', preview)
+    let shutdownFinished = false
+    const shutdown = rehearsals.cancelAll().then(() => { shutdownFinished = true })
+
+    expect(abortCalls).toBe(1)
+    await Promise.resolve()
+    expect(shutdownFinished).toBe(false)
+
+    releaseTermination()
+    await Promise.all([shutdown, pending])
+    expect(shutdownFinished).toBe(true)
+  })
 })

@@ -25,7 +25,8 @@ export interface RehearseDeps {
 
 interface RehearsalRunner {
   start(plan: ShellPlan, cwd: string): string
-  abortAll(): void
+  abortAll(): void | Promise<void>
+  waitForTermination?(): Promise<void>
 }
 
 interface ActiveRehearsal {
@@ -49,6 +50,12 @@ export interface ToolRehearsalManagerOptions {
 
 function failed(summary: string): Rehearsal {
   return { status: 'failed', summary: summary.startsWith('预演失败') ? summary : `预演失败：${summary}`, canConfirm: false }
+}
+
+function throwFailures(results: PromiseSettledResult<unknown>[], message: string): void {
+  const errors = results.flatMap(result => result.status === 'rejected' ? [result.reason] : [])
+  if (errors.length === 1) throw errors[0]
+  if (errors.length > 1) throw new AggregateError(errors, message)
 }
 
 function directoryExists(cwd: string): boolean {
@@ -129,28 +136,32 @@ export function createToolRehearsals(options: ToolRehearsalManagerOptions = {}):
         else stdout += event.text ?? ''
         return
       }
-      if (timer) clearTimeout(timer)
-      resolveRun({
+      clearTimeout(timer)
+      const result = {
         code: event.exitCode ?? null,
         stdout,
         stderr,
         aborted: Boolean(event.aborted),
         error: event.error
-      })
+      }
+      void Promise.resolve(runner.waitForTermination?.())
+        .then(() => resolveRun(result), rejectRun)
     })
     const promise = new Promise<RehearseRunResult>((resolve, reject) => {
       resolveRun = resolve
       rejectRun = reject
     }).finally(() => {
-      if (timer) clearTimeout(timer)
+      clearTimeout(timer)
       if (active.get(requestId)?.runner === runner) active.delete(requestId)
     })
     active.set(requestId, { runner, promise })
-    const timer = setTimeout(() => runner.abortAll(), timeoutMs)
+    const timer = setTimeout(() => {
+      void Promise.resolve(runner.abortAll()).catch(rejectRun)
+    }, timeoutMs)
     try {
       runner.start(plan, cwd)
     } catch (error) {
-      if (timer) clearTimeout(timer)
+      clearTimeout(timer)
       rejectRun(error)
     }
     return promise
@@ -171,17 +182,23 @@ export function createToolRehearsals(options: ToolRehearsalManagerOptions = {}):
       cancelled.set(requestId, now())
       const pending = active.get(requestId)
       if (!pending) return
-      pending.runner.abortAll()
-      await pending.promise.catch(() => undefined)
+      const results = await Promise.allSettled([
+        Promise.resolve(pending.runner.abortAll()),
+        pending.promise
+      ])
+      throwFailures(results, '取消预演时清理进程失败')
     },
     async cancelAll() {
       pruneCancelled()
       const pending = [...active.entries()]
+      const waits: Promise<unknown>[] = []
       for (const [id, rehearsal] of pending) {
         cancelled.set(id, now())
-        rehearsal.runner.abortAll()
+        waits.push(Promise.resolve(rehearsal.runner.abortAll()))
       }
-      await Promise.all(pending.map(([, rehearsal]) => rehearsal.promise.catch(() => undefined)))
+      waits.push(...pending.map(([, rehearsal]) => rehearsal.promise))
+      const results = await Promise.allSettled(waits)
+      throwFailures(results, '关闭时清理预演进程失败')
     }
   }
 }

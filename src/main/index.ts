@@ -645,11 +645,22 @@ if (!gotLock) {
 const handleBeforeQuit = createGracefulShutdownHandler({
   quit: () => app.quit(),
   shutdown: async () => {
-    await toolIpcLifecycle?.shutdown()
-    toolRunner.abortAll()
+    const shutdownErrors: unknown[] = []
+    try {
+      await toolIpcLifecycle?.shutdown()
+    } catch (error) {
+      shutdownErrors.push(error)
+    }
+    try {
+      await toolRunner.abortAll()
+    } catch (error) {
+      shutdownErrors.push(error)
+    }
     globalShortcut.unregisterAll()
     tray?.destroy()
     tray = null
+    if (shutdownErrors.length === 1) throw shutdownErrors[0]
+    if (shutdownErrors.length > 1) throw new AggregateError(shutdownErrors, '应用关闭清理失败')
   }
 })
 

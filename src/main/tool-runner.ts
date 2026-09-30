@@ -4,6 +4,46 @@ import type { ToolRunEvent } from '../shared/tools/types.js'
 import type { ShellPlan } from './tool-launch.js'
 
 const MAX_OUTPUT = 200_000
+const TERMINATION_TIMEOUT_MS = 10_000
+
+function hasExited(child: ChildProcess): boolean {
+  return child.exitCode !== null || child.signalCode !== null
+}
+
+function remainingTime(deadline: number): number {
+  return Math.max(0, deadline - Date.now())
+}
+
+async function waitForChildClose(child: ChildProcess, timeoutMs: number, pid: number): Promise<void> {
+  if (hasExited(child) || timeoutMs <= 0) {
+    if (hasExited(child)) return
+    throw new Error(`等待进程 ${pid} 退出超时`)
+  }
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+    const finish = (error?: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      child.removeListener('close', onClose)
+      if (error) reject(error)
+      else resolve()
+    }
+    const onClose = () => finish()
+    const timer = setTimeout(() => finish(new Error(`等待进程 ${pid} 退出超时`)), timeoutMs)
+    child.once('close', onClose)
+    if (hasExited(child)) finish()
+  })
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function combineErrors(errors: unknown[], message: string): Error {
+  if (errors.length === 1 && errors[0] instanceof Error) return errors[0]
+  return new AggregateError(errors, message)
+}
 
 export function terminationCommand(
   pid: number,
@@ -85,29 +125,81 @@ export function normalizePowerShellStderr(stderr: string): string {
 export async function killProcessTree(child: ChildProcess, platform: NodeJS.Platform = process.platform): Promise<void> {
   const pid = child.pid
   if (!pid) return
+  if (hasExited(child)) return
+  const deadline = Date.now() + TERMINATION_TIMEOUT_MS
   const plan = terminationCommand(pid, platform)
   if ('group' in plan) {
+    let signalError: unknown
     try {
       process.kill(-pid, 'SIGKILL')
-    } catch {
-      try { child.kill('SIGKILL') } catch { /* already exited */ }
+    } catch (groupError) {
+      try {
+        child.kill('SIGKILL')
+      } catch (childError) {
+        signalError = new AggregateError([groupError, childError], `无法终止进程组 ${pid}`)
+      }
+    }
+    try {
+      await waitForChildClose(child, remainingTime(deadline), pid)
+    } catch (error) {
+      if (signalError) throw combineErrors([signalError, error], `终止进程组 ${pid} 失败`)
+      throw error
     }
     return
   }
-  await new Promise<void>(resolve => {
-    const killer = spawn(plan.file, plan.args, { windowsHide: true, stdio: 'ignore' })
-    const finish = () => resolve()
-    killer.on('exit', finish)
-    killer.on('error', () => {
-      try { child.kill() } catch { /* already exited */ }
-      finish()
+  let killer: ChildProcess
+  try {
+    killer = spawn(plan.file, plan.args, { windowsHide: true, stdio: 'ignore' })
+  } catch (error) {
+    throw new Error(`无法启动 ${plan.file} 清理进程 ${pid}: ${describeError(error)}`, { cause: error })
+  }
+  try {
+    await new Promise<void>((resolve, reject) => {
+      let settled = false
+      const finish = (error?: Error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        killer.removeListener('exit', onExit)
+        killer.removeListener('error', onError)
+        if (error) reject(error)
+        else resolve()
+      }
+      const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+        if (code === 0) finish()
+        else finish(new Error(`${plan.file} 清理进程 ${pid} 失败 (exit=${String(code)}, signal=${String(signal)})`))
+      }
+      const onError = (error: Error) => finish(new Error(`无法启动 ${plan.file} 清理进程 ${pid}: ${error.message}`, { cause: error }))
+      const timer = setTimeout(() => {
+        try { killer.kill() } catch { /* report the cleanup timeout below */ }
+        finish(new Error(`${plan.file} 清理进程 ${pid} 超时`))
+      }, remainingTime(deadline))
+      killer.once('exit', onExit)
+      killer.once('error', onError)
     })
-  })
+  } catch (error) {
+    let fallbackError: unknown
+    if (!hasExited(child)) {
+      try {
+        child.kill()
+      } catch (killError) {
+        fallbackError = killError
+      }
+      try {
+        await waitForChildClose(child, remainingTime(deadline), pid)
+      } catch (closeError) {
+        throw combineErrors([error, ...(fallbackError ? [fallbackError] : []), closeError], `清理进程树 ${pid} 失败`)
+      }
+    }
+    throw error
+  }
+  await waitForChildClose(child, remainingTime(deadline), pid)
 }
 
 interface ActiveRun {
   child: ChildProcess
   shell: ShellPlan['shell']
+  termination?: Promise<void>
   aborted: boolean
   started: number
   capped: boolean
@@ -122,9 +214,30 @@ interface ActiveRun {
 
 export class ToolRunner {
   private readonly runs = new Map<string, ActiveRun>()
+  private readonly terminations = new Set<Promise<void>>()
+  private readonly terminationErrors: unknown[] = []
+  private drainPromise: Promise<void> | undefined
   private sequence = 0
 
-  constructor(private readonly emit: (event: ToolRunEvent) => void) {}
+  constructor(
+    private readonly emit: (event: ToolRunEvent) => void,
+    private readonly terminateProcessTree: (child: ChildProcess) => Promise<void> = child => killProcessTree(child)
+  ) {}
+
+  private terminate(active: ActiveRun): void {
+    if (active.termination) return
+    const termination = Promise.resolve()
+      .then(() => this.terminateProcessTree(active.child))
+      .catch(error => {
+        this.terminationErrors.push(error)
+        throw error
+      })
+      .finally(() => this.terminations.delete(termination))
+    active.termination = termination
+    this.terminations.add(termination)
+    // abort() is intentionally synchronous; preserve failures for the next awaited drain.
+    void termination.catch(() => {})
+  }
 
   start(plan: ShellPlan, cwd: string): string {
     if ([...this.runs.values()].length >= 1) throw new Error('已经有命令在运行')
@@ -225,44 +338,92 @@ export class ToolRunner {
     const active = this.runs.get(runId)
     if (!active) return false
     active.aborted = true
-    void killProcessTree(active.child)
+    this.terminate(active)
     return true
   }
 
-  abortAll(): void {
+  async abortAll(): Promise<void> {
     for (const runId of [...this.runs.keys()]) this.abort(runId)
+    await this.waitForTermination()
+  }
+
+  waitForTermination(): Promise<void> {
+    if (this.drainPromise) return this.drainPromise
+    const drain = (async () => {
+      while (this.terminations.size > 0) {
+        const results = await Promise.allSettled([...this.terminations])
+        for (const result of results) {
+          if (result.status === 'rejected' && !this.terminationErrors.includes(result.reason)) {
+            this.terminationErrors.push(result.reason)
+          }
+        }
+      }
+      if (this.terminationErrors.length > 0) {
+        const errors = this.terminationErrors.splice(0)
+        throw combineErrors(errors, '清理命令进程树失败')
+      }
+    })()
+    this.drainPromise = drain
+    void drain.finally(() => {
+      if (this.drainPromise === drain) this.drainPromise = undefined
+    }).catch(() => {})
+    return drain
   }
 }
 
 export function runPlan(
   plan: ShellPlan,
   cwd: string,
-  timeoutMs = 20_000
+  timeoutMs = 20_000,
+  createRunner: (emit: (event: ToolRunEvent) => void) => ToolRunner = emit => new ToolRunner(emit)
 ): Promise<{ code: number | null, stdout: string, stderr: string, aborted: boolean, error?: string }> {
   return new Promise((resolve, reject) => {
     let stdout = ''
     let stderr = ''
-    const runner = new ToolRunner(event => {
+    let settled = false
+    let doneEvent: ToolRunEvent | undefined
+    const runner = createRunner(event => {
       if (event.type === 'output') {
         if (event.stream === 'stderr') stderr += event.text ?? ''
         else stdout += event.text ?? ''
         return
       }
       clearTimeout(timer)
+      doneEvent = event
+      void finish()
+    })
+    const finish = async (terminationError?: unknown) => {
+      if (settled) return
+      try {
+        await runner.waitForTermination()
+      } catch (error) {
+        terminationError = terminationError === undefined
+          ? error
+          : combineErrors([terminationError, error], '命令进程树清理失败')
+      }
+      if (settled) return
+      settled = true
       resolve({
-        code: event.exitCode ?? null,
+        code: doneEvent?.exitCode ?? null,
         stdout,
         stderr,
-        aborted: Boolean(event.aborted),
-        error: event.error
+        aborted: Boolean(doneEvent?.aborted) || terminationError !== undefined,
+        error: [doneEvent?.error, ...(terminationError === undefined ? [] : [describeError(terminationError)])]
+          .filter(Boolean)
+          .join('; ') || undefined
       })
-    })
+    }
     const timer = setTimeout(() => {
-      runner.abortAll()
+      void runner.abortAll().then(() => {
+        if (!doneEvent) void finish(new Error(`命令运行超过 ${timeoutMs}ms`))
+      }, error => {
+        if (!doneEvent) void finish(error)
+      })
     }, timeoutMs)
     try {
       runner.start(plan, cwd)
     } catch (error) {
+      settled = true
       clearTimeout(timer)
       reject(error)
     }
