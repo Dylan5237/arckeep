@@ -14,7 +14,7 @@ foreach ($name in $environmentNames) {
 $smokeProcess = $null
 try {
   foreach ($name in $environmentNames) {
-    [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+    Remove-Item -LiteralPath ('Env:' + $name) -ErrorAction SilentlyContinue
   }
   [Environment]::SetEnvironmentVariable('ARCKEEP_SCREENSHOT', $imagePath, 'Process')
   [Environment]::SetEnvironmentVariable('ARCKEEP_SCREENSHOT_SCENE', 'signed-out', 'Process')
@@ -41,6 +41,10 @@ try {
     if (-not $smokeProcess.WaitForExit(5000)) { Write-Warning 'Owned smoke process did not exit after cleanup' }
   }
   foreach ($name in $environmentNames) {
-    [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process')
+    if ($null -eq $savedEnvironment[$name]) {
+      Remove-Item -LiteralPath ('Env:' + $name) -ErrorAction SilentlyContinue
+    } else {
+      [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process')
+    }
   }
 }
