@@ -4,6 +4,7 @@ import type { ToolRunEvent } from '../shared/tools/types.js'
 import type { ShellPlan } from './tool-launch.js'
 
 const MAX_OUTPUT = 200_000
+const OUTPUT_RESERVE = 8_192
 const TERMINATION_TIMEOUT_MS = 10_000
 
 function hasExited(child: ChildProcess): boolean {
@@ -122,6 +123,90 @@ export function normalizePowerShellStderr(stderr: string): string {
   return stderr.slice(0, start) + decoded
 }
 
+/** Emits plain diagnostics and complete CLIXML stream records without waiting for close. */
+export class PowerShellStderrDecoder {
+  private pending = ''
+  private mode: 'plain' | 'header' | 'xml' = 'plain'
+
+  write(text: string): string {
+    this.pending += text
+    let output = ''
+    for (;;) {
+      if (this.mode === 'plain') {
+        const start = this.pending.indexOf('#< CLIXML')
+        if (start < 0) {
+          const keep = this.suffixLength(['#< CLIXML'])
+          output += this.pending.slice(0, this.pending.length - keep)
+          this.pending = this.pending.slice(this.pending.length - keep)
+          break
+        }
+        output += this.pending.slice(0, start)
+        this.pending = this.pending.slice(start + '#< CLIXML'.length)
+        this.mode = 'header'
+      }
+      if (this.mode === 'header') {
+        const header = this.pending.trimStart()
+        if ('<Objs'.startsWith(header)) break
+        if (!header.startsWith('<Objs')) {
+          output += '#< CLIXML' + this.pending
+          this.pending = ''
+          this.mode = 'plain'
+          break
+        }
+        const end = header.indexOf('>')
+        if (end < 0) break
+        this.pending = header.slice(end + 1)
+        this.mode = 'xml'
+      }
+      if (this.mode === 'xml') {
+        const endDocument = this.pending.indexOf('</Objs>')
+        const startRecord = this.pending.search(/<S(?:\s|>)/)
+        if (endDocument >= 0 && (startRecord < 0 || endDocument < startRecord)) {
+          this.pending = this.pending.slice(endDocument + '</Objs>'.length)
+          this.mode = 'plain'
+          continue
+        }
+        if (startRecord < 0) {
+          const keep = this.suffixLength(['<S', '</Objs>'])
+          this.pending = this.pending.slice(this.pending.length - keep)
+          break
+        }
+        this.pending = this.pending.slice(startRecord)
+        const endRecord = this.pending.indexOf('</S>')
+        if (endRecord < 0) break
+        const record = this.pending.slice(0, endRecord + '</S>'.length)
+        output += normalizePowerShellStderr(`#< CLIXML\n<Objs>${record}</Objs>`)
+        this.pending = this.pending.slice(endRecord + '</S>'.length)
+      }
+    }
+    if (this.pending.length > MAX_OUTPUT * 4) {
+      output += this.pending.slice(0, MAX_OUTPUT) + '\n输出已截断'
+      this.pending = ''
+      this.mode = 'plain'
+    }
+    return output
+  }
+
+  end(text = ''): string {
+    const output = this.write(text)
+    const tail = this.mode === 'plain' ? this.pending
+      : this.mode === 'header' ? '#< CLIXML' + this.pending : this.pending
+    this.pending = ''
+    this.mode = 'plain'
+    return output + tail
+  }
+
+  private suffixLength(tokens: string[]): number {
+    let keep = 0
+    for (const token of tokens) {
+      for (let size = 1; size < token.length; size += 1) {
+        if (this.pending.endsWith(token.slice(0, size))) keep = Math.max(keep, size)
+      }
+    }
+    return keep
+  }
+}
+
 export async function killProcessTree(child: ChildProcess, platform: NodeJS.Platform = process.platform): Promise<void> {
   const pid = child.pid
   if (!pid) return
@@ -202,13 +287,13 @@ interface ActiveRun {
   termination?: Promise<void>
   aborted: boolean
   started: number
-  capped: boolean
+  capped: Record<'stdout' | 'stderr', boolean>
   finished: boolean
   outputBytes: number
+  streamBytes: Record<'stdout' | 'stderr', number>
   stdoutDecoder: IncrementalOutputDecoder
   stderrDecoder: IncrementalOutputDecoder
-  powershellStderr: string
-  powershellStderrTruncated: boolean
+  powershellStderr: PowerShellStderrDecoder
   outputsFinalized: boolean
 }
 
@@ -218,6 +303,7 @@ export class ToolRunner {
   private readonly terminationErrors: unknown[] = []
   private drainPromise: Promise<void> | undefined
   private sequence = 0
+  private closing = false
 
   constructor(
     private readonly emit: (event: ToolRunEvent) => void,
@@ -240,6 +326,7 @@ export class ToolRunner {
   }
 
   start(plan: ShellPlan, cwd: string): string {
+    if (this.closing) throw new Error('应用正在关闭，不能启动新命令')
     if ([...this.runs.values()].length >= 1) throw new Error('已经有命令在运行')
     const runId = `run-${Date.now().toString(36)}-${this.sequence}`
     this.sequence += 1
@@ -257,13 +344,13 @@ export class ToolRunner {
       shell: plan.shell,
       aborted: false,
       started: Date.now(),
-      capped: false,
+      capped: { stdout: false, stderr: false },
       finished: false,
       outputBytes: 0,
+      streamBytes: { stdout: 0, stderr: 0 },
       stdoutDecoder: new IncrementalOutputDecoder(),
       stderrDecoder: new IncrementalOutputDecoder(),
-      powershellStderr: '',
-      powershellStderrTruncated: false,
+      powershellStderr: new PowerShellStderrDecoder(),
       outputsFinalized: false
     }
     this.runs.set(runId, active)
@@ -274,13 +361,15 @@ export class ToolRunner {
       this.emit(event)
     }
     const emitText = (stream: 'stdout' | 'stderr', text: string) => {
-      if (active.capped) return
-      const room = MAX_OUTPUT - active.outputBytes
+      if (!text || active.capped[stream]) return
+      const room = Math.min(MAX_OUTPUT - active.outputBytes, MAX_OUTPUT - OUTPUT_RESERVE - active.streamBytes[stream])
+      const kept = Math.min(text.length, Math.max(0, room))
       if (text.length > room) {
-        text = `${text.slice(0, Math.max(0, room))}\n输出已截断`
-        active.capped = true
+        text = `${text.slice(0, kept)}\n输出已截断`
+        active.capped[stream] = true
       }
-      active.outputBytes += text.length
+      active.outputBytes += kept
+      active.streamBytes[stream] += kept
       if (text) this.emit({ type: 'output', runId, stream, text })
     }
     const finalizeOutputs = () => {
@@ -290,8 +379,7 @@ export class ToolRunner {
       const stderrTail = active.stderrDecoder.end()
       emitText('stdout', stdoutTail)
       if (active.shell === 'powershell') {
-        const decoded = normalizePowerShellStderr(active.powershellStderr + stderrTail)
-        emitText('stderr', decoded + (active.powershellStderrTruncated ? '\n输出已截断' : ''))
+        emitText('stderr', active.powershellStderr.end(stderrTail))
       } else {
         emitText('stderr', stderrTail)
       }
@@ -300,14 +388,7 @@ export class ToolRunner {
     child.stderr?.on('data', (chunk: Buffer) => {
       const text = active.stderrDecoder.write(chunk)
       if (active.shell === 'powershell') {
-        const room = MAX_OUTPUT * 4 - active.powershellStderr.length
-        if (text.length > room) {
-          active.powershellStderr += text.slice(0, Math.max(0, room))
-  private closing = false
-          active.powershellStderrTruncated = true
-        } else {
-          active.powershellStderr += text
-        }
+        emitText('stderr', active.powershellStderr.write(text))
       } else emitText('stderr', text)
     })
     child.on('error', error => {
@@ -326,7 +407,6 @@ export class ToolRunner {
       finish({
         type: 'done',
         runId,
-    if (this.closing) throw new Error('应用正在关闭，不能启动新命令')
         exitCode: active.aborted ? null : code,
         durationMs: Date.now() - active.started,
         aborted: active.aborted,
@@ -347,6 +427,10 @@ export class ToolRunner {
   async abortAll(): Promise<void> {
     for (const runId of [...this.runs.keys()]) this.abort(runId)
     await this.waitForTermination()
+  }
+
+  close(): void {
+    this.closing = true
   }
 
   waitForTermination(): Promise<void> {
@@ -429,9 +513,5 @@ export function runPlan(
       clearTimeout(timer)
       reject(error)
     }
-  close(): void {
-    this.closing = true
-  }
-
   })
 }
