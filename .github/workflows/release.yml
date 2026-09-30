@@ -38,6 +38,13 @@ jobs:
       - name: Build NSIS installer and portable exe
         run: npm run dist
 
+      - name: Packaged fixture startup smoke
+        shell: pwsh
+        run: ./scripts/smoke-windows-package.ps1
+
+      - name: Bind package checksums to source and tag
+        run: node scripts/hash-windows-package.mjs
+
       - name: Publish GitHub Release
         shell: pwsh
         env:
@@ -66,7 +73,7 @@ jobs:
               "--generate-notes"
             )
             if ($prerelease) { $arguments += "--prerelease" }
-            $arguments += @($setup.FullName, $portable.FullName)
+            $arguments += @($setup.FullName, $portable.FullName, 'dist/SHA256SUMS.txt', 'dist/package-manifest.json')
             & gh @arguments
             if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
           } else {
@@ -74,6 +81,6 @@ jobs:
               gh release edit $tag --repo $repo --prerelease
               if ($LASTEXITCODE -ne 0) { throw "gh release edit failed" }
             }
-            gh release upload $tag $setup.FullName $portable.FullName --repo $repo --clobber
+            gh release upload $tag $setup.FullName $portable.FullName dist/SHA256SUMS.txt dist/package-manifest.json --repo $repo --clobber
             if ($LASTEXITCODE -ne 0) { throw "gh release upload failed" }
           }
