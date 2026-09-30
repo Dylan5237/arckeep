@@ -1927,3 +1927,242 @@ describe('classifier narrowings for pass, quiet pulls, tables, checklists, title
     expect(silent?.reasons).toEqual(['指派'])
   })
 })
+
+describe('classifier clarifications for pass scope, checklists, cells, tokens, headings, citations, and excerpts', () => {
+  const rules = config()
+
+  function sample(patch: Partial<GithubRecord> & Pick<GithubRecord, 'kind' | 'number' | 'title'>): GithubRecord {
+    return record({
+      repo: 'example-org/sample',
+      url: 'https://github.com/example-org/sample/issues/1',
+      ...patch
+    })
+  }
+
+  it('keeps 只剩 or 仍须 with 验收 or 截图 after a comma or semicolon when PASS names another item', () => {
+    const positive = classifyRecord(sample({
+      kind: 'issue',
+      number: 401,
+      title: 'Export phase',
+      comments: [{
+        body: '功能 PASS；仍须截图',
+        authorLogin: 'mina',
+        createdAt: '2026-09-22T00:00:00.000Z'
+      }]
+    }), rules, NOW)
+    expect(positive?.tier).toBe('strong')
+    expect(positive?.signal.rule).toBe('明确请求')
+    expect(positive?.signal.excerpt).toContain('仍须')
+    expect(positive?.signal.excerpt).toContain('截图')
+    expect(positive?.signal.excerpt.includes('功能 PASS')).toBe(false)
+
+    const negative = classifyRecord(sample({
+      kind: 'issue',
+      number: 402,
+      title: 'Export phase',
+      comments: [{
+        body: '功能 PASS，仍须整理目录',
+        authorLogin: 'mina',
+        createdAt: '2026-09-22T00:00:00.000Z'
+      }]
+    }), rules, NOW)
+    expect(negative).toBeNull()
+  })
+
+  it('reads an unchecked machine, screenshot, or visual-acceptance item anywhere in the body', () => {
+    const positive = classifyRecord(sample({
+      kind: 'issue',
+      number: 411,
+      title: 'Check later',
+      body: [
+        '## 说明',
+        '这里没有状态小节。',
+        '',
+        '- [ ] run it on their own machine'
+      ].join('\n')
+    }), rules, NOW)
+    expect(positive?.tier).toBe('strong')
+    expect(positive?.signal.rule).toBe('明确请求')
+    expect(positive?.signal.excerpt).toContain('run it on their own machine')
+
+    const negative = classifyRecord(sample({
+      kind: 'issue',
+      number: 412,
+      title: 'Check later',
+      body: [
+        '## 说明',
+        '这里没有状态小节。',
+        '',
+        '- [x] run it on their own machine',
+        '- [x] provide a screenshot',
+        '- [x] visual acceptance'
+      ].join('\n')
+    }), rules, NOW)
+    expect(negative).toBeNull()
+  })
+
+  it('keeps a 请…裁决 or 请…确认 cell when a later clause says PASS 暂不改变 and a newer comment does not close it', () => {
+    const body = [
+      '## 状态',
+      '| 项 | 下一步 |',
+      '| --- | --- |',
+      '| 导出 | 请你裁决这一项，PASS 暂不改变 |'
+    ].join('\n')
+    const positive = classifyRecord(sample({
+      kind: 'issue',
+      number: 421,
+      title: 'Column width',
+      body,
+      comments: [{
+        body: 'PASS\n下一步：compare on a machine, sync',
+        authorLogin: 'mina',
+        createdAt: '2026-09-27T00:00:00.000Z'
+      }]
+    }), rules, NOW)
+    expect(positive?.tier).toBe('strong')
+    expect(positive?.signal.rule).toBe('明确请求')
+    expect(positive?.signal.excerpt).toContain('请你裁决')
+    expect(positive?.signal.excerpt.includes('暂不')).toBe(false)
+    expect(positive?.signal.excerpt.toLowerCase().includes('compare on a machine')).toBe(false)
+    expect(positive?.signal.excerpt.toLowerCase().includes('sync')).toBe(false)
+
+    const negative = classifyRecord(sample({
+      kind: 'issue',
+      number: 422,
+      title: 'Column width',
+      body,
+      comments: [{
+        body: '已完成',
+        authorLogin: 'mina',
+        createdAt: '2026-09-27T00:00:00.000Z'
+      }]
+    }), rules, NOW)
+    expect(negative).toBeNull()
+  })
+
+  it('admits USER_ACTION_REQUIRED, WAITING_USER, or USER_NEEDED_NEXT, and a following Next section', () => {
+    const positive = classifyRecord(sample({
+      kind: 'issue',
+      number: 431,
+      title: 'USER_NEEDED_NEXT (not claimed)',
+      body: [
+        'WAITING_USER (no Phase PASS)',
+        '',
+        '## Next',
+        'The user must finish a step.'
+      ].join('\n')
+    }), rules, NOW)
+    expect(positive?.tier).toBe('strong')
+    expect(positive?.signal.rule).toBe('明确请求')
+    expect(positive?.signal.excerpt.toLowerCase()).toContain('user must finish')
+    expect(positive?.signal.excerpt.toLowerCase().includes('not claimed')).toBe(false)
+    expect(positive?.signal.excerpt.toLowerCase().includes('no phase pass')).toBe(false)
+
+    const negative = classifyRecord(sample({
+      kind: 'issue',
+      number: 432,
+      title: 'Notes (no Phase PASS)',
+      body: [
+        'not claimed',
+        '',
+        '## Next',
+        'Archive the notes.'
+      ].join('\n')
+    }), rules, NOW)
+    expect(negative).toBeNull()
+  })
+
+  it('treats a standalone 待拍板, 待确认, or 待裁决 heading as the request', () => {
+    const positive = classifyRecord(sample({
+      kind: 'issue',
+      number: 441,
+      title: 'Export columns',
+      body: [
+        '## 说明',
+        '材料还在整理。',
+        '',
+        '### 待裁决默认值',
+        '下面这段只是补充说明，单独出现也不构成请求。'
+      ].join('\n')
+    }), rules, NOW)
+    expect(positive?.tier).toBe('strong')
+    expect(positive?.signal.rule).toBe('明确请求')
+    expect(positive?.signal.excerpt).toContain('待裁决')
+    expect(positive?.signal.excerpt.includes('补充说明')).toBe(false)
+
+    const negative = classifyRecord(sample({
+      kind: 'issue',
+      number: 442,
+      title: 'Export columns',
+      body: [
+        '## 说明',
+        '正文里出现待拍板。',
+        '另一句出现待确认。',
+        '再一句出现待裁决。'
+      ].join('\n')
+    }), rules, NOW)
+    expect(negative).toBeNull()
+  })
+
+  it('drops a sentence whose main clause is 支持 #N, 见 #N, or 同 #N, including quoted text', () => {
+    const positive = classifyRecord(sample({
+      kind: 'issue',
+      number: 451,
+      title: 'Follow-up',
+      comments: [{
+        body: '同 #4：「请确认能否合入」\n请确认列名是否保留',
+        authorLogin: 'mina',
+        createdAt: '2026-09-22T00:00:00.000Z'
+      }]
+    }), rules, NOW)
+    expect(positive?.tier).toBe('strong')
+    expect(positive?.signal.rule).toBe('明确请求')
+    expect(positive?.signal.excerpt).toBe('请确认列名是否保留')
+    expect(positive?.signal.excerpt.includes('同 #4')).toBe(false)
+    expect(positive?.signal.excerpt.includes('请确认能否合入')).toBe(false)
+
+    const negative = classifyRecord(sample({
+      kind: 'issue',
+      number: 452,
+      title: 'Pointer',
+      comments: [{
+        body: '支持 #15：「请确认能否合入」',
+        authorLogin: 'mina',
+        createdAt: '2026-09-22T00:00:00.000Z'
+      }]
+    }), rules, NOW)
+    expect(negative).toBeNull()
+  })
+
+  it('skips excerpt sentences that contain 不能, 不构成, 不是, or 暂不', () => {
+    const positive = classifyRecord(sample({
+      kind: 'issue',
+      number: 461,
+      title: 'Wording',
+      body: '这不能当作结论。这不是待办。暂不收进列表。这句并不构成批准。请确认能否合入。'
+    }), rules, NOW)
+    expect(positive?.tier).toBe('strong')
+    expect(positive?.signal.rule).toBe('明确请求')
+    expect(positive?.signal.excerpt).toBe('请确认能否合入。')
+    expect(positive?.signal.excerpt.includes('不能')).toBe(false)
+    expect(positive?.signal.excerpt.includes('不是')).toBe(false)
+    expect(positive?.signal.excerpt.includes('暂不')).toBe(false)
+    expect(positive?.signal.excerpt.includes('不构成')).toBe(false)
+
+    const negative = classifyRecord(sample({
+      kind: 'issue',
+      number: 462,
+      title: 'Wording',
+      labels: ['needs-human'],
+      labelEvents: [{ name: 'needs-human', at: '2026-09-12T00:00:00.000Z' }],
+      body: '请确认这不是最终版，暂不合并。'
+    }), rules, NOW)
+    expect(negative?.tier).toBe('strong')
+    expect(negative?.signal.rule).toBe('标签')
+    expect(negative?.signal.excerpt).toContain('needs-human')
+    expect(negative?.signal.excerpt.includes('不是')).toBe(false)
+    expect(negative?.signal.excerpt.includes('暂不')).toBe(false)
+    expect(negative?.signal.excerpt.includes('不能')).toBe(false)
+    expect(negative?.signal.excerpt.includes('请确认')).toBe(false)
+  })
+})
