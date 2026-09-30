@@ -116,7 +116,7 @@ describe('dry-run output becomes a file summary', () => {
         calls += 1
         const script = powershellScriptFromPlan(plan)
         expect(script).toContain("apo init --dry-run --name 'o''hare'")
-        expect(script).toContain('exit $LASTEXITCODE')
+        expect(script).toContain('exit $global:LASTEXITCODE')
         expect(script).not.toContain('apo init --name')
         return { code: 3, stdout: '', stderr: '拒绝初始化', aborted: false }
       }

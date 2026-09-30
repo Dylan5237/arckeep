@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { planShell, resolveBash } from '../src/main/tool-launch.js'
-import { killProcessTree, runPlan, terminationCommand } from '../src/main/tool-runner.js'
-import { expandCommand } from '../src/shared/tools/quote.js'
+import { IncrementalOutputDecoder, killProcessTree, normalizePowerShellStderr, runPlan, terminationCommand } from '../src/main/tool-runner.js'
+import { expandCommand, quotePowerShellArg } from '../src/shared/tools/quote.js'
 import type { ShellKind } from '../src/shared/tools/types.js'
 
 const markers: string[] = []
@@ -89,6 +89,9 @@ const hostilePayloads: Array<(marker: string) => string> = [
   marker => `& echo pwned>${marker}`,
   marker => `; rm -rf x>${marker}`,
   () => '"',
+  () => 'a"b',
+  () => 'say "hello"',
+  () => '中文值',
   marker => `$(echo pwned>${marker})`,
   marker => '`echo pwned>' + marker + '`',
   () => '%PATH%',
@@ -173,11 +176,86 @@ describe('live shell injection', () => {
 
   it('streams stdout and stderr', async () => {
     const shell: ShellKind = process.platform === 'win32' ? 'powershell' : 'git-bash'
-    const plan = planShell(shell, `node -e "process.stdout.write('out-a'); process.stderr.write('err-b')"`)
+    const plan = planShell(shell, `node -e "process.stdout.write('北区'); process.stderr.write('错因')"`)
     const cwd = mkdtempSync(path.join(tmpdir(), 'arckeep-stream-'))
     const result = await runPlan(plan, cwd)
-    expect(result.stdout).toContain('out-a')
-    expect(result.stderr).toContain('err-b')
+    expect(result.stdout).toContain('北区')
+    expect(result.stderr).toContain('错因')
     rmSync(cwd, { recursive: true, force: true })
   }, 20_000)
+})
+
+describe('incremental output decoding and PowerShell stderr', () => {
+  it('preserves UTF-8 characters split across chunks', () => {
+    const decoder = new IncrementalOutputDecoder()
+    const bytes = Buffer.from('跨块中文')
+    const output = decoder.write(bytes.subarray(0, 2))
+      + decoder.write(bytes.subarray(2, 5))
+      + decoder.write(bytes.subarray(5))
+      + decoder.end()
+    expect(output).toBe('跨块中文')
+  })
+
+  it('drops CLIXML progress while retaining decoded errors', () => {
+    const clixml = '#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">'
+      + '<Obj S="progress"><PR><AV>working</AV></PR></Obj>'
+      + '<S S="Error">Write-Error : 中文失败_x000D__x000A_</S>'
+      + '</Objs>'
+    expect(normalizePowerShellStderr(clixml)).toBe('Write-Error : 中文失败\r\n')
+    expect(normalizePowerShellStderr('#< CLIXML\n<Objs><Obj S="progress"></Obj></Objs>')).toBe('')
+    expect(normalizePowerShellStderr('#< CLIXML\nnot xml')).toBe('#< CLIXML\nnot xml')
+  })
+})
+
+const powershellTestHosts = process.platform === 'win32' ? windowsPowerShellHosts() : ['powershell.exe']
+
+describe('live PowerShell result and parameter fidelity', () => {
+  for (const host of powershellTestHosts) {
+    const available = process.platform === 'win32'
+    const env = { ...process.env, ARCKEEP_POWERSHELL: host }
+    const label = path.basename(host)
+
+    it.skipIf(!available)(`${label} reports cmdlet errors and preserves explicit exit codes`, async () => {
+      const cwd = mkdtempSync(path.join(tmpdir(), 'arckeep-powershell-result-'))
+      const writeError = await runPlan(planShell('powershell', "Write-Error '中文失败-sentinel'", env), cwd)
+      expect(writeError.code).toBe(1)
+      expect(writeError.aborted).toBe(false)
+      expect(writeError.stderr).toContain('中文失败-sentinel')
+      expect(writeError.stderr).not.toContain('#< CLIXML')
+
+      const missing = await runPlan(planShell('powershell', "Get-Item -LiteralPath './missing-adversarial-file'", env), cwd)
+      expect(missing.code).toBe(1)
+      expect(missing.stderr).toMatch(/missing-adversarial-file|Cannot find path/i)
+
+      const success = await runPlan(planShell('powershell', "Write-Output 'success-sentinel'", env), cwd)
+      expect(success.code).toBe(0)
+      expect(success.stdout).toContain('success-sentinel')
+
+      const explicitExit = await runPlan(planShell('powershell', 'exit 3', env), cwd)
+      expect(explicitExit.code).toBe(3)
+      rmSync(cwd, { recursive: true, force: true })
+    }, 60_000)
+
+    it.skipIf(!available)(`${label} preserves quoted cmdlet, script, and native arguments`, async () => {
+      const cwd = mkdtempSync(path.join(tmpdir(), 'arckeep-powershell-args-'))
+      const payload = 'a"b 中文'
+      const cmdlet = expandCommand('Write-Output {{payload}}', { payload }, 'powershell')
+      const cmdletResult = await runPlan(planShell('powershell', cmdlet, env), cwd)
+      expect(cmdletResult.code).toBe(0)
+      expect(cmdletResult.stdout.trimEnd()).toBe(payload)
+
+      const scriptFile = path.join(cwd, 'capture.ps1')
+      writeFileSync(scriptFile, 'param([string]$value)\n[Console]::Out.Write($value)\n')
+      const scriptCommand = expandCommand(`& ${quotePowerShellArg(scriptFile)} {{payload}}`, { payload }, 'powershell')
+      const scriptResult = await runPlan(planShell('powershell', scriptCommand, env), cwd)
+      expect(scriptResult.code).toBe(0)
+      expect(scriptResult.stdout).toBe(payload)
+
+      const nativeCommand = expandCommand('node -e "process.stdout.write(process.argv[1])" {{payload}}', { payload }, 'powershell')
+      const nativeResult = await runPlan(planShell('powershell', nativeCommand, env), cwd)
+      expect(nativeResult.code).toBe(0)
+      expect(nativeResult.stdout, `${nativeCommand}\n${nativeResult.stderr}`).toBe(payload)
+      rmSync(cwd, { recursive: true, force: true })
+    }, 60_000)
+  }
 })
