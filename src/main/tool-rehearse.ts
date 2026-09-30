@@ -121,7 +121,6 @@ export function createToolRehearsals(options: ToolRehearsalManagerOptions = {}):
     if (active.has(requestId)) return Promise.reject(new Error('预演请求重复'))
     let stdout = ''
     let stderr = ''
-    let timer: NodeJS.Timeout | undefined
     let resolveRun: (result: RehearseRunResult) => void = () => {}
     let rejectRun: (error: unknown) => void = () => {}
     const runner = createRunner(event => {
@@ -147,7 +146,7 @@ export function createToolRehearsals(options: ToolRehearsalManagerOptions = {}):
       if (active.get(requestId)?.runner === runner) active.delete(requestId)
     })
     active.set(requestId, { runner, promise })
-    timer = setTimeout(() => runner.abortAll(), timeoutMs)
+    const timer = setTimeout(() => runner.abortAll(), timeoutMs)
     try {
       runner.start(plan, cwd)
     } catch (error) {
