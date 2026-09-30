@@ -1,0 +1,63 @@
+name: portable-list
+executable: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\node_modules\electron-winstaller\vendor\7z-x64.exe
+arguments-json: ["l","-slt","D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-0.1.0-portable.exe"]
+working-directory: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\dist\candidate-ee03338-local
+started-utc: 2026-09-30T09:58:16.8056142Z
+exit-code: 0
+--- stdout ---
+
+7-Zip [64] 16.04 : Copyright (c) 1999-2016 Igor Pavlov : 2016-10-04
+
+Scanning the drive for archives:
+1 file, 104271801 bytes (100 MiB)
+
+Listing archive: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\dist\candidate-ee03338-local\Arckeep-0.1.0-portable.exe
+
+--
+Path = D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\dist\candidate-ee03338-local\Arckeep-0.1.0-portable.exe
+Type = Nsis
+Physical Size = 104271801
+Method = Deflate
+Solid = -
+Headers Size = 39604
+Embedded Stub Size = 57856
+SubType = NSIS-3 Unicode
+
+----------
+Path = $PLUGINSDIR\System.dll
+Size = 
+Packed Size = 6931
+Modified = 
+Attributes = 
+Method = Deflate
+Solid = -
+Offset = 0
+
+Path = $PLUGINSDIR\app-64.7z
+Size = 103913864
+Packed Size = 103913864
+Modified = 2026-09-30 17:56:50
+Attributes = 
+Method = Copy
+Solid = -
+Offset = 6935
+
+Path = $PLUGINSDIR\nsis7z.dll
+Size = 
+Packed Size = 242382
+Modified = 
+Attributes = 
+Method = Deflate
+Solid = -
+Offset = 103920803
+
+Path = $PLUGINSDIR\StdUtils.dll
+Size = 
+Packed Size = 45608
+Modified = 
+Attributes = 
+Method = Deflate
+Solid = -
+Offset = 104163189
+--- stderr ---
+

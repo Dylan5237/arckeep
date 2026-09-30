@@ -1,0 +1,14 @@
+
+> arckeep@0.1.0 test
+> vitest run test/tool-validate.test.ts
+
+
+ RUN  v3.2.7 D:/_projects/platform/arckeep/.worktrees/6-codex-mvp-delivery
+
+ ✓ test/tool-validate.test.ts (11 tests) 27ms
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  15:05:48
+   Duration  1.40s (transform 118ms, setup 0ms, collect 294ms, tests 27ms, environment 0ms, prepare 132ms)
+

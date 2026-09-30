@@ -1,0 +1,18 @@
+{
+  "applicationVersion": "0.1.0",
+  "configuredElectronVersion": "43.7.6",
+  "sourceRevision": "e3ea343dd0c3d88dbbc47ce82e58351fbc44d35c",
+  "tag": null,
+  "artifacts": [
+    {
+      "name": "Arckeep-Setup-0.1.0.exe",
+      "bytes": 104494540,
+      "sha256": "54bb870141ee3b0190a8cfc249f0dfa0f4dc945d349ce4cf95d738952ab3fa78"
+    },
+    {
+      "name": "Arckeep-0.1.0-portable.exe",
+      "bytes": 104268806,
+      "sha256": "43aff0e807dc2ccb130038eb8421f72facbcc5abeea8cf1f10a57aadae44d1df"
+    }
+  ]
+}

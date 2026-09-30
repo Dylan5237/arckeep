@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Single formal-long-command-app-quit retest after integrated termination fix",
+  "createdAtUtc": "2026-09-30T08:47:11.1502278Z",
+  "delivery": {
+    "path": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+    "branch": "fix/6-mvp-delivery",
+    "head": "f90e798aa24e1726ea615f1b6f8d98c2afde4434",
+    "expectedHead": "f90e798aa24e1726ea615f1b6f8d98c2afde4434",
+    "worktreeClean": true,
+    "expectedElectronVersion": "43.7.6",
+    "runtimeElectronVersion": "43.7.6",
+    "sourceManifestSha256": "969e9f218d50c1190e27915d85cf8bf68609291eaa6c356e4494b790974f509b",
+    "compiledManifestSha256": "ddbf073d8dd2e1d74fa3442ea1186f215730923589b0a2990c15dd0b54ec2398",
+    "buildCorrespondence": "NOT_AUTOMATICALLY_VERIFIED; actual Electron runtime version, source HEAD, and compiled-output hashes are independent observations"
+  },
+  "runner": {
+    "path": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\final-candidate-command.mjs",
+    "sha256": "31ab19d5f36cd6586a9c0a20028659f057c7a99462cca20238a6cc6d19285d27",
+    "invocation": "node final-candidate-command.mjs --serial-window-authorized --formal-quit-only --results-out results-formal-quit-f90e798.json",
+    "scenarioSelection": "FORMAL_LONG_COMMAND_QUIT_ONLY"
+  },
+  "outcome": {
+    "resultsPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\results-formal-quit-f90e798.json",
+    "resultsSha256": "7ed33f19e68e008daa838065c8bf53af39baa3224308873a9e0d23b8133634ca",
+    "logPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\runner-formal-quit-f90e798.txt",
+    "logSha256": "f92b3f68d4248cd1254cbc01e39425f7a7961223b9bcf091094aabfb700956a4",
+    "preparedManifestPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\prepared.json",
+    "preparedManifestSha256": "d133014e21a9f4f8ebe9a6ae772774fbc3439ab951c3d6bfe6aa70313a425dba",
+    "preservedPriorPreparedManifest": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\prepared-e3ea343-original.json",
+    "verdict": "SELECTED_SCENARIOS_COMPLETE_WITH_RECORDED_SCOPE",
+    "scenarioVerdict": "OBSERVED_WITH_RECORDED_SCOPE",
+    "finding": "FORMAL_LONG_COMMAND_AND_CHILD_ABSENT_AFTER_APP_QUIT_WITHOUT_COMPLETION_SENTINELS",
+    "startedAt": "2026-09-30T08:43:02.715Z",
+    "quitRequestedAt": "2026-09-30T08:43:38.913Z",
+    "startedToQuitMs": 21236,
+    "observedAtAfterQuitBeforeCleanup": "2026-09-30T08:43:41.86Z"
+  },
+  "afterQuitBeforeCleanup": {
+    "main": "absent",
+    "command": "absent",
+    "child": "absent",
+    "formalCompleted": null,
+    "childCompleted": null
+  },
+  "sentinels": {
+    "formalParentStarted": true,
+    "formalParentCompleted": false,
+    "formalChildStarted": true,
+    "formalChildCompleted": false
+  },
+  "processReadbacksAfterRun": [
+    {
+      "label": "electron-main",
+      "pid": 64636,
+      "state": "absent",
+      "executablePath": null
+    },
+    {
+      "label": "playwright-child",
+      "pid": 59404,
+      "state": "absent",
+      "executablePath": null
+    },
+    {
+      "label": "long-formal-parent.ps1",
+      "pid": 12180,
+      "state": "absent",
+      "executablePath": null
+    },
+    {
+      "label": "long-formal-child.ps1",
+      "pid": 42096,
+      "state": "absent",
+      "executablePath": null
+    }
+  ],
+  "runnerOwnedPidCleanup": [
+    {
+      "pid": 12180,
+      "preCleanupObservedAt": "2026-09-30T08:43:48.127Z",
+      "preCleanup": {
+        "kind": "absent"
+      },
+      "preCleanupParentChain": [
+        {
+          "kind": "absent"
+        }
+      ],
+      "killRequested": false,
+      "afterCleanup": {
+        "kind": "absent"
+      }
+    },
+    {
+      "pid": 42096,
+      "preCleanupObservedAt": "2026-09-30T08:43:51.198Z",
+      "preCleanup": {
+        "kind": "absent"
+      },
+      "preCleanupParentChain": [
+        {
+          "kind": "absent"
+        }
+      ],
+      "killRequested": false,
+      "afterCleanup": {
+        "kind": "absent"
+      }
+    }
+  ],
+  "rootWrapper": {
+    "temporaryPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\.final-candidate-command-root-wrapper-2026-09-30T084302-717Z-formal-long-command-app-quit-live-processes.cjs",
+    "temporaryPathExists": false,
+    "archivePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\command-root-wrapper.cjs",
+    "archiveExists": true,
+    "expectedSha256": "c256813f9767b6162c58a24988ffa16d68b1c0b1ba767e96bda879dfa80bd284",
+    "observedSha256": "c256813f9767b6162c58a24988ffa16d68b1c0b1ba767e96bda879dfa80bd284",
+    "hashMatches": true
+  },
+  "retainedBaseline": {
+    "path": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\prepared-e3ea343-original.json",
+    "sha256": "5c87aac55d3fa5d81ba939136839af173c6f2debb24cdde372d5a769797fbf7b",
+    "originalDeliveryHead": "e3ea343dd0c3d88dbbc47ce82e58351fbc44d35c"
+  },
+  "beforeQuit": {
+    "main": "alive",
+    "command": "alive",
+    "child": "alive",
+    "formalCompleted": null,
+    "childCompleted": null,
+    "observedAt": "2026-09-30T08:43:38.912Z"
+  },
+  "preservedPriorFailure": {
+    "path": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\results-formal-quit.json",
+    "sha256": "08bc6f36f368dac640719118d15949a2c2010bc456869e8f47459b3e52a5f302",
+    "verdict": "INCOMPLETE_OR_FAILED",
+    "lastWriteTime": "2026-09-30T16:02:22.0836012+08:00"
+  },
+  "preservedPriorRunnerLog": {
+    "path": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\runner-final-evidence.txt",
+    "sha256": "7ced826ff4c52802d222a3a7946a0c9376bc82771dcf5e159e133f1cde845d1c"
+  }
+}

@@ -1,0 +1,30 @@
+name: portable-extract-app-64
+executable: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\node_modules\electron-winstaller\vendor\7z-x64.exe
+arguments-json: ["e","-y","-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\portable","D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-0.1.0-portable.exe","$PLUGINSDIR\\app-64.7z"]
+working-directory: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\dist\candidate-ee03338-local
+started-utc: 2026-09-30T09:58:16.9624478Z
+exit-code: 0
+--- stdout ---
+
+7-Zip [64] 16.04 : Copyright (c) 1999-2016 Igor Pavlov : 2016-10-04
+
+Scanning the drive for archives:
+1 file, 104271801 bytes (100 MiB)
+
+Extracting archive: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\dist\candidate-ee03338-local\Arckeep-0.1.0-portable.exe
+--
+Path = D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\dist\candidate-ee03338-local\Arckeep-0.1.0-portable.exe
+Type = Nsis
+Physical Size = 104271801
+Method = Deflate
+Solid = -
+Headers Size = 39604
+Embedded Stub Size = 57856
+SubType = NSIS-3 Unicode
+
+Everything is Ok
+
+Size:       103913864
+Compressed: 104271801
+--- stderr ---
+

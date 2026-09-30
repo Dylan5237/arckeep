@@ -1,0 +1,3 @@
+# Preserve native tool output exactly, including generated spaces and blank lines.
+checks/*.txt -text -whitespace
+payload-verification-*/tool-logs/*.txt -text -whitespace

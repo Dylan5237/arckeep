@@ -1,0 +1,11 @@
+{
+  "state": "PREPARED_WAITING_FOR_SERIAL_GUI_WINDOW",
+  "preparedPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\prepared.json",
+  "deliveryHead": "f90e798aa24e1726ea615f1b6f8d98c2afde4434",
+  "compiledManifestSha256": "ddbf073d8dd2e1d74fa3442ea1186f215730923589b0a2990c15dd0b54ec2398",
+  "electronLaunches": 0
+}
+2026-09-30T08:43:02.716Z prepared source HEAD and compiled artifact hashes match; beginning authorized serial GUI run
+2026-09-30T08:43:53.289Z formal-long-command-app-quit-live-processes: OBSERVED_WITH_RECORDED_SCOPE
+2026-09-30T08:43:53.291Z verdict=SELECTED_SCENARIOS_COMPLETE_WITH_RECORDED_SCOPE
+2026-09-30T08:43:53.291Z results=D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\final-candidate-command-20260930T070215Z\results-formal-quit-f90e798.json

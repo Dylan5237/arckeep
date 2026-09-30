@@ -1,0 +1,29 @@
+name: portable-payload-Arckeep-exe
+executable: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\node_modules\electron-winstaller\vendor\7z-x64.exe
+arguments-json: ["x","-y","-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\portable\\Arckeep-73ae69f119f14a3f8eaeaa5747ef310a","D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\portable\\app-64.7z","Arckeep.exe"]
+working-directory: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\dist\candidate-ee03338-local
+started-utc: 2026-09-30T09:58:19.9594345Z
+exit-code: 0
+--- stdout ---
+
+7-Zip [64] 16.04 : Copyright (c) 1999-2016 Igor Pavlov : 2016-10-04
+
+Scanning the drive for archives:
+1 file, 103913864 bytes (100 MiB)
+
+Extracting archive: D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\payload-verification-ee03338\raw-payloads\containers\portable\app-64.7z
+--
+Path = D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\payload-verification-ee03338\raw-payloads\containers\portable\app-64.7z
+Type = 7z
+Physical Size = 103913864
+Headers Size = 1549
+Method = LZMA2:20 LZMA:20 BCJ2
+Solid = -
+Blocks = 79
+
+Everything is Ok
+
+Size:       239024128
+Compressed: 103913864
+--- stderr ---
+

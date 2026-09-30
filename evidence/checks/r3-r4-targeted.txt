@@ -1,0 +1,20 @@
+
+> arckeep@0.1.0 test
+> vitest run --run test/tool-stderr-streaming.test.ts test/tool-ipc-shutdown.test.ts test/tool-rehearsal-lifecycle.test.ts
+
+
+ RUN  v3.2.7 D:/_projects/platform/arckeep/.worktrees/6-codex-mvp-delivery
+
+ ✓ test/tool-rehearsal-lifecycle.test.ts (4 tests) 4ms
+ ✓ test/tool-ipc-shutdown.test.ts (1 test) 7ms
+ ✓ test/tool-stderr-streaming.test.ts (6 tests) 6058ms
+   ✓ live stderr visibility and dual-stream limits > powershell.exe emits diagnostics while the command is still running  2297ms
+   ✓ live stderr visibility and dual-stream limits > powershell.exe retains diagnostics even when stdout fills its quota first  505ms
+   ✓ live stderr visibility and dual-stream limits > pwsh.exe emits diagnostics while the command is still running  2457ms
+   ✓ live stderr visibility and dual-stream limits > pwsh.exe retains diagnostics even when stdout fills its quota first  796ms
+
+ Test Files  3 passed (3)
+      Tests  11 passed (11)
+   Start at  17:43:15
+   Duration  7.71s (transform 258ms, setup 0ms, collect 1.19s, tests 6.07s, environment 0ms, prepare 358ms)
+

@@ -1,0 +1,14 @@
+{
+    "name":  "portable-list",
+    "executable":  "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+    "arguments":  [
+                      "l",
+                      "-slt",
+                      "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-f90e798\\Arckeep-0.1.0-portable.exe"
+                  ],
+    "workingDirectory":  "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-f90e798",
+    "startedUtc":  "2026-09-30T08:44:30.3842227Z",
+    "exitCode":  0,
+    "stdout":  "\r\n7-Zip [64] 16.04 : Copyright (c) 1999-2016 Igor Pavlov : 2016-10-04\r\n\r\nScanning the drive for archives:\r\n1 file, 104272067 bytes (100 MiB)\r\n\r\nListing archive: D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-f90e798\\Arckeep-0.1.0-portable.exe\r\n\r\n--\r\nPath = D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-f90e798\\Arckeep-0.1.0-portable.exe\r\nType = Nsis\r\nPhysical Size = 104272067\r\nMethod = Deflate\r\nSolid = -\r\nHeaders Size = 39604\r\nEmbedded Stub Size = 57856\r\nSubType = NSIS-3 Unicode\r\n\r\n----------\r\nPath = $PLUGINSDIR\\System.dll\r\nSize = \r\nPacked Size = 6931\r\nModified = \r\nAttributes = \r\nMethod = Deflate\r\nSolid = -\r\nOffset = 0\r\n\r\nPath = $PLUGINSDIR\\app-64.7z\r\nSize = 103914129\r\nPacked Size = 103914129\r\nModified = 2026-09-30 16:40:52\r\nAttributes = \r\nMethod = Copy\r\nSolid = -\r\nOffset = 6935\r\n\r\nPath = $PLUGINSDIR\\nsis7z.dll\r\nSize = \r\nPacked Size = 242382\r\nModified = \r\nAttributes = \r\nMethod = Deflate\r\nSolid = -\r\nOffset = 103921068\r\n\r\nPath = $PLUGINSDIR\\StdUtils.dll\r\nSize = \r\nPacked Size = 45608\r\nModified = \r\nAttributes = \r\nMethod = Deflate\r\nSolid = -\r\nOffset = 104163454\r\n\r\n",
+    "stderr":  ""
+}

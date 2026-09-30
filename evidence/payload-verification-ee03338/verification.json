@@ -1,0 +1,356 @@
+{
+  "generatedUtc": "2026-09-30T09:58:23.9098659Z",
+  "sourceRoot": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+  "packageDir": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+  "sourceRevision": "ee033380291d8968e3e8e5dd8fcf383e236f58fe",
+  "packageManifestSourceRevision": "ee033380291d8968e3e8e5dd8fcf383e236f58fe",
+  "sourceRevisionMatchesPackageManifest": true,
+  "scope": "Read-only extraction and SHA-256 comparison of the literal $PLUGINSDIR\\app-64.7z entry in the NSIS installer and portable package; selected payload files are compared with win-unpacked; application, installer, and portable associated icons are saved as PNG. This does not execute the installer or app and does not establish clean-machine installation or business acceptance.",
+  "package": {
+    "installer": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-Setup-0.1.0.exe",
+    "portable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-0.1.0-portable.exe",
+    "sevenZip": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe"
+  },
+  "containers": [
+    {
+      "kind": "installer",
+      "packagePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-Setup-0.1.0.exe",
+      "entry": "$PLUGINSDIR\\app-64.7z",
+      "entryBytes": 103913864,
+      "extractedPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\installer\\app-64.7z",
+      "sha256": "CC87E5AD0BCC081A09DA87B09B5AA3056380453318A5274E21641644412DC026"
+    },
+    {
+      "kind": "portable",
+      "packagePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-0.1.0-portable.exe",
+      "entry": "$PLUGINSDIR\\app-64.7z",
+      "entryBytes": 103913864,
+      "extractedPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\portable\\app-64.7z",
+      "sha256": "CC87E5AD0BCC081A09DA87B09B5AA3056380453318A5274E21641644412DC026"
+    }
+  ],
+  "payloadArchivesMatch": true,
+  "keyFilesMatchWinUnpacked": true,
+  "keyFiles": [
+    {
+      "name": "Arckeep.exe",
+      "installerPayload": {
+        "sha256": "061CD08DCC11FFD6DB3FD6A76F265F2113F9FFCF8AD9CEAA8E53B38485D834A4",
+        "extractedPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\installer\\Arckeep-e0a4e90a048949a7bd8a4808d86e69aa\\Arckeep.exe",
+        "matchesWinUnpacked": true
+      },
+      "portablePayload": {
+        "sha256": "061CD08DCC11FFD6DB3FD6A76F265F2113F9FFCF8AD9CEAA8E53B38485D834A4",
+        "extractedPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\portable\\Arckeep-73ae69f119f14a3f8eaeaa5747ef310a\\Arckeep.exe",
+        "matchesWinUnpacked": true
+      },
+      "winUnpacked": {
+        "sha256": "061CD08DCC11FFD6DB3FD6A76F265F2113F9FFCF8AD9CEAA8E53B38485D834A4",
+        "path": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\win-unpacked\\Arckeep.exe"
+      }
+    },
+    {
+      "name": "resources/app.asar",
+      "installerPayload": {
+        "sha256": "A349EA67C318CA595E9D8A467FE2D8174A7D24FF8B2E5816EA921310783E2540",
+        "extractedPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\installer\\app-c2a2f0b6fc104795a4d417e6d36595ad\\resources\\app.asar",
+        "matchesWinUnpacked": true
+      },
+      "portablePayload": {
+        "sha256": "A349EA67C318CA595E9D8A467FE2D8174A7D24FF8B2E5816EA921310783E2540",
+        "extractedPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\portable\\app-75e0b261e53d42a4b108e17042cb3f38\\resources\\app.asar",
+        "matchesWinUnpacked": true
+      },
+      "winUnpacked": {
+        "sha256": "A349EA67C318CA595E9D8A467FE2D8174A7D24FF8B2E5816EA921310783E2540",
+        "path": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\win-unpacked\\resources\\app.asar"
+      }
+    },
+    {
+      "name": "resources/icon.ico",
+      "installerPayload": {
+        "sha256": "A3C7F9C99B512ABE5E57B4A06C2C50F0622C66D7DE6CA267A3912058332B47F4",
+        "extractedPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\installer\\icon-67ca92948f824695a84129595af77c1f\\resources\\icon.ico",
+        "matchesWinUnpacked": true
+      },
+      "portablePayload": {
+        "sha256": "A3C7F9C99B512ABE5E57B4A06C2C50F0622C66D7DE6CA267A3912058332B47F4",
+        "extractedPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\portable\\icon-e13892dc28a142259dbe4eb04511a3c1\\resources\\icon.ico",
+        "matchesWinUnpacked": true
+      },
+      "winUnpacked": {
+        "sha256": "A3C7F9C99B512ABE5E57B4A06C2C50F0622C66D7DE6CA267A3912058332B47F4",
+        "path": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\win-unpacked\\resources\\icon.ico"
+      }
+    },
+    {
+      "name": "resources/icon.png",
+      "installerPayload": {
+        "sha256": "99BF922830F485F58A3FDD2A4A4F532F3F3F1A5DB83E88B6BB25EBE4BB9AEC8F",
+        "extractedPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\installer\\icon-ee3aacdd665d4f43a2d409cbed0793d1\\resources\\icon.png",
+        "matchesWinUnpacked": true
+      },
+      "portablePayload": {
+        "sha256": "99BF922830F485F58A3FDD2A4A4F532F3F3F1A5DB83E88B6BB25EBE4BB9AEC8F",
+        "extractedPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\portable\\icon-1befbdbcb01f4c83b9151717b6fab0df\\resources\\icon.png",
+        "matchesWinUnpacked": true
+      },
+      "winUnpacked": {
+        "sha256": "99BF922830F485F58A3FDD2A4A4F532F3F3F1A5DB83E88B6BB25EBE4BB9AEC8F",
+        "path": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\win-unpacked\\resources\\icon.png"
+      }
+    }
+  ],
+  "icons": [
+    {
+      "name": "application",
+      "source": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\win-unpacked\\Arckeep.exe",
+      "method": "System.Drawing.Icon.ExtractAssociatedIcon",
+      "output": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\icons\\application.png",
+      "width": 32,
+      "height": 32,
+      "bytes": 1252,
+      "sha256": "6B8A1BF335DE91B321BCD33ACB741FB909884745460F0A003D33BC630D9F0A22"
+    },
+    {
+      "name": "installer",
+      "source": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-Setup-0.1.0.exe",
+      "method": "System.Drawing.Icon.ExtractAssociatedIcon",
+      "output": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\icons\\installer.png",
+      "width": 32,
+      "height": 32,
+      "bytes": 1252,
+      "sha256": "6B8A1BF335DE91B321BCD33ACB741FB909884745460F0A003D33BC630D9F0A22"
+    },
+    {
+      "name": "portable",
+      "source": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-0.1.0-portable.exe",
+      "method": "System.Drawing.Icon.ExtractAssociatedIcon",
+      "output": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\icons\\portable.png",
+      "width": 32,
+      "height": 32,
+      "bytes": 1252,
+      "sha256": "6B8A1BF335DE91B321BCD33ACB741FB909884745460F0A003D33BC630D9F0A22"
+    }
+  ],
+  "toolLogDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs",
+  "toolCommands": [
+    {
+      "name": "source-revision",
+      "executable": "git.exe",
+      "arguments": [
+        "-C",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+        "rev-parse",
+        "HEAD"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\source-revision.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\source-revision.txt"
+    },
+    {
+      "name": "installer-list",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "l",
+        "-slt",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-Setup-0.1.0.exe"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-list.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-list.txt"
+    },
+    {
+      "name": "portable-list",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "l",
+        "-slt",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-0.1.0-portable.exe"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-list.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-list.txt"
+    },
+    {
+      "name": "installer-extract-app-64",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "e",
+        "-y",
+        "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\installer",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-Setup-0.1.0.exe",
+        "$PLUGINSDIR\\app-64.7z"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-extract-app-64.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-extract-app-64.txt"
+    },
+    {
+      "name": "portable-extract-app-64",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "e",
+        "-y",
+        "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\portable",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-0.1.0-portable.exe",
+        "$PLUGINSDIR\\app-64.7z"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-extract-app-64.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-extract-app-64.txt"
+    },
+    {
+      "name": "installer-payload-list",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "l",
+        "-slt",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\installer\\app-64.7z"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-payload-list.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-payload-list.txt"
+    },
+    {
+      "name": "portable-payload-list",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "l",
+        "-slt",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\portable\\app-64.7z"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-payload-list.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-payload-list.txt"
+    },
+    {
+      "name": "installer-payload-Arckeep-exe",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "x",
+        "-y",
+        "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\installer\\Arckeep-e0a4e90a048949a7bd8a4808d86e69aa",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\installer\\app-64.7z",
+        "Arckeep.exe"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-payload-Arckeep-exe.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-payload-Arckeep-exe.txt"
+    },
+    {
+      "name": "portable-payload-Arckeep-exe",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "x",
+        "-y",
+        "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\portable\\Arckeep-73ae69f119f14a3f8eaeaa5747ef310a",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\portable\\app-64.7z",
+        "Arckeep.exe"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-payload-Arckeep-exe.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-payload-Arckeep-exe.txt"
+    },
+    {
+      "name": "installer-payload-resources-app-asar",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "x",
+        "-y",
+        "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\installer\\app-c2a2f0b6fc104795a4d417e6d36595ad",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\installer\\app-64.7z",
+        "resources\\app.asar"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-payload-resources-app-asar.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-payload-resources-app-asar.txt"
+    },
+    {
+      "name": "portable-payload-resources-app-asar",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "x",
+        "-y",
+        "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\portable\\app-75e0b261e53d42a4b108e17042cb3f38",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\portable\\app-64.7z",
+        "resources\\app.asar"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-payload-resources-app-asar.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-payload-resources-app-asar.txt"
+    },
+    {
+      "name": "installer-payload-resources-icon-ico",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "x",
+        "-y",
+        "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\installer\\icon-67ca92948f824695a84129595af77c1f",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\installer\\app-64.7z",
+        "resources\\icon.ico"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-payload-resources-icon-ico.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-payload-resources-icon-ico.txt"
+    },
+    {
+      "name": "portable-payload-resources-icon-ico",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "x",
+        "-y",
+        "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\portable\\icon-e13892dc28a142259dbe4eb04511a3c1",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\portable\\app-64.7z",
+        "resources\\icon.ico"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-payload-resources-icon-ico.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-payload-resources-icon-ico.txt"
+    },
+    {
+      "name": "installer-payload-resources-icon-png",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "x",
+        "-y",
+        "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\installer\\icon-ee3aacdd665d4f43a2d409cbed0793d1",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\installer\\app-64.7z",
+        "resources\\icon.png"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-payload-resources-icon-png.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\installer-payload-resources-icon-png.txt"
+    },
+    {
+      "name": "portable-payload-resources-icon-png",
+      "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+      "arguments": [
+        "x",
+        "-y",
+        "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\payload-keyfiles\\portable\\icon-1befbdbcb01f4c83b9151717b6fab0df",
+        "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\raw-payloads\\containers\\portable\\app-64.7z",
+        "resources\\icon.png"
+      ],
+      "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local",
+      "exitCode": 0,
+      "log": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-payload-resources-icon-png.json",
+      "textLog": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-ee03338\\tool-logs\\portable-payload-resources-icon-png.txt"
+    }
+  ],
+  "result": "PASS"
+}

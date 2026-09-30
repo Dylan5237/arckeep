@@ -1,0 +1,33 @@
+{
+  "observedDate": "2026-09-30",
+  "scope": "Read-only GitHub and origin readback; no remote writes",
+  "authority": {
+    "remote": "origin",
+    "repository": "Dylan5237/arckeep",
+    "mainRevision": "417c3e453643ddeba09d961f7b72b6b1bab4327d",
+    "command": "git ls-remote origin refs/heads/main"
+  },
+  "governancePullRequest": {
+    "number": 31,
+    "title": "接入 agent-project-ops",
+    "state": "OPEN",
+    "headRevision": "9237b7d22a0b6243b6485f68b70ffbdc60e77e8d",
+    "reviewDecision": "",
+    "url": "https://github.com/Dylan5237/arckeep/pull/31"
+  },
+  "deliveryIssue": {
+    "number": 6,
+    "title": "v0.1.0 MVP 发布",
+    "state": "OPEN",
+    "url": "https://github.com/Dylan5237/arckeep/issues/6",
+    "acceptanceCheckboxesObserved": "All six remain unchecked",
+    "requirements": [
+      "tag v0.1.0 and successful Actions packaging run",
+      "Release v0.1.0 includes NSIS and portable files named with 0.1.0",
+      "Application displays version 0.1.0",
+      "Clean Windows setup in three README steps and actual waiting data",
+      "README known limitations section",
+      "MVP tracking issue 7 has functional issues 1, 2, 4, 3 and 5 checked"
+    ]
+  }
+}

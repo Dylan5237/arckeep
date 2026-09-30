@@ -1,0 +1,67 @@
+
+> arckeep@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 D:/_projects/platform/arckeep/.worktrees/6-codex-mvp-delivery
+
+ ✓ test/test-hooks.test.ts (5 tests) 12ms
+ ✓ test/github-auth.test.ts (5 tests) 13ms
+ ✓ test/pack-mode.test.ts (1 test) 147ms
+ ✓ test/tool-quote.test.ts (8 tests) 17ms
+ ✓ test/capture-draft.test.ts (4 tests) 32ms
+ ✓ test/tool-runner-shutdown.test.ts (3 tests) 381ms
+ ✓ test/tool-actions-confirmation.test.ts (2 tests) 14ms
+ ✓ test/tool-rehearsal-lifecycle.test.ts (3 tests) 7ms
+ ✓ test/tool-validate.test.ts (11 tests) 54ms
+ ✓ test/publish-never.test.ts (2 tests) 12ms
+ ✓ test/tool-rehearsal.test.ts (9 tests) 26ms
+ ✓ test/token-store.test.ts (3 tests) 60ms
+ ✓ test/launch-window.test.ts (2 tests) 69ms
+ ✓ test/screenshot-scene.test.ts (2 tests) 81ms
+ ✓ test/todos.test.ts (11 tests) 221ms
+ ✓ test/ipc-validators.test.ts (9 tests) 11ms
+ ✓ test/settings-service.test.ts (10 tests) 156ms
+ ✓ test/hotkey-status.test.ts (6 tests) 8ms
+ ✓ test/parse-capture.test.ts (8 tests) 9ms
+ ✓ test/screenshot-todos.test.ts (1 test) 9ms
+ ✓ test/hotkey.test.ts (5 tests) 8ms
+ ✓ test/graceful-shutdown.test.ts (2 tests) 6ms
+ ✓ test/electron-fuses.test.ts (1 test) 4ms
+ ✓ test/overview.test.ts (18 tests) 161ms
+ ✓ test/tool-preview-bindings.test.ts (4 tests) 7ms
+ ✓ test/window-prefs.test.ts (1 test) 5ms
+ ✓ test/url-trust.test.ts (7 tests) 9ms
+ ✓ test/waiting-page.test.ts (6 tests) 7ms
+ ✓ test/tool-run-events.test.ts (1 test) 6ms
+ ✓ test/token-field.test.ts (1 test) 4ms
+ ✓ test/waiting-todos.test.ts (5 tests) 95ms
+ ✓ test/waiting-rules.test.ts (73 tests) 221ms
+ ✓ test/waiting.test.ts (23 tests) 236ms
+ ✓ test/capture-enter.test.ts (3 tests) 121ms
+ ✓ test/todo-row-actions.test.ts (1 test) 61ms
+ ✓ test/todo-lifecycle.test.ts (5 tests) 100ms
+ ✓ test/tool-runner.test.ts (21 tests) 27107ms
+   ✓ process tree termination > kills a child that the command itself started  1719ms
+   ✓ live shell injection > cmd keeps hostile parameters as data  4322ms
+   ✓ live shell injection > cmd reports exit code 3  414ms
+   ✓ live shell injection > powershell powershell.exe keeps hostile parameters as data  3717ms
+   ✓ live shell injection > powershell powershell.exe reports exit code 3  390ms
+   ✓ live shell injection > powershell pwsh.exe keeps hostile parameters as data  5256ms
+   ✓ live shell injection > powershell pwsh.exe reports exit code 3  503ms
+   ✓ live shell injection > git-bash keeps hostile parameters as data  1803ms
+   ✓ live shell injection > streams stdout and stderr  382ms
+   ✓ live CMD builtin output encoding > preserves UTF-8 stdout and stderr with the actual planned script  363ms
+   ✓ live CMD builtin output encoding > preserves builtin and native UTF-8 output in either command order  856ms
+   ✓ live CMD builtin output encoding > passes cwd and stdin EOF through the hidden launcher  406ms
+   ✓ live CMD relay process tree cleanup > kills a native descendant when aborting the hidden cmd relay  1162ms
+   ✓ live PowerShell result and parameter fidelity > powershell.exe reports cmdlet errors and preserves explicit exit codes  1372ms
+   ✓ live PowerShell result and parameter fidelity > powershell.exe preserves quoted cmdlet, script, and native arguments  935ms
+   ✓ live PowerShell result and parameter fidelity > pwsh.exe reports cmdlet errors and preserves explicit exit codes  1998ms
+   ✓ live PowerShell result and parameter fidelity > pwsh.exe preserves quoted cmdlet, script, and native arguments  1327ms
+
+ Test Files  37 passed (37)
+      Tests  282 passed (282)
+   Start at  16:38:00
+   Duration  31.12s (transform 10.58s, setup 0ms, collect 35.10s, tests 29.50s, environment 3.23s, prepare 11.10s)
+

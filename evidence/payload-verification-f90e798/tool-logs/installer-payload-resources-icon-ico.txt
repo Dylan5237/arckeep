@@ -1,0 +1,29 @@
+name: installer-payload-resources-icon-ico
+executable: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\node_modules\electron-winstaller\vendor\7z-x64.exe
+arguments-json: ["x","-y","-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-f90e798\\raw-payloads\\payload-keyfiles\\installer\\icon-9bf1da4cbfa743289d606c834d256936","D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-f90e798\\raw-payloads\\containers\\installer\\app-64.7z","resources\\icon.ico"]
+working-directory: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\dist\candidate-f90e798
+started-utc: 2026-09-30T08:44:37.7246518Z
+exit-code: 0
+--- stdout ---
+
+7-Zip [64] 16.04 : Copyright (c) 1999-2016 Igor Pavlov : 2016-10-04
+
+Scanning the drive for archives:
+1 file, 103914129 bytes (100 MiB)
+
+Extracting archive: D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\payload-verification-f90e798\raw-payloads\containers\installer\app-64.7z
+--
+Path = D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\payload-verification-f90e798\raw-payloads\containers\installer\app-64.7z
+Type = 7z
+Physical Size = 103914129
+Headers Size = 1549
+Method = LZMA2:20 LZMA:20 BCJ2
+Solid = -
+Blocks = 79
+
+Everything is Ok
+
+Size:       19713
+Compressed: 103914129
+--- stderr ---
+

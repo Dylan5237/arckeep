@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Arckeep-Setup-0.1.0.exe",
+    "status": "NotSigned",
+    "statusMessage": "The file D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-Setup-0.1.0.exe is not digitally signed. You cannot run this script on the current system. For more information about running scripts and setting execution policy, see about_Execution_Policies at https://go.microsoft.com/fwlink/?LinkID=135170"
+  },
+  {
+    "name": "Arckeep-0.1.0-portable.exe",
+    "status": "NotSigned",
+    "statusMessage": "The file D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-ee03338-local\\Arckeep-0.1.0-portable.exe is not digitally signed. You cannot run this script on the current system. For more information about running scripts and setting execution policy, see about_Execution_Policies at https://go.microsoft.com/fwlink/?LinkID=135170"
+  }
+]

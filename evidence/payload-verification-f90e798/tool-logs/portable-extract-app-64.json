@@ -1,0 +1,16 @@
+{
+    "name":  "portable-extract-app-64",
+    "executable":  "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+    "arguments":  [
+                      "e",
+                      "-y",
+                      "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-f90e798\\raw-payloads\\containers\\portable",
+                      "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-f90e798\\Arckeep-0.1.0-portable.exe",
+                      "$PLUGINSDIR\\app-64.7z"
+                  ],
+    "workingDirectory":  "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-f90e798",
+    "startedUtc":  "2026-09-30T08:44:30.5387127Z",
+    "exitCode":  0,
+    "stdout":  "\r\n7-Zip [64] 16.04 : Copyright (c) 1999-2016 Igor Pavlov : 2016-10-04\r\n\r\nScanning the drive for archives:\r\n1 file, 104272067 bytes (100 MiB)\r\n\r\nExtracting archive: D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-f90e798\\Arckeep-0.1.0-portable.exe\r\n--\r\nPath = D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-f90e798\\Arckeep-0.1.0-portable.exe\r\nType = Nsis\r\nPhysical Size = 104272067\r\nMethod = Deflate\r\nSolid = -\r\nHeaders Size = 39604\r\nEmbedded Stub Size = 57856\r\nSubType = NSIS-3 Unicode\r\n\r\nEverything is Ok\r\n\r\nSize:       103914129\r\nCompressed: 104272067\r\n",
+    "stderr":  ""
+}

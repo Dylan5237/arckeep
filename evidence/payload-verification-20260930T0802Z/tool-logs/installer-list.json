@@ -1,0 +1,14 @@
+{
+    "name":  "installer-list",
+    "executable":  "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+    "arguments":  [
+                      "l",
+                      "-slt",
+                      "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-e3ea343\\Arckeep-Setup-0.1.0.exe"
+                  ],
+    "workingDirectory":  "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-e3ea343",
+    "startedUtc":  "2026-09-30T08:00:34.1550080Z",
+    "exitCode":  0,
+    "stdout":  "\r\n7-Zip [64] 16.04 : Copyright (c) 1999-2016 Igor Pavlov : 2016-10-04\r\n\r\nScanning the drive for archives:\r\n1 file, 104494540 bytes (100 MiB)\r\n\r\nListing archive: D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-e3ea343\\Arckeep-Setup-0.1.0.exe\r\n\r\n--\r\nPath = D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-e3ea343\\Arckeep-Setup-0.1.0.exe\r\nType = Nsis\r\nPhysical Size = 104494540\r\nMethod = Deflate\r\nSolid = -\r\nHeaders Size = 213426\r\nEmbedded Stub Size = 65536\r\nSubType = NSIS-3 Unicode\r\n\r\n----------\r\nPath = $PLUGINSDIR\\System.dll\r\nSize = \r\nPacked Size = 6931\r\nModified = \r\nAttributes = \r\nMethod = Deflate\r\nSolid = -\r\nOffset = 0\r\n\r\nPath = $PLUGINSDIR\\UAC.dll\r\nSize = \r\nPacked Size = 8018\r\nModified = \r\nAttributes = \r\nMethod = Deflate\r\nSolid = -\r\nOffset = 6935\r\n\r\nPath = $PLUGINSDIR\\StdUtils.dll\r\nSize = \r\nPacked Size = 45608\r\nModified = \r\nAttributes = \r\nMethod = Deflate\r\nSolid = -\r\nOffset = 14957\r\n\r\nPath = $PLUGINSDIR\\nsDialogs.dll\r\nSize = \r\nPacked Size = 4684\r\nModified = \r\nAttributes = \r\nMethod = Deflate\r\nSolid = -\r\nOffset = 60569\r\n\r\nPath = $PLUGINSDIR\\modern-wizard.bmp\r\nSize = \r\nPacked Size = 1899\r\nModified = 2019-06-18 03:21:30\r\nAttributes = \r\nMethod = Deflate\r\nSolid = -\r\nOffset = 65257\r\n\r\nPath = $PLUGINSDIR\\nsExec.dll\r\nSize = \r\nPacked Size = 3299\r\nModified = \r\nAttributes = \r\nMethod = Deflate\r\nSolid = -\r\nOffset = 67160\r\n\r\nPath = $PLUGINSDIR\\app-64.7z\r\nSize = 103910866\r\nPacked Size = 103910866\r\nModified = 2026-09-30 15:28:16\r\nAttributes = \r\nMethod = Copy\r\nSolid = -\r\nOffset = 70463\r\n\r\nPath = $PLUGINSDIR\\nsis7z.dll\r\nSize = \r\nPacked Size = 242382\r\nModified = \r\nAttributes = \r\nMethod = Deflate\r\nSolid = -\r\nOffset = 103981333\r\n\r\nPath = $R0\\Uninstall Arckeep.exe\r\nSize = \r\nPacked Size = 156121\r\nModified = 2026-09-30 15:28:18\r\nAttributes = \r\nMethod = Deflate\r\nSolid = -\r\nOffset = 104223719\r\n\r\nPath = $PLUGINSDIR\\WinShell.dll\r\nSize = \r\nPacked Size = 1080\r\nModified = \r\nAttributes = \r\nMethod = Deflate\r\nSolid = -\r\nOffset = 104379844\r\n\r\n",
+    "stderr":  ""
+}

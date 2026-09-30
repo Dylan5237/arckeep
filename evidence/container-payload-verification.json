@@ -1,0 +1,36 @@
+{
+  "SourceRevision": "e3ea343dd0c3d88dbbc47ce82e58351fbc44d35c",
+  "Scope": "Read-only extraction/identity verification, not installer execution or clean Windows acceptance",
+  "Containers": [
+    {
+      "Path": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\verification\\installer-payload-e3ea343\\app-64.7z",
+      "Hash": "D847800234FAFBBC29CB7DACBA505E74ABBEEF6DDA409B6CFBC65A10F6457E48"
+    },
+    {
+      "Path": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\verification\\portable-payload-e3ea343\\app-64.7z",
+      "Hash": "D847800234FAFBBC29CB7DACBA505E74ABBEEF6DDA409B6CFBC65A10F6457E48"
+    }
+  ],
+  "KeyFiles": [
+    {
+      "Name": "Arckeep.exe",
+      "SHA256": "FEB6D4A1D47B904EA198B117975AA5EE8F3C6B9B20DF76CBAE6538940FC3A6FA",
+      "Match": true
+    },
+    {
+      "Name": "resources/app.asar",
+      "SHA256": "1B7299FE0E29654EDEC6D2D3F109F319AD85E7E1021B0B3B1CC2FA88F7761432",
+      "Match": true
+    },
+    {
+      "Name": "resources/icon.ico",
+      "SHA256": "A3C7F9C99B512ABE5E57B4A06C2C50F0622C66D7DE6CA267A3912058332B47F4",
+      "Match": true
+    },
+    {
+      "Name": "resources/icon.png",
+      "SHA256": "99BF922830F485F58A3FDD2A4A4F532F3F3F1A5DB83E88B6BB25EBE4BB9AEC8F",
+      "Match": true
+    }
+  ]
+}

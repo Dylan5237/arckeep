@@ -1,0 +1,5 @@
+  • electron-builder  version=26.15.3 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • skipped dependencies rebuild  reason=npmRebuild is set to false
+  • packaging       platform=win32 arch=x64 electron=43.7.6 appOutDir=dist\candidate-ee03338\win-unpacked
+  • downloaded      label=electron progress=100%

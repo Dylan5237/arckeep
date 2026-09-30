@@ -1,0 +1,751 @@
+{
+  "startedAt": "2026-09-30T08:43:02.715Z",
+  "source": {
+    "root": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+    "branch": "fix/6-mvp-delivery",
+    "sourceHead": "f90e798aa24e1726ea615f1b6f8d98c2afde4434",
+    "worktreeStatus": "",
+    "productVersion": "0.1.0",
+    "expectedElectronVersion": "43.7.6",
+    "sourceFiles": {
+      "src/main/index.ts": "e9fe835d4eadf415ff7e5748bd8e0215043ccb272caafaa83c8c5cc3e4190fd1",
+      "src/main/tool-ipc.ts": "7e5ada8eeedb1d3b95f44fee3d11508f11d45132222f19358a9ad87c7dee25f1",
+      "src/main/tool-actions.ts": "c5e6589beec1bca793941cb7fdde0e9973a886f8604dfbd8c896c6e3e9477491",
+      "src/main/tool-request.ts": "23b909f717fd15b3cf1132e2e70167115adfd663a2904286eb693fa2b7ce1435",
+      "src/main/tool-launch.ts": "1b1ed5db7416f7c9d9e12bf260410036f139ee74bb24e4b00805b8c67e5e6d79",
+      "src/main/tool-runner.ts": "8f6ff5d89d583969be59ce16c8a9703a511f8bd9c1fd506a3d66f004abfcb69b",
+      "src/main/tool-rehearse.ts": "7f93a52719df818971d3a6eebf479088e8d11ae9fdc28f38faf9f12ecd7492df",
+      "src/renderer/main.ts": "6ac0de4705f970c734be8f4354c2efe1ab45e0c2887fe9b135ba50ddcec22e7a",
+      "src/renderer/tools-page.ts": "4cb43b7d9085a3d556a50114696333c41ecfafb5e506c71d33b738cd03ad5832",
+      "src/preload/index.ts": "e9a7fbda47947a768592538493620c8c889b9db93017c07bac74ad06f5e4d3c2"
+    },
+    "sourceManifestSha256": "969e9f218d50c1190e27915d85cf8bf68609291eaa6c356e4494b790974f509b",
+    "compiledFiles": {
+      "out/main/capture-window.js": "803204e6ce157c0174a0cc981070f1c00dcbb4a5e20eb97e47df2a20fad6cef5",
+      "out/main/capture-window.js.map": "226e9ccfe75ca797b677b0c585d595f3ad3c071ab54120abb70e64c92548a73d",
+      "out/main/github-auth.js": "688a9e914e78ea37198d8c38543628d82223d4d5d6ed0e2d6a08a999f8050315",
+      "out/main/github-auth.js.map": "61264bc18583361b13690dbb62d57ea566db790d5543a3bfd5dbc17d944c2ac1",
+      "out/main/graceful-shutdown.js": "820bd121d69f52af9baf36f1e5636818ee898e1c93f7fc8e57e431150d6f4676",
+      "out/main/graceful-shutdown.js.map": "5ddbe10c36428f991dd1a317109cb44d368613aff798f36d5d4ddcf0ba5a4abf",
+      "out/main/hotkey.js": "afc94e502e5c3284bdbcf19ea34fcc89f0b5bbb82a0fce866d820e506b65f712",
+      "out/main/hotkey.js.map": "dc4d3377ebea9ae58cef7f86d094054fd90f6a7dad5293a67c774cb87baee45b",
+      "out/main/index.js": "8a776aaad5ef286ef2121485ff27ea58424f138b7a96536361fc37cc25743524",
+      "out/main/index.js.map": "c2bc567e7b022d3efa655baa0aa7e5421f63bcf96c3dc7f01901115fd912eeb0",
+      "out/main/ipc-validators.js": "73b7f8fcf6c8c8965ecf2beb8e0b77257237a7e4776c86d13ccf35809056921b",
+      "out/main/ipc-validators.js.map": "b5f0f0e616041a15eb68c3c68329647053575b1792eb938a125d53c032b472a8",
+      "out/main/launch-window.js": "3efe946791e4ccaf503b4bf0629d555a46c218bf6786d630a085909dbc0ac871",
+      "out/main/launch-window.js.map": "f3b42d07ecb2bf341fe8c42076e36aa34cee3f1a3bff5be2bf873919b766eef3",
+      "out/main/overview-service.js": "d771397e83f973f6a43d1d753204a143287b8affeb2a3b8b7d3a8a14eeb324ff",
+      "out/main/overview-service.js.map": "216b3b4e4cb2f9c016fd7344c6a26732fc4423f2da43939a90d19736a81aeea7",
+      "out/main/paths.js": "3d4ab60750a3aea68eb59a7fc76da8bd377104bdaa60be6406e178c88bdf116b",
+      "out/main/paths.js.map": "e278bce6c4c3448278e3a93e26e103d59069bf752047855960e7fd9f1dd1e0c3",
+      "out/main/screenshot-overview.js": "4a4ceb4416f13fbe43739669bf99e5a7b9c6aefbc3a7bd0abf8fc1d8afb462de",
+      "out/main/screenshot-overview.js.map": "1b6f81adc46eac98822d1963ab7ca98d7a03904e6af5909971dc8c63f591f622",
+      "out/main/screenshot-run.js": "870aa38df1e0c516f66d5c38cccc3681cf77439219121c41932cf96035b3c2f6",
+      "out/main/screenshot-run.js.map": "bd8c7641a0d55dfe985ba00847a752db8304787c4bcc2f1eb987f185bed01567",
+      "out/main/screenshot-scene.js": "db7f53bfc7856d41746d22df769f8572af023bb88622a12b7bc53e98238650c0",
+      "out/main/screenshot-scene.js.map": "84106e549159953eceda7fb1d59ee6a3a4d0bde838ec26312d702fa99d51c62e",
+      "out/main/screenshot-todos.js": "4a8a0ccdbb62831579897881e4590a63c4893b143c0e5102db8ec957a824c659",
+      "out/main/screenshot-todos.js.map": "b6e463f361e239b400fd5fb454f6366fdb85e142e173b9b8b97dc5777f00c2ba",
+      "out/main/screenshot-tools.js": "f4b0880bffdb4af49887a9c9f06bd10cf5e964aba077ca8e2f76d8a5462abc06",
+      "out/main/screenshot-tools.js.map": "2f8c1afa8232d5acc8ddbf62ff98a83333c5a1c924b871a55647bea771a3fba1",
+      "out/main/screenshot-waiting.js": "b25ff68b5bf85ce1f45cc828ea12479d1afc906ab80f24955af9c0cca280c9f8",
+      "out/main/screenshot-waiting.js.map": "66b1a6af7725abe40e4a26d558e249bf4f26b39f208f27ab4d40c4f911d20680",
+      "out/main/settings-service.js": "da9139d7d1b6d560b4547b0158965c8bf720a39b72c18c72b987663ed2ff04f2",
+      "out/main/settings-service.js.map": "9f47342f8e41d98b91cd45313d89b665e0972bd6bfae2e8d12749746d3bc9019",
+      "out/main/settings-store.js": "39a9dc548f25dcb5ad8f5107f5769b3a62b828becf1dd71df039dd92bffa9711",
+      "out/main/settings-store.js.map": "8485b640275acc3780bb8a02a6417ccc22f7b32897bf5928c28f6d30b2ce7117",
+      "out/main/test-hooks.js": "21cc0072885a0fbe3ada5625266cdfd54260d37ac2e02d0aea6d80dac75f6395",
+      "out/main/test-hooks.js.map": "04c4df0b0935cd38a577667d339f18648239979c67766d6f70a4953f4ad36bcb",
+      "out/main/todos/draft.js": "39843f7fd83e999d3d95aa5474d87344371da24da1a7c98c9b4119b247af1395",
+      "out/main/todos/draft.js.map": "e967a3a30e879f7a745f3a8d3c09466c82fcb557be93d500183ab984466a7969",
+      "out/main/todos/store.js": "338a7f72fc58ce3645e634b00f6c61b07c3e92f049873d4a7ef3149266388e56",
+      "out/main/todos/store.js.map": "759f635f3394f5dbe726292561a02a7d65aae124f310e6bd0faf5058f1cb370d",
+      "out/main/token-store.js": "b039911e0c4289650c37cf2ce5f7e62d3432402c7b3f45ad59a9a6acae09f7ae",
+      "out/main/token-store.js.map": "23228f18e49ae4af088481233c3bc4a5911430dd053b593dc676e58495659f95",
+      "out/main/tool-actions.js": "d29bc4a38611dc3f2b996a4cf437abb75f2fa8fa1c560471fbf2076dff1ce3fa",
+      "out/main/tool-actions.js.map": "f80259352dd4db678c7fee630cbacab91d8cf1126c73212c1ff5301d2e59dbd3",
+      "out/main/tool-assets.js": "10c1b1db7f6f0e644894eecb28b54858a6904f835a6405a7d91a8ff53e1bbe4f",
+      "out/main/tool-assets.js.map": "08a268c3829a4a309357bc7e5cbd4d32547f01419f48383bf5425aba14019326",
+      "out/main/tool-ipc.js": "c2df19861cffe8e9af5916244b02b8155937378af0e40f81b82ccf57b6243230",
+      "out/main/tool-ipc.js.map": "6bef322d8db1e7edc09b58a6c9bf50e55a5920189f0bd3e3cf3d9a62052a170b",
+      "out/main/tool-launch.js": "439c691b4d24a55ae144b1c85dad7895b0b74f3e6bd50bf42557b946fca06fec",
+      "out/main/tool-launch.js.map": "695b6d3b86f2382b1b1d4f02791392f1ba78c192c7e67a2a284b640c0a6bcf75",
+      "out/main/tool-rehearse.js": "4ca85631f429ba5e16cd88e1b1b9777ed2cee8d85979ea2c6705dea079243ec5",
+      "out/main/tool-rehearse.js.map": "ab6c36e5e0d98cc06cc9e21de187d41dddb1c9de237a1b700e80f60f26bf6bfb",
+      "out/main/tool-request.js": "5f3350e40e89020e0d8032e86176436739d6351cef408a19130cc0fe8bb7c0c1",
+      "out/main/tool-request.js.map": "85d86951b3c68ec58593a1b7482053d05460aaa6aa0851d9442ee1b17992e1fb",
+      "out/main/tool-runner.js": "a3bf7852a805f867c6994e0159d6b41e8f5ed46019392ca6665a49167ef90331",
+      "out/main/tool-runner.js.map": "5d80bd11da3ce512fe58ef7915366701fe27e77abcf903c575d4699b61ac40ac",
+      "out/main/tool-validate.js": "9690c6809f7626e7f7368e76eecfd3b3cf547a13294355a37b99b042f885cd1d",
+      "out/main/tool-validate.js.map": "dc2aeb1485190fc044702e3399b28bbbd6c31c55a3b07c86ea03d7c2004276f2",
+      "out/main/url-trust.js": "b92ce3625230f727b4208a458aa94705ed57f2af1ee1575aa5191683d85b5b95",
+      "out/main/url-trust.js.map": "243f3053cb4d134155d4b01e6aff806f2780b205ab4fb76be5cb2cf3c2486da1",
+      "out/main/waiting-service.js": "251e929eb4483f42f4ab13b67e2c95509bcd59b0b3e78546347743732fa4963b",
+      "out/main/waiting-service.js.map": "0735bfa5e91a55a7ba0a472396611a36580e0d324679f0080ee6c218cc0134f2",
+      "out/main/window-prefs.js": "ecfe730c3bdf0996fcf475c5fec93ffcc954c4ab4e0127d2908f95305babadad",
+      "out/main/window-prefs.js.map": "86fe7c59f893c60829d6f514106439a053d8ea9890aa38398f98d285adb14d8b",
+      "out/preload/index.cjs": "6ba27d174076b7b3fd282273321a443443a95398aa4357f90c2e5c05313bcaa5",
+      "out/preload/index.js": "ed153ed26d17df1468ea0b52150bb5cae5a72b2514708fde29233d0845a894a9",
+      "out/preload/index.js.map": "65effb662e68a1d80e21c1503e9b4d479b911eec94eb27672eb5aa22aaf9f23c",
+      "out/renderer/assets/capture-D9GmwemH.css": "fcecb7ef553d3a7657b2e83856193d122ecbb1b1563bae3df7e174647d559724",
+      "out/renderer/assets/capture-DfYO9rr_.js": "445ad48e33d3125b9723ab1530e14bb38c60fe98d44e5594297155409e935141",
+      "out/renderer/assets/index-CBJiJP19.css": "e76bd19cd36b2d49dd81b333fc8319f5c5a6af40ed989b9a0b8b7ffe842849ef",
+      "out/renderer/assets/index-D9AUfmsl.js": "79e283d664b9f20db2e73b1ab110f61088d88d9c6d82d1ab05177b867988124e",
+      "out/renderer/assets/modulepreload-polyfill-B5Qt9EMX.js": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0",
+      "out/renderer/assets/toast-DainXMau.css": "a912c22d30ec99f6c25bc1198a848f44bd1b6f27913354329724e72cffbb6c74",
+      "out/renderer/capture.html": "f51ac71874484d0431d3b66fcebf5fecf29caa1d51a602029c5a73a501935dc7",
+      "out/renderer/index.html": "2f09fc57dc9b55146fc89619ba090d51eed14448fa29147b968b7b0e95ba98a6",
+      "out/renderer/toast.html": "ac874707634c92e16ce929298513e05c5f2de0ab89b666f584dbb9782a87360a"
+    },
+    "compiledManifestSha256": "ddbf073d8dd2e1d74fa3442ea1186f215730923589b0a2990c15dd0b54ec2398",
+    "electronExecutableSha256": "e9addd0a50fac9e590b3becb23b10ddfa889417e66d5c94489ef6d8bda061ae0",
+    "buildProvenance": "NOT_AUTOMATICALLY_VERIFIED; source revision and compiled-file hashes are recorded separately"
+  },
+  "preparedSnapshot": {
+    "sourceHead": "f90e798aa24e1726ea615f1b6f8d98c2afde4434",
+    "compiledManifestSha256": "ddbf073d8dd2e1d74fa3442ea1186f215730923589b0a2990c15dd0b54ec2398",
+    "buildProvenance": "NOT_AUTOMATICALLY_VERIFIED; source revision and compiled-file hashes are recorded separately"
+  },
+  "buildCorrespondence": "NOT_AUTOMATICALLY_VERIFIED; actual Electron runtime version, source HEAD, and compiled-output hashes are independent observations",
+  "entryMode": "ROOT_WRAPPER_IMPORTS_DELIVERY_OUT_MAIN_INDEX",
+  "packageElectronVersion": "43.7.6",
+  "scope": "Real Electron GUI through compiled delivery output with isolated userData/APPDATA/GH_CONFIG_DIR. Not packaged-entry, OS tray, business acceptance, Phase Accept, or Release acceptance.",
+  "scenarios": [
+    {
+      "id": "formal-long-command-app-quit-live-processes",
+      "profile": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm",
+      "wrapperPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\.final-candidate-command-root-wrapper-2026-09-30T084302-717Z-formal-long-command-app-quit-live-processes.cjs",
+      "ownedProcesses": [
+        {
+          "pid": 12180,
+          "created": "2026-09-30T08:43:17.2441010Z",
+          "parentPid": 64636,
+          "scriptPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\long-formal-parent.ps1",
+          "initial": {
+            "kind": "alive",
+            "pid": 12180,
+            "parentPid": 64636,
+            "created": "2026-09-30T08:43:17.2441010Z",
+            "executablePath": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            "executableName": "powershell.exe",
+            "wrapperArgumentPresent": false,
+            "scriptArgumentPresent": true
+          },
+          "initialParentChain": [
+            {
+              "kind": "alive",
+              "pid": 12180,
+              "parentPid": 64636,
+              "created": "2026-09-30T08:43:17.2441010Z",
+              "executablePath": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+              "executableName": "powershell.exe",
+              "wrapperArgumentPresent": false
+            },
+            {
+              "kind": "alive",
+              "pid": 64636,
+              "parentPid": 59404,
+              "created": "2026-09-30T08:43:04.0294760Z",
+              "executablePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe",
+              "executableName": "electron.exe",
+              "wrapperArgumentPresent": true
+            },
+            {
+              "kind": "alive",
+              "pid": 59404,
+              "parentPid": 63620,
+              "created": "2026-09-30T08:43:03.9876860Z",
+              "executablePath": "C:\\WINDOWS\\system32\\cmd.exe",
+              "executableName": "cmd.exe",
+              "wrapperArgumentPresent": true
+            },
+            {
+              "kind": "alive",
+              "pid": 63620,
+              "parentPid": 65592,
+              "created": "2026-09-30T08:43:01.6609040Z",
+              "executablePath": "C:\\nvm4w\\nodejs\\node.exe",
+              "executableName": "node.exe",
+              "wrapperArgumentPresent": false
+            },
+            {
+              "kind": "alive",
+              "pid": 65592,
+              "parentPid": 68172,
+              "created": "2026-09-30T08:43:01.2377840Z",
+              "executablePath": "C:\\Users\\howyo\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe",
+              "executableName": "pwsh.exe",
+              "wrapperArgumentPresent": false
+            },
+            {
+              "kind": "alive",
+              "pid": 68172,
+              "parentPid": 68576,
+              "created": "2026-09-30T08:12:09.4530270Z",
+              "executablePath": "C:\\Users\\howyo\\AppData\\Local\\OpenAI\\Codex\\bin\\c6fe824d725f02d7\\codex.exe",
+              "executableName": "codex.exe",
+              "wrapperArgumentPresent": false
+            },
+            {
+              "kind": "alive",
+              "pid": 68576,
+              "parentPid": 16200,
+              "created": "2026-09-30T08:11:56.7992950Z",
+              "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.928.2636.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+              "executableName": "ChatGPT.exe",
+              "wrapperArgumentPresent": false
+            },
+            {
+              "kind": "alive",
+              "pid": 16200,
+              "parentPid": 3344,
+              "created": "2026-09-28T01:49:10.8205210Z",
+              "executablePath": "C:\\WINDOWS\\system32\\sihost.exe",
+              "executableName": "sihost.exe",
+              "wrapperArgumentPresent": false
+            }
+          ]
+        },
+        {
+          "pid": 42096,
+          "created": "2026-09-30T08:43:17.6581180Z",
+          "parentPid": 12180,
+          "scriptPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\long-formal-child.ps1",
+          "initial": {
+            "kind": "alive",
+            "pid": 42096,
+            "parentPid": 12180,
+            "created": "2026-09-30T08:43:17.6581180Z",
+            "executablePath": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            "executableName": "powershell.exe",
+            "wrapperArgumentPresent": false,
+            "scriptArgumentPresent": true
+          },
+          "initialParentChain": [
+            {
+              "kind": "alive",
+              "pid": 42096,
+              "parentPid": 12180,
+              "created": "2026-09-30T08:43:17.6581180Z",
+              "executablePath": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+              "executableName": "powershell.exe",
+              "wrapperArgumentPresent": false
+            },
+            {
+              "kind": "alive",
+              "pid": 12180,
+              "parentPid": 64636,
+              "created": "2026-09-30T08:43:17.2441010Z",
+              "executablePath": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+              "executableName": "powershell.exe",
+              "wrapperArgumentPresent": false
+            },
+            {
+              "kind": "alive",
+              "pid": 64636,
+              "parentPid": 59404,
+              "created": "2026-09-30T08:43:04.0294760Z",
+              "executablePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe",
+              "executableName": "electron.exe",
+              "wrapperArgumentPresent": true
+            },
+            {
+              "kind": "alive",
+              "pid": 59404,
+              "parentPid": 63620,
+              "created": "2026-09-30T08:43:03.9876860Z",
+              "executablePath": "C:\\WINDOWS\\system32\\cmd.exe",
+              "executableName": "cmd.exe",
+              "wrapperArgumentPresent": true
+            },
+            {
+              "kind": "alive",
+              "pid": 63620,
+              "parentPid": 65592,
+              "created": "2026-09-30T08:43:01.6609040Z",
+              "executablePath": "C:\\nvm4w\\nodejs\\node.exe",
+              "executableName": "node.exe",
+              "wrapperArgumentPresent": false
+            },
+            {
+              "kind": "alive",
+              "pid": 65592,
+              "parentPid": 68172,
+              "created": "2026-09-30T08:43:01.2377840Z",
+              "executablePath": "C:\\Users\\howyo\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe",
+              "executableName": "pwsh.exe",
+              "wrapperArgumentPresent": false
+            },
+            {
+              "kind": "alive",
+              "pid": 68172,
+              "parentPid": 68576,
+              "created": "2026-09-30T08:12:09.4530270Z",
+              "executablePath": "C:\\Users\\howyo\\AppData\\Local\\OpenAI\\Codex\\bin\\c6fe824d725f02d7\\codex.exe",
+              "executableName": "codex.exe",
+              "wrapperArgumentPresent": false
+            },
+            {
+              "kind": "alive",
+              "pid": 68576,
+              "parentPid": 16200,
+              "created": "2026-09-30T08:11:56.7992950Z",
+              "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.928.2636.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+              "executableName": "ChatGPT.exe",
+              "wrapperArgumentPresent": false
+            }
+          ]
+        }
+      ],
+      "candidates": [
+        {
+          "script": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\long-formal-child.ps1",
+          "started": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\long-formal-child-started.json",
+          "completed": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\long-formal-child-completed.json",
+          "sleepMs": 60000,
+          "output": "LONG_FORMAL_CHILD_RUNNING"
+        },
+        {
+          "script": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\long-formal-parent.ps1",
+          "started": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\long-formal-parent-started.json",
+          "completed": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\long-formal-parent-completed.json",
+          "sleepMs": 60000,
+          "output": null
+        },
+        {
+          "script": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\formal-quit-dry-check.ps1",
+          "started": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\formal-quit-dry-check-started.json",
+          "completed": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\formal-quit-dry-check-completed.json",
+          "sleepMs": 0,
+          "output": "FORMAL_QUIT_DRY_CHECK"
+        }
+      ],
+      "verdict": "OBSERVED_WITH_RECORDED_SCOPE",
+      "isolation": {
+        "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\appdata",
+        "localAppData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\local-appdata",
+        "temp": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\temp",
+        "ghConfigDir": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\gh-config",
+        "ghTokenPresent": false,
+        "testHooks": true
+      },
+      "wrapperPreflight": {
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "result": {
+          "appPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+          "appDataInsideProfile": true,
+          "userDataInsideProfile": true,
+          "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\appdata",
+          "userData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\user-data"
+        }
+      },
+      "runtime": {
+        "mainPid": 64636,
+        "electronVersion": "43.7.6",
+        "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\appdata",
+        "userData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\appdata\\Arckeep",
+        "appPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+        "envAppData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\appdata",
+        "ghConfigDir": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\gh-config",
+        "ghTokenPresent": false,
+        "testHooks": "1",
+        "wrapperAppDataApplied": "1",
+        "devServerConfigured": false,
+        "screenshotPresent": false,
+        "electronPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe"
+      },
+      "rendererUrl": "file:///D:/_projects/platform/arckeep/.worktrees/6-codex-mvp-delivery/out/renderer/index.html",
+      "artifactsDir": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\playwright-artifacts",
+      "playwrightChildPid": 59404,
+      "mainPid": 64636,
+      "mainAtLaunch": {
+        "kind": "alive",
+        "pid": 64636,
+        "parentPid": 59404,
+        "created": "2026-09-30T08:43:04.0294760Z",
+        "executablePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe",
+        "executableName": "electron.exe",
+        "wrapperArgumentPresent": true
+      },
+      "mainParentChainAtLaunch": [
+        {
+          "kind": "alive",
+          "pid": 64636,
+          "parentPid": 59404,
+          "created": "2026-09-30T08:43:04.0294760Z",
+          "executablePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe",
+          "executableName": "electron.exe",
+          "wrapperArgumentPresent": true
+        },
+        {
+          "kind": "alive",
+          "pid": 59404,
+          "parentPid": 63620,
+          "created": "2026-09-30T08:43:03.9876860Z",
+          "executablePath": "C:\\WINDOWS\\system32\\cmd.exe",
+          "executableName": "cmd.exe",
+          "wrapperArgumentPresent": true
+        },
+        {
+          "kind": "alive",
+          "pid": 63620,
+          "parentPid": 65592,
+          "created": "2026-09-30T08:43:01.6609040Z",
+          "executablePath": "C:\\nvm4w\\nodejs\\node.exe",
+          "executableName": "node.exe",
+          "wrapperArgumentPresent": false
+        },
+        {
+          "kind": "alive",
+          "pid": 65592,
+          "parentPid": 68172,
+          "created": "2026-09-30T08:43:01.2377840Z",
+          "executablePath": "C:\\Users\\howyo\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe",
+          "executableName": "pwsh.exe",
+          "wrapperArgumentPresent": false
+        },
+        {
+          "kind": "alive",
+          "pid": 68172,
+          "parentPid": 68576,
+          "created": "2026-09-30T08:12:09.4530270Z",
+          "executablePath": "C:\\Users\\howyo\\AppData\\Local\\OpenAI\\Codex\\bin\\c6fe824d725f02d7\\codex.exe",
+          "executableName": "codex.exe",
+          "wrapperArgumentPresent": false
+        },
+        {
+          "kind": "alive",
+          "pid": 68576,
+          "parentPid": 16200,
+          "created": "2026-09-30T08:11:56.7992950Z",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.928.2636.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+          "executableName": "ChatGPT.exe",
+          "wrapperArgumentPresent": false
+        },
+        {
+          "kind": "alive",
+          "pid": 16200,
+          "parentPid": 3344,
+          "created": "2026-09-28T01:49:10.8205210Z",
+          "executablePath": "C:\\WINDOWS\\system32\\sihost.exe",
+          "executableName": "sihost.exe",
+          "wrapperArgumentPresent": false
+        },
+        {
+          "kind": "alive",
+          "pid": 3344,
+          "parentPid": 1900,
+          "created": "2026-09-28T01:48:59.6846670Z",
+          "executablePath": null,
+          "executableName": null,
+          "wrapperArgumentPresent": false
+        }
+      ],
+      "startedToQuitMs": 21236,
+      "liveIdentitiesBeforeQuit": {
+        "observedAt": "2026-09-30T08:43:38.912Z",
+        "startedToQuitMs": 21236,
+        "main": {
+          "kind": "alive",
+          "pid": 64636,
+          "parentPid": 59404,
+          "created": "2026-09-30T08:43:04.0294760Z",
+          "executablePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe",
+          "executableName": "electron.exe",
+          "wrapperArgumentPresent": true
+        },
+        "command": {
+          "kind": "alive",
+          "pid": 12180,
+          "parentPid": 64636,
+          "created": "2026-09-30T08:43:17.2441010Z",
+          "executablePath": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "executableName": "powershell.exe",
+          "wrapperArgumentPresent": false,
+          "scriptArgumentPresent": true
+        },
+        "child": {
+          "kind": "alive",
+          "pid": 42096,
+          "parentPid": 12180,
+          "created": "2026-09-30T08:43:17.6581180Z",
+          "executablePath": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "executableName": "powershell.exe",
+          "wrapperArgumentPresent": false,
+          "scriptArgumentPresent": true
+        },
+        "commandParentChain": [
+          {
+            "kind": "alive",
+            "pid": 12180,
+            "parentPid": 64636,
+            "created": "2026-09-30T08:43:17.2441010Z",
+            "executablePath": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            "executableName": "powershell.exe",
+            "wrapperArgumentPresent": false
+          },
+          {
+            "kind": "alive",
+            "pid": 64636,
+            "parentPid": 59404,
+            "created": "2026-09-30T08:43:04.0294760Z",
+            "executablePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe",
+            "executableName": "electron.exe",
+            "wrapperArgumentPresent": true
+          },
+          {
+            "kind": "alive",
+            "pid": 59404,
+            "parentPid": 63620,
+            "created": "2026-09-30T08:43:03.9876860Z",
+            "executablePath": "C:\\WINDOWS\\system32\\cmd.exe",
+            "executableName": "cmd.exe",
+            "wrapperArgumentPresent": true
+          },
+          {
+            "kind": "alive",
+            "pid": 63620,
+            "parentPid": 65592,
+            "created": "2026-09-30T08:43:01.6609040Z",
+            "executablePath": "C:\\nvm4w\\nodejs\\node.exe",
+            "executableName": "node.exe",
+            "wrapperArgumentPresent": false
+          },
+          {
+            "kind": "alive",
+            "pid": 65592,
+            "parentPid": 68172,
+            "created": "2026-09-30T08:43:01.2377840Z",
+            "executablePath": "C:\\Users\\howyo\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe",
+            "executableName": "pwsh.exe",
+            "wrapperArgumentPresent": false
+          },
+          {
+            "kind": "alive",
+            "pid": 68172,
+            "parentPid": 68576,
+            "created": "2026-09-30T08:12:09.4530270Z",
+            "executablePath": "C:\\Users\\howyo\\AppData\\Local\\OpenAI\\Codex\\bin\\c6fe824d725f02d7\\codex.exe",
+            "executableName": "codex.exe",
+            "wrapperArgumentPresent": false
+          },
+          {
+            "kind": "alive",
+            "pid": 68576,
+            "parentPid": 16200,
+            "created": "2026-09-30T08:11:56.7992950Z",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.928.2636.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+            "executableName": "ChatGPT.exe",
+            "wrapperArgumentPresent": false
+          },
+          {
+            "kind": "alive",
+            "pid": 16200,
+            "parentPid": 3344,
+            "created": "2026-09-28T01:49:10.8205210Z",
+            "executablePath": "C:\\WINDOWS\\system32\\sihost.exe",
+            "executableName": "sihost.exe",
+            "wrapperArgumentPresent": false
+          }
+        ],
+        "childParentChain": [
+          {
+            "kind": "alive",
+            "pid": 42096,
+            "parentPid": 12180,
+            "created": "2026-09-30T08:43:17.6581180Z",
+            "executablePath": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            "executableName": "powershell.exe",
+            "wrapperArgumentPresent": false
+          },
+          {
+            "kind": "alive",
+            "pid": 12180,
+            "parentPid": 64636,
+            "created": "2026-09-30T08:43:17.2441010Z",
+            "executablePath": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            "executableName": "powershell.exe",
+            "wrapperArgumentPresent": false
+          },
+          {
+            "kind": "alive",
+            "pid": 64636,
+            "parentPid": 59404,
+            "created": "2026-09-30T08:43:04.0294760Z",
+            "executablePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe",
+            "executableName": "electron.exe",
+            "wrapperArgumentPresent": true
+          },
+          {
+            "kind": "alive",
+            "pid": 59404,
+            "parentPid": 63620,
+            "created": "2026-09-30T08:43:03.9876860Z",
+            "executablePath": "C:\\WINDOWS\\system32\\cmd.exe",
+            "executableName": "cmd.exe",
+            "wrapperArgumentPresent": true
+          },
+          {
+            "kind": "alive",
+            "pid": 63620,
+            "parentPid": 65592,
+            "created": "2026-09-30T08:43:01.6609040Z",
+            "executablePath": "C:\\nvm4w\\nodejs\\node.exe",
+            "executableName": "node.exe",
+            "wrapperArgumentPresent": false
+          },
+          {
+            "kind": "alive",
+            "pid": 65592,
+            "parentPid": 68172,
+            "created": "2026-09-30T08:43:01.2377840Z",
+            "executablePath": "C:\\Users\\howyo\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell\\pwsh.exe",
+            "executableName": "pwsh.exe",
+            "wrapperArgumentPresent": false
+          },
+          {
+            "kind": "alive",
+            "pid": 68172,
+            "parentPid": 68576,
+            "created": "2026-09-30T08:12:09.4530270Z",
+            "executablePath": "C:\\Users\\howyo\\AppData\\Local\\OpenAI\\Codex\\bin\\c6fe824d725f02d7\\codex.exe",
+            "executableName": "codex.exe",
+            "wrapperArgumentPresent": false
+          },
+          {
+            "kind": "alive",
+            "pid": 68576,
+            "parentPid": 16200,
+            "created": "2026-09-30T08:11:56.7992950Z",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.928.2636.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+            "executableName": "ChatGPT.exe",
+            "wrapperArgumentPresent": false
+          }
+        ],
+        "formalCompleted": null,
+        "childCompleted": null
+      },
+      "quitRequestedAt": "2026-09-30T08:43:38.913Z",
+      "playwrightChildAfterQuit": {
+        "alive": false,
+        "exitCode": 0,
+        "signal": null,
+        "observedExit": {
+          "code": 0,
+          "signal": null,
+          "at": "2026-09-30T08:43:40.650Z"
+        }
+      },
+      "mainAfterQuit": {
+        "kind": "absent"
+      },
+      "afterAppExitBeforeCleanup": {
+        "observedAt": "2026-09-30T08:43:41.860Z",
+        "main": {
+          "kind": "absent"
+        },
+        "command": {
+          "kind": "absent"
+        },
+        "child": {
+          "kind": "absent"
+        },
+        "formalCompleted": null,
+        "childCompleted": null
+      },
+      "finding": "FORMAL_LONG_COMMAND_AND_CHILD_ABSENT_AFTER_APP_QUIT_WITHOUT_COMPLETION_SENTINELS",
+      "cleanup": {
+        "mainPid": 64636,
+        "playwrightChildPid": 59404,
+        "playwrightChildFinal": {
+          "alive": false,
+          "exitCode": 0,
+          "signal": null,
+          "observedExit": {
+            "code": 0,
+            "signal": null,
+            "at": "2026-09-30T08:43:40.650Z"
+          }
+        },
+        "mainFinalBeforePotentialCleanup": {
+          "kind": "absent"
+        },
+        "mainFinal": {
+          "kind": "absent"
+        },
+        "ownedProcesses": [
+          {
+            "pid": 12180,
+            "preCleanupObservedAt": "2026-09-30T08:43:48.127Z",
+            "preCleanup": {
+              "kind": "absent"
+            },
+            "preCleanupParentChain": [
+              {
+                "kind": "absent"
+              }
+            ],
+            "killRequested": false,
+            "afterCleanup": {
+              "kind": "absent"
+            }
+          },
+          {
+            "pid": 42096,
+            "preCleanupObservedAt": "2026-09-30T08:43:51.198Z",
+            "preCleanup": {
+              "kind": "absent"
+            },
+            "preCleanupParentChain": [
+              {
+                "kind": "absent"
+              }
+            ],
+            "killRequested": false,
+            "afterCleanup": {
+              "kind": "absent"
+            }
+          }
+        ]
+      },
+      "markerObservations": [
+        {
+          "script": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\long-formal-child.ps1",
+          "started": {
+            "pid": 42096,
+            "at": "2026-09-30T08:43:17.9853110Z"
+          },
+          "completed": null
+        },
+        {
+          "script": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\long-formal-parent.ps1",
+          "started": {
+            "pid": 12180,
+            "at": "2026-09-30T08:43:17.6769310Z"
+          },
+          "completed": null
+        },
+        {
+          "script": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\formal-quit-dry-check.ps1",
+          "started": {
+            "pid": 53304,
+            "at": "2026-09-30T08:43:16.7266458Z"
+          },
+          "completed": {
+            "pid": 53304,
+            "at": "2026-09-30T08:43:16.8789238Z"
+          }
+        }
+      ],
+      "wrapperArchive": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-command-20260930T070215Z\\profile-formal-long-command-app-quit-live-processes-xu1hRm\\command-root-wrapper.cjs",
+      "wrapperArchiveSha256": "c256813f9767b6162c58a24988ffa16d68b1c0b1ba767e96bda879dfa80bd284",
+      "finishedAt": "2026-09-30T08:43:53.289Z"
+    }
+  ],
+  "verdict": "SELECTED_SCENARIOS_COMPLETE_WITH_RECORDED_SCOPE",
+  "finishedAt": "2026-09-30T08:43:53.290Z",
+  "scenarioSelection": "FORMAL_LONG_COMMAND_QUIT_ONLY"
+}

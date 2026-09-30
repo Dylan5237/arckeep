@@ -1,0 +1,16 @@
+{
+    "name":  "installer-payload-resources-app-asar",
+    "executable":  "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+    "arguments":  [
+                      "x",
+                      "-y",
+                      "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-20260930T0802Z\\raw-payloads\\payload-keyfiles\\installer\\app-46fb7d1762f24434a40500b456711cd3",
+                      "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-20260930T0802Z\\raw-payloads\\containers\\installer\\app-64.7z",
+                      "resources\\app.asar"
+                  ],
+    "workingDirectory":  "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-e3ea343",
+    "startedUtc":  "2026-09-30T08:00:41.1421759Z",
+    "exitCode":  0,
+    "stdout":  "\r\n7-Zip [64] 16.04 : Copyright (c) 1999-2016 Igor Pavlov : 2016-10-04\r\n\r\nScanning the drive for archives:\r\n1 file, 103910866 bytes (100 MiB)\r\n\r\nExtracting archive: D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-20260930T0802Z\\raw-payloads\\containers\\installer\\app-64.7z\r\n--\r\nPath = D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-20260930T0802Z\\raw-payloads\\containers\\installer\\app-64.7z\r\nType = 7z\r\nPhysical Size = 103910866\r\nHeaders Size = 1550\r\nMethod = LZMA2:20 LZMA:20 BCJ2\r\nSolid = -\r\nBlocks = 79\r\n\r\nEverything is Ok\r\n\r\nSize:       2257507\r\nCompressed: 103910866\r\n",
+    "stderr":  ""
+}

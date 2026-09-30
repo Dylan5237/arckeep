@@ -1,0 +1,288 @@
+{
+  "generatedAt": "2026-09-30T07:31:53.1753842Z",
+  "delivery": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+  "sourceHeadAtFirstLaunchAttempt": "5cbfc35e08aac2462e894b5d1b258f8b3fbbf4e4",
+  "buildHeadSuppliedByRoot": "5cbfc35e08aac2462e894b5d1b258f8b3fbbf4e4",
+  "sourceSuccessorsAfterBuild": [
+    {
+      "sha": "e3ea343dd0c3d88dbbc47ce82e58351fbc44d35c",
+      "classification": "smoke script environment cleanup only; no compiled app module change",
+      "files": [
+        "test/smoke script as recorded by root"
+      ]
+    }
+  ],
+  "package": {
+    "name": "arckeep",
+    "version": "0.1.0",
+    "electron": "43.7.6"
+  },
+  "electronExecutable": {
+    "path": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe",
+    "fileVersion": "43.7.6",
+    "productVersion": "43.7.6",
+    "sha256": "E9ADDD0A50FAC9E590B3BECB23B10DDFA889417E66D5C94489EF6D8BDA061AE0",
+    "length": 239023616
+  },
+  "relevantSource": [
+    {
+      "path": "src/main/index.ts",
+      "length": 22979,
+      "sha256": "E1D193B5E12E0AF24913735E280611E46AC7B0B837B27DEF9EE5A5FD4A64BAD1",
+      "lastWriteTime": "2026-09-30T06:51:15.8362180Z"
+    },
+    {
+      "path": "src/main/test-hooks.ts",
+      "length": 3875,
+      "sha256": "630279B52847DEDA7466B1F84A9A26E210FA00B5DF45B8CF46EE6A842DE0B7E0",
+      "lastWriteTime": "2026-09-30T06:21:06.4678931Z"
+    },
+    {
+      "path": "src/main/todos/store.ts",
+      "length": 5144,
+      "sha256": "F9A768FC0B5236FD19891DA3983272360C459C97508E8CCD11095D1800D15D61",
+      "lastWriteTime": "2026-09-30T06:21:06.4699006Z"
+    },
+    {
+      "path": "src/renderer/todos-page.ts",
+      "length": 14611,
+      "sha256": "56DBD65719279DDDDB81A2768CB070342284C96BC4810D1DCA879BDECF67BEF5",
+      "lastWriteTime": "2026-09-30T06:51:15.6120253Z"
+    },
+    {
+      "path": "src/renderer/capture.ts",
+      "length": 5517,
+      "sha256": "1CE4072B678EA0FC85227BFB956CAAFC16CD1234400B35B8218EF03887528389",
+      "lastWriteTime": "2026-09-30T06:21:06.4788996Z"
+    },
+    {
+      "path": "src/shared/todos/undo.ts",
+      "length": 835,
+      "sha256": "147DA3BFC00774E45E531D005A2FB7BCF90C343E478B75CDBB5B3061FAA0DEC6",
+      "lastWriteTime": "2026-09-30T06:51:15.6140264Z"
+    },
+    {
+      "path": "src/shared/todos/validate.ts",
+      "length": 3523,
+      "sha256": "0D70F8ABDF2195C64C290B9216F6F426A9CA9C1EF8357AF4D783089CB737643F",
+      "lastWriteTime": "2026-09-30T06:21:06.4930213Z"
+    }
+  ],
+  "compiledArtifacts": [
+    {
+      "path": "out/main/index.js",
+      "length": 23667,
+      "sha256": "8C680E34A3B60E256D17F7B18AC611ACCF7697F3B715BD7A4ED79B76EA7BCC03",
+      "lastWriteTime": "2026-09-30T07:16:28.9387299Z"
+    },
+    {
+      "path": "out/main/test-hooks.js",
+      "length": 2717,
+      "sha256": "21CC0072885A0FBE3ADA5625266CDFD54260D37AC2E02D0AEA6D80DAC75F6395",
+      "lastWriteTime": "2026-09-30T07:16:28.8985888Z"
+    },
+    {
+      "path": "out/main/todos/store.js",
+      "length": 4883,
+      "sha256": "338A7F72FC58CE3645E634B00F6C61B07C3E92F049873D4A7EF3149266388E56",
+      "lastWriteTime": "2026-09-30T07:16:28.9101028Z"
+    },
+    {
+      "path": "out/shared/todos/undo.js",
+      "length": 631,
+      "sha256": "09D38D368B9F4F57ABC163A43944F0BD21D30F9234C68E8FFD0465F4EBE8ED8E",
+      "lastWriteTime": "2026-09-30T07:16:28.9537298Z"
+    },
+    {
+      "path": "out/preload/index.cjs",
+      "length": 7220,
+      "sha256": "6BA27D174076B7B3FD282273321A443443A95398AA4357F90C2E5C05313BCAA5",
+      "lastWriteTime": "2026-09-30T07:16:30.0695858Z"
+    },
+    {
+      "path": "out/renderer/index.html",
+      "length": 1332,
+      "sha256": "2F09FC57DC9B55146FC89619BA090D51EED14448FA29147B968B7B0E95BA98A6",
+      "lastWriteTime": "2026-09-30T07:16:31.9405729Z"
+    },
+    {
+      "path": "out/renderer/assets/index-D9AUfmsl.js",
+      "length": 75781,
+      "sha256": "79E283D664B9F20DB2E73B1AB110F61088D88D9C6D82D1AB05177B867988124E",
+      "lastWriteTime": "2026-09-30T07:16:31.9405729Z"
+    },
+    {
+      "path": "out/renderer/assets/capture-DfYO9rr_.js",
+      "length": 3738,
+      "sha256": "445AD48E33D3125B9723AB1530E14BB38C60FE98D44E5594297155409E935141",
+      "lastWriteTime": "2026-09-30T07:16:31.9405729Z"
+    }
+  ],
+  "launchAttempts": [
+    {
+      "attempt": 1,
+      "runnerPid": 60308,
+      "electronLauncherPid": 61552,
+      "electronMainPid": null,
+      "exitCode": 2147483651,
+      "status": "failed_before_app_initialization",
+      "failure": "Electron install_dir_access AppContainer ACL fatal; no UI",
+      "noSandbox": false,
+      "evidence": "attempt-1-sandbox-failure.log"
+    },
+    {
+      "attempt": 2,
+      "runnerPid": 48868,
+      "electronLauncherPid": 46296,
+      "electronMainPid": null,
+      "exitCode": 2147483651,
+      "status": "failed_before_app_initialization",
+      "failure": "Same Electron install_dir_access AppContainer ACL fatal; no UI",
+      "noSandbox": true,
+      "evidence": "runner-retry1.log"
+    },
+    {
+      "attempt": 3,
+      "runnerPid": 54884,
+      "electronLauncherPid": 40512,
+      "electronMainPid": null,
+      "exitCode": 2147483651,
+      "status": "failed_before_app_initialization",
+      "failure": "Standard sandbox launch after recorded ACL update; same install_dir_access ACL fatal before UI",
+      "noSandbox": false,
+      "evidence": "attempt-3-normal-sandbox-failure.log"
+    }
+  ],
+  "limitation": "Three launch attempts (normal, no-sandbox, normal after the recorded ACL update) failed before Electron app initialization. No main PID/window was available; none of the three todo behavior scenarios ran. No additional ACL change or launch retry was made.",
+  "accessControlEvidence": {
+    "before": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\verification\\runtime-acl-before.json",
+    "after": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\verification\\runtime-acl-after.json",
+    "readback": "icacls shows ALL APPLICATION PACKAGES RX on Electron dist directory; Electron still emitted the same fatal."
+  },
+  "initialBuildHeadBeforeTestAndIconSuccessors": "88f71eb3d725dccbe6fe797546efc763de6e080c",
+  "sourceHistoryFromInitialBuild": [
+    {
+      "sha": "bd8211597ea4ba3408c45c585f9e3da908e2a73d",
+      "classification": "test-only",
+      "files": [
+        "test/tool-validate.test.ts"
+      ]
+    },
+    {
+      "sha": "d88f25b",
+      "classification": "Windows/tray icon asset only",
+      "files": [
+        "build/icon.ico"
+      ]
+    },
+    {
+      "sha": "5cbfc35e08aac2462e894b5d1b258f8b3fbbf4e4",
+      "classification": "Windows icon generation and asset update",
+      "files": [
+        "build/icon.ico",
+        "scripts/build-windows-icon.ps1"
+      ]
+    }
+  ],
+  "sourceHeadAtSuccessfulRun": "e3ea343dd0c3d88dbbc47ce82e58351fbc44d35c",
+  "executionPermission": "require_escalated",
+  "successfulRun": {
+    "runId": "2026-09-30T0706Z-elevated-retry4",
+    "buildHead": "5cbfc35e08aac2462e894b5d1b258f8b3fbbf4e4",
+    "sourceHead": "e3ea343dd0c3d88dbbc47ce82e58351fbc44d35c",
+    "electronVersion": "43.7.6",
+    "noSandbox": false,
+    "statuses": [
+      "passed",
+      "passed",
+      "passed"
+    ],
+    "mainPids": [
+      66660,
+      66132,
+      57768,
+      53004
+    ],
+    "allMainPidsGracefullyExited": true,
+    "anyForcedClose": false,
+    "evidenceResult": "todo-lifecycle-results.json",
+    "evidenceLog": "runner-elevated-retry4.log"
+  },
+  "processExitVerification": {
+    "checkedAt": "2026-09-30T07:31:53.0906185Z",
+    "checkedPids": [
+      66660,
+      66132,
+      57768,
+      53004,
+      5476,
+      54324,
+      52200,
+      68360,
+      58736,
+      65588,
+      48592,
+      54816,
+      62368
+    ],
+    "liveOwnedProcessesFound": [],
+    "temporaryWrapperInDelivery": false
+  },
+  "evidenceFiles": [
+    {
+      "path": "todo-lifecycle-run.cjs",
+      "length": 22918,
+      "sha256": "D838EF65828B4C25AB944D072234563BDFFE111681C12CA5DD39D36802E9238D"
+    },
+    {
+      "path": ".codex-final-candidate-todo-20260930T0706Z-elevated-retry4.cjs",
+      "length": 628,
+      "sha256": "FB25F9B8BD0C398B65A31DBEAFCD74C67A7AC13E60501A61BD2E4E3BC4318ACF"
+    },
+    {
+      "path": "todo-lifecycle-results.json",
+      "length": 21473,
+      "sha256": "07F280C16BFAB55A034A2E530976802607336E0FFDE7A6D26F38181FA8654077"
+    },
+    {
+      "path": "runner-elevated-retry4.log",
+      "length": 487,
+      "sha256": "569141BF96CA8605DA8315F5D668E19FC21AD13CD83B2127A37A8A412A37A6F1"
+    },
+    {
+      "path": "scenario-1-draft-after-expiry.png",
+      "length": 43435,
+      "sha256": "7D1DCBDF69B9F0552A1F8D1590C521A071F51B09DA9433CDF473F09A14A28E5B"
+    },
+    {
+      "path": "scenario-2-expired-undo.png",
+      "length": 36049,
+      "sha256": "39A6FB6D40BB80DCA3EC1E5F3D5989FAD30AC85972047B1BF76EB06C502BB485"
+    },
+    {
+      "path": "scenario-3-after-composing-enter.png",
+      "length": 43338,
+      "sha256": "A4B1BA8120AF16D1CB4CE32D6B67AA812F9E172EE8E0EC34153B5EA55859E6A5"
+    },
+    {
+      "path": "scenario-3-saved-before-restart.png",
+      "length": 39899,
+      "sha256": "65BBAD9CD6D7D332D51404AC1D379D5BD4E26583817C97F57E11B707AC0801A1"
+    },
+    {
+      "path": "scenario-3-after-restart.png",
+      "length": 39919,
+      "sha256": "58035665B3E0569DE37B01CF1BA1A78A4D01B8F024D727029EE450BF97315E76"
+    },
+    {
+      "path": "runtime-acl-before.json",
+      "length": 1224,
+      "sha256": "D33AAC35F9E07B39169481D776BFD4799389074FAA3F1D662FAC248A8536BC9F"
+    },
+    {
+      "path": "runtime-acl-after.json",
+      "length": 1268,
+      "sha256": "CBD958D226B9BC52461A2C314634C0C9973005CCDD67CB8724A7D5AA83CF7081"
+    }
+  ]
+}

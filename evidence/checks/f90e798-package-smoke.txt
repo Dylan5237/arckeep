@@ -1,0 +1,1 @@
+Packaged fixture startup smoke passed: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\dist\candidate-f90e798\package-smoke\540131a0beb4405eafee6425c04de44b\signed-out.png

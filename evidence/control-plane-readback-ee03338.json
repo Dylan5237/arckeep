@@ -1,0 +1,26 @@
+{
+  "observedAt": "2026-09-30 09:53:06 UTC",
+  "scope": "Read-only; no remote writes",
+  "authority": {
+    "remote": "origin",
+    "mainRevision": "417c3e453643ddeba09d961f7b72b6b1bab4327d",
+    "registeredRemotes": [
+      "origin"
+    ],
+    "hooksPath": ".githooks",
+    "primaryClean": true
+  },
+  "governancePullRequest": {
+    "headRefOid": "9237b7d22a0b6243b6485f68b70ffbdc60e77e8d",
+    "reviewDecision": "",
+    "state": "OPEN",
+    "url": "https://github.com/Dylan5237/arckeep/pull/31"
+  },
+  "deliveryIssue": {
+    "state": "OPEN",
+    "title": "v0.1.0 MVP 发布",
+    "url": "https://github.com/Dylan5237/arckeep/issues/6",
+    "uncheckedConditions": 6
+  },
+  "localProductCandidate": "ee033380291d8968e3e8e5dd8fcf383e236f58fe"
+}

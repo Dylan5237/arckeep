@@ -1,0 +1,2 @@
+54bb870141ee3b0190a8cfc249f0dfa0f4dc945d349ce4cf95d738952ab3fa78  Arckeep-Setup-0.1.0.exe
+43aff0e807dc2ccb130038eb8421f72facbcc5abeea8cf1f10a57aadae44d1df  Arckeep-0.1.0-portable.exe

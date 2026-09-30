@@ -1,0 +1,1 @@
+{"sourceRevision":"ee033380291d8968e3e8e5dd8fcf383e236f58fe","applicationVersion":"0.1.0","electron":"43.7.6","matchedFiles":196,"artifacts":2}

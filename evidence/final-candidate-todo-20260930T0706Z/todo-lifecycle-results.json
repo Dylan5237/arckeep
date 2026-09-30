@@ -1,0 +1,318 @@
+{
+  "runId": "2026-09-30T0706Z-elevated-retry4",
+  "scope": "Three real Electron + Playwright todo scenarios using the delivery out/ build and standard sandbox launch.",
+  "delivery": "D:/_projects/platform/arckeep/.worktrees/6-codex-mvp-delivery",
+  "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe",
+  "mainEntry": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\out\\main\\index.js",
+  "wrapperTemporaryPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\.codex-final-candidate-todo-20260930T0706Z-elevated-retry4.cjs",
+  "wrapperEvidencePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\.codex-final-candidate-todo-20260930T0706Z-elevated-retry4.cjs",
+  "runnerLaunchOptions": {
+    "noSandbox": false,
+    "reason": "Standard Electron sandbox launch after root applied the recorded local runtime read ACL for ALL APPLICATION PACKAGES."
+  },
+  "executionPermission": "require_escalated",
+  "buildHead": "5cbfc35e08aac2462e894b5d1b258f8b3fbbf4e4",
+  "sourceHeadAtRunnerStart": "e3ea343dd0c3d88dbbc47ce82e58351fbc44d35c",
+  "electronVersionExpected": "43.7.6",
+  "testHooksEnabled": true,
+  "profiles": [
+    {
+      "name": "scenario-1-draft-survives-expiry",
+      "profileRoot": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-1-draft-survives-expiry",
+      "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-1-draft-survives-expiry\\appdata",
+      "userDataExpected": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-1-draft-survives-expiry\\appdata\\Arckeep",
+      "appDataEnv": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-1-draft-survives-expiry\\appdata-env",
+      "localAppData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-1-draft-survives-expiry\\localappdata",
+      "temp": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-1-draft-survives-expiry\\temp",
+      "ghConfigDir": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-1-draft-survives-expiry\\gh-config",
+      "runtime": {
+        "mainPid": 66660,
+        "electronVersion": "43.7.6",
+        "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-1-draft-survives-expiry\\appdata",
+        "userData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-1-draft-survives-expiry\\appdata\\Arckeep",
+        "appPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+        "appName": "Arckeep",
+        "wrapperAppDataApplied": true
+      },
+      "launcherPid": 63932,
+      "removedEnvironmentKeys": [],
+      "ghTokenPresent": false,
+      "wrapperAppDataApplied": true
+    },
+    {
+      "name": "scenario-2-navigation-undo-deadline",
+      "profileRoot": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-2-navigation-undo-deadline",
+      "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-2-navigation-undo-deadline\\appdata",
+      "userDataExpected": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-2-navigation-undo-deadline\\appdata\\Arckeep",
+      "appDataEnv": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-2-navigation-undo-deadline\\appdata-env",
+      "localAppData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-2-navigation-undo-deadline\\localappdata",
+      "temp": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-2-navigation-undo-deadline\\temp",
+      "ghConfigDir": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-2-navigation-undo-deadline\\gh-config",
+      "runtime": {
+        "mainPid": 66132,
+        "electronVersion": "43.7.6",
+        "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-2-navigation-undo-deadline\\appdata",
+        "userData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-2-navigation-undo-deadline\\appdata\\Arckeep",
+        "appPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+        "appName": "Arckeep",
+        "wrapperAppDataApplied": true
+      },
+      "launcherPid": 67228,
+      "removedEnvironmentKeys": [],
+      "ghTokenPresent": false,
+      "wrapperAppDataApplied": true
+    },
+    {
+      "name": "scenario-3-composing-enter-restart",
+      "profileRoot": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart",
+      "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\appdata",
+      "userDataExpected": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\appdata\\Arckeep",
+      "appDataEnv": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\appdata-env",
+      "localAppData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\localappdata",
+      "temp": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\temp",
+      "ghConfigDir": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\gh-config",
+      "runtime": {
+        "mainPid": 57768,
+        "electronVersion": "43.7.6",
+        "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\appdata",
+        "userData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\appdata\\Arckeep",
+        "appPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+        "appName": "Arckeep",
+        "wrapperAppDataApplied": true
+      },
+      "launcherPid": 52200,
+      "removedEnvironmentKeys": [],
+      "ghTokenPresent": false,
+      "wrapperAppDataApplied": true
+    },
+    {
+      "name": "scenario-3-composing-enter-restart",
+      "profileRoot": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart",
+      "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\appdata",
+      "userDataExpected": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\appdata\\Arckeep",
+      "appDataEnv": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\appdata-env",
+      "localAppData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\localappdata",
+      "temp": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\temp",
+      "ghConfigDir": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\gh-config",
+      "runtime": {
+        "mainPid": 53004,
+        "electronVersion": "43.7.6",
+        "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\appdata",
+        "userData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry4\\scenario-3-composing-enter-restart\\appdata\\Arckeep",
+        "appPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+        "appName": "Arckeep",
+        "wrapperAppDataApplied": true
+      },
+      "launcherPid": 68360,
+      "removedEnvironmentKeys": [],
+      "ghTokenPresent": false,
+      "wrapperAppDataApplied": true
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "delete-a-edit-b-expiry-retains-draft",
+      "status": "passed",
+      "profile": "scenario-1-draft-survives-expiry",
+      "undoButtonShownAt": 1790753322869,
+      "undoExpiredAndButtonRemoved": true,
+      "beforeExpiryDraft": {
+        "text": "scenario 1 draft retained after expiry",
+        "repo": "evidence/edited-b",
+        "waiting": true
+      },
+      "afterExpiryDraft": {
+        "text": "scenario 1 draft retained after expiry",
+        "repo": "evidence/edited-b",
+        "waiting": true
+      },
+      "storedAfterExpiry": [
+        {
+          "id": "22732ab4-dbd1-46e8-a26c-a565357f83c5",
+          "text": "scenario 1 original B",
+          "repo": "evidence/original-b",
+          "waiting": false,
+          "waitingSince": null,
+          "createdAt": "2026-09-30T07:28:42.828Z",
+          "updatedAt": "2026-09-30T07:28:42.828Z",
+          "completed": false
+        }
+      ],
+      "expiredAt": 1790753327879,
+      "screenshot": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\scenario-1-draft-after-expiry.png",
+      "cleanup": {
+        "secondary": {
+          "action": "quit",
+          "pid": 61236,
+          "code": 0,
+          "signal": null,
+          "stdout": "\r\n",
+          "stderr": "libpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\n"
+        },
+        "mainPid": 66660,
+        "launcherPid": 63932,
+        "gracefulExit": true,
+        "forcedClose": false,
+        "processClose": {
+          "code": 0,
+          "signal": null
+        },
+        "appProcessExitCode": 0,
+        "stdout": "",
+        "stderr": "Waiting for the debugger to disconnect...\r\n"
+      }
+    },
+    {
+      "id": "navigation-preserves-original-deadline-and-stale-click-rejected",
+      "status": "passed",
+      "profile": "scenario-2-navigation-undo-deadline",
+      "undoButtonShownAt": 1790753329960,
+      "remainingMsAtReturnApprox": 2752,
+      "undoAvailableOnReturn": true,
+      "expiredAt": 1790753334958,
+      "elapsedFromShownToExpiryObservedMs": 4998,
+      "undoRemovedAfterOriginalDeadline": true,
+      "staleButtonWasDetached": true,
+      "staleButtonProgrammaticClickDidNotRestore": true,
+      "todosAfterStaleClick": [],
+      "todoEventOps": [
+        "create",
+        "delete"
+      ],
+      "screenshot": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\scenario-2-expired-undo.png",
+      "cleanup": {
+        "secondary": {
+          "action": "quit",
+          "pid": 67360,
+          "code": 0,
+          "signal": null,
+          "stdout": "\r\n",
+          "stderr": "libpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\n"
+        },
+        "mainPid": 66132,
+        "launcherPid": 67228,
+        "gracefulExit": true,
+        "forcedClose": false,
+        "processClose": {
+          "code": 0,
+          "signal": null
+        },
+        "appProcessExitCode": 0,
+        "stdout": "",
+        "stderr": "Waiting for the debugger to disconnect...\r\n"
+      }
+    },
+    {
+      "id": "composing-enter-ignored-normal-enter-saves-and-restart-persists",
+      "status": "passed",
+      "profile": "scenario-3-composing-enter-restart",
+      "composingEnterEvent": {
+        "isComposing": true,
+        "isTrusted": false,
+        "defaultPrevented": false
+      },
+      "composingEnterAudit": [
+        {
+          "key": "Enter",
+          "isComposing": true,
+          "isTrusted": false,
+          "defaultPrevented": false
+        }
+      ],
+      "composingEnterDidNotSave": true,
+      "screenshotBeforeOrdinaryEnter": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\scenario-3-after-composing-enter.png",
+      "ordinaryEnterAudit": [
+        {
+          "key": "Enter",
+          "isComposing": true,
+          "isTrusted": false,
+          "defaultPrevented": false
+        },
+        {
+          "key": "Enter",
+          "isComposing": false,
+          "isTrusted": true,
+          "defaultPrevented": false
+        }
+      ],
+      "savedBeforeRestart": {
+        "id": "1a60b09c-d7b6-429c-b775-206ce4426edb",
+        "text": "scenario 3 saved by Enter",
+        "repo": "evidence/saved-by-enter",
+        "waiting": true,
+        "waitingSince": "2026-09-30T07:28:57.795Z",
+        "createdAt": "2026-09-30T07:28:57.375Z",
+        "updatedAt": "2026-09-30T07:28:57.795Z",
+        "completed": false
+      },
+      "screenshotAfterOrdinaryEnter": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\scenario-3-saved-before-restart.png",
+      "firstApp": {
+        "secondary": {
+          "action": "quit",
+          "pid": 65588,
+          "code": 0,
+          "signal": null,
+          "stdout": "\r\n",
+          "stderr": "libpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\n"
+        },
+        "mainPid": 57768,
+        "launcherPid": 52200,
+        "gracefulExit": true,
+        "forcedClose": false,
+        "processClose": {
+          "code": 0,
+          "signal": null
+        },
+        "appProcessExitCode": 0,
+        "stdout": "",
+        "stderr": "Waiting for the debugger to disconnect...\r\n"
+      },
+      "restart": {
+        "mainPid": 53004,
+        "launcherPid": 68360,
+        "persistedItem": {
+          "id": "1a60b09c-d7b6-429c-b775-206ce4426edb",
+          "text": "scenario 3 saved by Enter",
+          "repo": "evidence/saved-by-enter",
+          "waiting": true,
+          "waitingSince": "2026-09-30T07:28:57.795Z",
+          "createdAt": "2026-09-30T07:28:57.375Z",
+          "updatedAt": "2026-09-30T07:28:57.795Z",
+          "completed": false
+        },
+        "uiText": "scenario 3 saved by Enter",
+        "uiRepo": "evidence/saved-by-enter",
+        "uiWaitingChip": "等我"
+      },
+      "screenshotAfterRestart": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\scenario-3-after-restart.png",
+      "restartCleanup": {
+        "secondary": {
+          "action": "quit",
+          "pid": 48592,
+          "code": 0,
+          "signal": null,
+          "stdout": "\r\n",
+          "stderr": "libpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\n"
+        },
+        "mainPid": 53004,
+        "launcherPid": 68360,
+        "gracefulExit": true,
+        "forcedClose": false,
+        "processClose": {
+          "code": 0,
+          "signal": null
+        },
+        "appProcessExitCode": 0,
+        "stdout": "",
+        "stderr": "Waiting for the debugger to disconnect...\r\n"
+      }
+    }
+  ],
+  "limitations": [
+    "Synthetic KeyboardEvent isComposing coverage does not test a real Windows IME.",
+    "Playwright Enter coverage does not test OS global shortcuts.",
+    "Tray construction is incidental startup only; tray interaction is not tested."
+  ],
+  "wrapperMovedToEvidence": true,
+  "completedAt": "2026-09-30T07:29:00.891Z"
+}

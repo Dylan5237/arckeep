@@ -1,0 +1,9 @@
+# Raw local profiles and owned probe markers are preserved on this host, not published.
+**/profiles/
+**/profile*/
+**/playwright-artifacts/
+**/raw-logs/
+
+# Package verifier outputs keep reproducible metadata, icons, and logs tracked;
+# extracted app payload binaries remain local-only.
+/payload-verification-*/raw-payloads/

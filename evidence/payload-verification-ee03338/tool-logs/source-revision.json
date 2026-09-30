@@ -1,0 +1,15 @@
+{
+  "name": "source-revision",
+  "executable": "git.exe",
+  "arguments": [
+    "-C",
+    "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+    "rev-parse",
+    "HEAD"
+  ],
+  "workingDirectory": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+  "startedUtc": "2026-09-30T09:58:16.5355979Z",
+  "exitCode": 0,
+  "stdout": "ee033380291d8968e3e8e5dd8fcf383e236f58fe\n",
+  "stderr": ""
+}

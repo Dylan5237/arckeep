@@ -1,0 +1,10 @@
+{
+  "command": "echo 中文stdout & echo 中文stderr 1>&2",
+  "result": {
+    "code": 0,
+    "stdout": "����stdout \r\n",
+    "stderr": "����stderr \r\n",
+    "aborted": false
+  },
+  "scope": "Actual cmd built-in output, separate from Node UTF-8 native-output tests"
+}

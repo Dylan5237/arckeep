@@ -1,0 +1,836 @@
+name: installer-payload-list
+executable: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\node_modules\electron-winstaller\vendor\7z-x64.exe
+arguments-json: ["l","-slt","D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-f90e798\\raw-payloads\\containers\\installer\\app-64.7z"]
+working-directory: D:\_projects\platform\arckeep\.worktrees\6-codex-mvp-delivery\dist\candidate-f90e798
+started-utc: 2026-09-30T08:44:30.9727120Z
+exit-code: 0
+--- stdout ---
+
+7-Zip [64] 16.04 : Copyright (c) 1999-2016 Igor Pavlov : 2016-10-04
+
+Scanning the drive for archives:
+1 file, 103914129 bytes (100 MiB)
+
+Listing archive: D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\payload-verification-f90e798\raw-payloads\containers\installer\app-64.7z
+
+--
+Path = D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\payload-verification-f90e798\raw-payloads\containers\installer\app-64.7z
+Type = 7z
+Physical Size = 103914129
+Headers Size = 1549
+Method = LZMA2:20 LZMA:20 BCJ2
+Solid = -
+Blocks = 79
+
+----------
+Path = locales
+Size = 0
+Packed Size = 0
+Modified = 
+Attributes = D
+CRC = 
+Encrypted = -
+Method = 
+Block = 
+
+Path = resources
+Size = 0
+Packed Size = 0
+Modified = 
+Attributes = D
+CRC = 
+Encrypted = -
+Method = 
+Block = 
+
+Path = chrome_100_percent.pak
+Size = 119905
+Packed Size = 109582
+Modified = 
+Attributes = A
+CRC = 55DBB58B
+Encrypted = -
+Method = LZMA2:20
+Block = 0
+
+Path = chrome_200_percent.pak
+Size = 197089
+Packed Size = 183482
+Modified = 
+Attributes = A
+CRC = 23187AE3
+Encrypted = -
+Method = LZMA2:20
+Block = 1
+
+Path = icudtl.dat
+Size = 10876560
+Packed Size = 3490899
+Modified = 
+Attributes = A
+CRC = A7D36ED0
+Encrypted = -
+Method = LZMA2:20
+Block = 2
+
+Path = LICENSE.electron.txt
+Size = 1096
+Packed Size = 690
+Modified = 
+Attributes = A
+CRC = 3958EFAA
+Encrypted = -
+Method = LZMA2:20
+Block = 3
+
+Path = LICENSES.chromium.html
+Size = 20313960
+Packed Size = 549501
+Modified = 
+Attributes = A
+CRC = DC12AE9C
+Encrypted = -
+Method = LZMA2:20
+Block = 4
+
+Path = locales\af.pak
+Size = 614017
+Packed Size = 147955
+Modified = 
+Attributes = A
+CRC = 22357D67
+Encrypted = -
+Method = LZMA2:20
+Block = 5
+
+Path = locales\am.pak
+Size = 994699
+Packed Size = 166120
+Modified = 
+Attributes = A
+CRC = AAEB6FD6
+Encrypted = -
+Method = LZMA2:20
+Block = 6
+
+Path = locales\ar.pak
+Size = 1096145
+Packed Size = 171317
+Modified = 
+Attributes = A
+CRC = FA380044
+Encrypted = -
+Method = LZMA2:20
+Block = 7
+
+Path = locales\bg.pak
+Size = 1138139
+Packed Size = 166081
+Modified = 
+Attributes = A
+CRC = 8179D182
+Encrypted = -
+Method = LZMA2:20
+Block = 8
+
+Path = locales\bn.pak
+Size = 1461103
+Packed Size = 172692
+Modified = 
+Attributes = A
+CRC = 485B512F
+Encrypted = -
+Method = LZMA2:20
+Block = 9
+
+Path = locales\ca.pak
+Size = 692259
+Packed Size = 151210
+Modified = 
+Attributes = A
+CRC = A5FEDEDD
+Encrypted = -
+Method = LZMA2:20
+Block = 10
+
+Path = locales\cs.pak
+Size = 718691
+Packed Size = 163829
+Modified = 
+Attributes = A
+CRC = 2C891A97
+Encrypted = -
+Method = LZMA2:20
+Block = 11
+
+Path = locales\da.pak
+Size = 644715
+Packed Size = 147932
+Modified = 
+Attributes = A
+CRC = 5691AF6F
+Encrypted = -
+Method = LZMA2:20
+Block = 12
+
+Path = locales\de.pak
+Size = 693336
+Packed Size = 156750
+Modified = 
+Attributes = A
+CRC = F3ADECF2
+Encrypted = -
+Method = LZMA2:20
+Block = 13
+
+Path = locales\el.pak
+Size = 1251062
+Packed Size = 174516
+Modified = 
+Attributes = A
+CRC = F1980FF2
+Encrypted = -
+Method = LZMA2:20
+Block = 14
+
+Path = locales\en-GB.pak
+Size = 559903
+Packed Size = 137346
+Modified = 
+Attributes = A
+CRC = AD18FE0E
+Encrypted = -
+Method = LZMA2:20
+Block = 15
+
+Path = locales\en-US.pak
+Size = 566095
+Packed Size = 138029
+Modified = 
+Attributes = A
+CRC = C4257406
+Encrypted = -
+Method = LZMA2:20
+Block = 16
+
+Path = locales\es-419.pak
+Size = 683097
+Packed Size = 150839
+Modified = 
+Attributes = A
+CRC = A3D37177
+Encrypted = -
+Method = LZMA2:20
+Block = 17
+
+Path = locales\es.pak
+Size = 679701
+Packed Size = 149942
+Modified = 
+Attributes = A
+CRC = 976F8F5A
+Encrypted = -
+Method = LZMA2:20
+Block = 18
+
+Path = locales\et.pak
+Size = 620420
+Packed Size = 152748
+Modified = 
+Attributes = A
+CRC = 5730E17F
+Encrypted = -
+Method = LZMA2:20
+Block = 19
+
+Path = locales\fa.pak
+Size = 1026888
+Packed Size = 162434
+Modified = 
+Attributes = A
+CRC = 4F4022ED
+Encrypted = -
+Method = LZMA2:20
+Block = 20
+
+Path = locales\fi.pak
+Size = 632436
+Packed Size = 151243
+Modified = 
+Attributes = A
+CRC = C724C292
+Encrypted = -
+Method = LZMA2:20
+Block = 21
+
+Path = locales\fil.pak
+Size = 715769
+Packed Size = 150738
+Modified = 
+Attributes = A
+CRC = 845BFB05
+Encrypted = -
+Method = LZMA2:20
+Block = 22
+
+Path = locales\fr.pak
+Size = 738348
+Packed Size = 156237
+Modified = 
+Attributes = A
+CRC = B8754703
+Encrypted = -
+Method = LZMA2:20
+Block = 23
+
+Path = locales\gu.pak
+Size = 1443762
+Packed Size = 170863
+Modified = 
+Attributes = A
+CRC = 8DDA00F2
+Encrypted = -
+Method = LZMA2:20
+Block = 24
+
+Path = locales\he.pak
+Size = 898800
+Packed Size = 158793
+Modified = 
+Attributes = A
+CRC = CD0B638B
+Encrypted = -
+Method = LZMA2:20
+Block = 25
+
+Path = locales\hi.pak
+Size = 1529643
+Packed Size = 177284
+Modified = 
+Attributes = A
+CRC = B6ADF51D
+Encrypted = -
+Method = LZMA2:20
+Block = 26
+
+Path = locales\hr.pak
+Size = 691185
+Packed Size = 157687
+Modified = 
+Attributes = A
+CRC = 0805C914
+Encrypted = -
+Method = LZMA2:20
+Block = 27
+
+Path = locales\hu.pak
+Size = 738546
+Packed Size = 164784
+Modified = 
+Attributes = A
+CRC = 8766339C
+Encrypted = -
+Method = LZMA2:20
+Block = 28
+
+Path = locales\id.pak
+Size = 612462
+Packed Size = 137950
+Modified = 
+Attributes = A
+CRC = 785BC572
+Encrypted = -
+Method = LZMA2:20
+Block = 29
+
+Path = locales\it.pak
+Size = 669241
+Packed Size = 148719
+Modified = 
+Attributes = A
+CRC = BE3370F4
+Encrypted = -
+Method = LZMA2:20
+Block = 30
+
+Path = locales\ja.pak
+Size = 815509
+Packed Size = 143840
+Modified = 
+Attributes = A
+CRC = E10F3145
+Encrypted = -
+Method = LZMA2:20
+Block = 31
+
+Path = locales\kn.pak
+Size = 1661701
+Packed Size = 174317
+Modified = 
+Attributes = A
+CRC = 7123EA96
+Encrypted = -
+Method = LZMA2:20
+Block = 32
+
+Path = locales\ko.pak
+Size = 694030
+Packed Size = 140217
+Modified = 
+Attributes = A
+CRC = 96641C6E
+Encrypted = -
+Method = LZMA2:20
+Block = 33
+
+Path = locales\lt.pak
+Size = 752001
+Packed Size = 160792
+Modified = 
+Attributes = A
+CRC = 11597B52
+Encrypted = -
+Method = LZMA2:20
+Block = 34
+
+Path = locales\lv.pak
+Size = 749059
+Packed Size = 161886
+Modified = 
+Attributes = A
+CRC = 6CB6686C
+Encrypted = -
+Method = LZMA2:20
+Block = 35
+
+Path = locales\ml.pak
+Size = 1705593
+Packed Size = 177713
+Modified = 
+Attributes = A
+CRC = F41C6135
+Encrypted = -
+Method = LZMA2:20
+Block = 36
+
+Path = locales\mr.pak
+Size = 1415199
+Packed Size = 167772
+Modified = 
+Attributes = A
+CRC = 983E1EA5
+Encrypted = -
+Method = LZMA2:20
+Block = 37
+
+Path = locales\ms.pak
+Size = 644669
+Packed Size = 140322
+Modified = 
+Attributes = A
+CRC = 537C6F97
+Encrypted = -
+Method = LZMA2:20
+Block = 38
+
+Path = locales\nb.pak
+Size = 616327
+Packed Size = 144836
+Modified = 
+Attributes = A
+CRC = 63C9B081
+Encrypted = -
+Method = LZMA2:20
+Block = 39
+
+Path = locales\nl.pak
+Size = 642143
+Packed Size = 148379
+Modified = 
+Attributes = A
+CRC = F4EB7E0D
+Encrypted = -
+Method = LZMA2:20
+Block = 40
+
+Path = locales\pl.pak
+Size = 717729
+Packed Size = 163164
+Modified = 
+Attributes = A
+CRC = A3562EE1
+Encrypted = -
+Method = LZMA2:20
+Block = 41
+
+Path = locales\pt-BR.pak
+Size = 673197
+Packed Size = 150617
+Modified = 
+Attributes = A
+CRC = DF78378C
+Encrypted = -
+Method = LZMA2:20
+Block = 42
+
+Path = locales\pt-PT.pak
+Size = 676984
+Packed Size = 149039
+Modified = 
+Attributes = A
+CRC = E1BF958D
+Encrypted = -
+Method = LZMA2:20
+Block = 43
+
+Path = locales\ro.pak
+Size = 702574
+Packed Size = 153889
+Modified = 
+Attributes = A
+CRC = 095B658E
+Encrypted = -
+Method = LZMA2:20
+Block = 44
+
+Path = locales\ru.pak
+Size = 1163483
+Packed Size = 174379
+Modified = 
+Attributes = A
+CRC = F1F98A35
+Encrypted = -
+Method = LZMA2:20
+Block = 45
+
+Path = locales\sk.pak
+Size = 730264
+Packed Size = 166950
+Modified = 
+Attributes = A
+CRC = 98E0CC49
+Encrypted = -
+Method = LZMA2:20
+Block = 46
+
+Path = locales\sl.pak
+Size = 699179
+Packed Size = 158091
+Modified = 
+Attributes = A
+CRC = 956AF5E8
+Encrypted = -
+Method = LZMA2:20
+Block = 47
+
+Path = locales\sr.pak
+Size = 1075898
+Packed Size = 166252
+Modified = 
+Attributes = A
+CRC = D2ABE87E
+Encrypted = -
+Method = LZMA2:20
+Block = 48
+
+Path = locales\sv.pak
+Size = 624021
+Packed Size = 144788
+Modified = 
+Attributes = A
+CRC = 4BF1F987
+Encrypted = -
+Method = LZMA2:20
+Block = 49
+
+Path = locales\sw.pak
+Size = 660623
+Packed Size = 148987
+Modified = 
+Attributes = A
+CRC = FA2629F6
+Encrypted = -
+Method = LZMA2:20
+Block = 50
+
+Path = locales\ta.pak
+Size = 1696711
+Packed Size = 173516
+Modified = 
+Attributes = A
+CRC = 33695351
+Encrypted = -
+Method = LZMA2:20
+Block = 51
+
+Path = locales\te.pak
+Size = 1571940
+Packed Size = 174059
+Modified = 
+Attributes = A
+CRC = 278738E4
+Encrypted = -
+Method = LZMA2:20
+Block = 52
+
+Path = locales\th.pak
+Size = 1320867
+Packed Size = 152180
+Modified = 
+Attributes = A
+CRC = 731743C6
+Encrypted = -
+Method = LZMA2:20
+Block = 53
+
+Path = locales\tr.pak
+Size = 672669
+Packed Size = 150230
+Modified = 
+Attributes = A
+CRC = C9EC1415
+Encrypted = -
+Method = LZMA2:20
+Block = 54
+
+Path = locales\uk.pak
+Size = 1172739
+Packed Size = 172230
+Modified = 
+Attributes = A
+CRC = 40E49044
+Encrypted = -
+Method = LZMA2:20
+Block = 55
+
+Path = locales\ur.pak
+Size = 1010270
+Packed Size = 162327
+Modified = 
+Attributes = A
+CRC = 2AD1ED60
+Encrypted = -
+Method = LZMA2:20
+Block = 56
+
+Path = locales\vi.pak
+Size = 799770
+Packed Size = 149895
+Modified = 
+Attributes = A
+CRC = F0A93CBF
+Encrypted = -
+Method = LZMA2:20
+Block = 57
+
+Path = locales\zh-CN.pak
+Size = 571748
+Packed Size = 139393
+Modified = 
+Attributes = A
+CRC = F594BEDD
+Encrypted = -
+Method = LZMA2:20
+Block = 58
+
+Path = locales\zh-TW.pak
+Size = 564374
+Packed Size = 137480
+Modified = 
+Attributes = A
+CRC = 0F5514B5
+Encrypted = -
+Method = LZMA2:20
+Block = 59
+
+Path = resources\app.asar
+Size = 2275626
+Packed Size = 358573
+Modified = 
+Attributes = A
+CRC = 7FBB2F04
+Encrypted = -
+Method = LZMA2:20
+Block = 60
+
+Path = resources\default_app.asar
+Size = 110862
+Packed Size = 82965
+Modified = 
+Attributes = A
+CRC = EA56DC82
+Encrypted = -
+Method = LZMA2:20
+Block = 61
+
+Path = resources\icon.ico
+Size = 19713
+Packed Size = 19118
+Modified = 
+Attributes = A
+CRC = 9D59D765
+Encrypted = -
+Method = LZMA2:20
+Block = 62
+
+Path = resources\icon.png
+Size = 9343
+Packed Size = 9194
+Modified = 
+Attributes = A
+CRC = C8B7150D
+Encrypted = -
+Method = LZMA2:20
+Block = 63
+
+Path = resources.pak
+Size = 7236872
+Packed Size = 7145756
+Modified = 
+Attributes = A
+CRC = 8CC4BAA2
+Encrypted = -
+Method = LZMA2:20
+Block = 64
+
+Path = snapshot_blob.bin
+Size = 365488
+Packed Size = 54654
+Modified = 
+Attributes = A
+CRC = F002BF85
+Encrypted = -
+Method = LZMA2:20
+Block = 65
+
+Path = v8_context_snapshot.bin
+Size = 740048
+Packed Size = 117345
+Modified = 
+Attributes = A
+CRC = C1968216
+Encrypted = -
+Method = LZMA2:20
+Block = 66
+
+Path = version
+Size = 6
+Packed Size = 10
+Modified = 
+Attributes = A
+CRC = 6DDC91E3
+Encrypted = -
+Method = LZMA2:20
+Block = 67
+
+Path = vk_swiftshader_icd.json
+Size = 106
+Packed Size = 96
+Modified = 
+Attributes = A
+CRC = 596B3D49
+Encrypted = -
+Method = LZMA2:20
+Block = 68
+
+Path = Arckeep.exe
+Size = 239024128
+Packed Size = 69780848
+Modified = 
+Attributes = A
+CRC = 034068EC
+Encrypted = -
+Method = BCJ2 LZMA2:20 LZMA:20:lc0:lp2 LZMA:20:lc0:lp2
+Block = 69
+
+Path = d3dcompiler_47.dll
+Size = 4741488
+Packed Size = 1580157
+Modified = 
+Attributes = A
+CRC = 80D20879
+Encrypted = -
+Method = BCJ2 LZMA2:20 LZMA:20:lc0:lp2 LZMA:20:lc0:lp2
+Block = 70
+
+Path = dxcompiler.dll
+Size = 25610240
+Packed Size = 6346534
+Modified = 
+Attributes = A
+CRC = 9174C7FC
+Encrypted = -
+Method = BCJ2 LZMA2:20 LZMA:20:lc0:lp2 LZMA:20:lc0:lp2
+Block = 71
+
+Path = dxil.dll
+Size = 1509760
+Packed Size = 474729
+Modified = 
+Attributes = A
+CRC = 6CD2B41A
+Encrypted = -
+Method = BCJ2 LZMA2:20 LZMA:20:lc0:lp2 LZMA:20:lc0:lp2
+Block = 72
+
+Path = ffmpeg.dll
+Size = 3061248
+Packed Size = 931509
+Modified = 
+Attributes = A
+CRC = A2F8799D
+Encrypted = -
+Method = BCJ2 LZMA2:20 LZMA:20:lc0:lp2 LZMA:20:lc0:lp2
+Block = 73
+
+Path = libEGL.dll
+Size = 467968
+Packed Size = 165778
+Modified = 
+Attributes = A
+CRC = 28AFE150
+Encrypted = -
+Method = BCJ2 LZMA2:20 LZMA:20:lc0:lp2 LZMA:20:lc0:lp2
+Block = 74
+
+Path = libGLESv2.dll
+Size = 8056320
+Packed Size = 2226486
+Modified = 
+Attributes = A
+CRC = 195D6571
+Encrypted = -
+Method = BCJ2 LZMA2:20 LZMA:20:lc0:lp2 LZMA:20:lc0:lp2
+Block = 75
+
+Path = resources\elevate.exe
+Size = 107520
+Packed Size = 49095
+Modified = 
+Attributes = A
+CRC = C908A44F
+Encrypted = -
+Method = BCJ2 LZMA2:20 LZMA:20:lc0:lp2 LZMA:20:lc0:lp2
+Block = 76
+
+Path = vk_swiftshader.dll
+Size = 5506048
+Packed Size = 1348566
+Modified = 
+Attributes = A
+CRC = F892365C
+Encrypted = -
+Method = BCJ2 LZMA2:20 LZMA:20:lc0:lp2 LZMA:20:lc0:lp2
+Block = 77
+
+Path = vulkan-1.dll
+Size = 924160
+Packed Size = 255435
+Modified = 
+Attributes = A
+CRC = 15D457CD
+Encrypted = -
+Method = BCJ2 LZMA2:20 LZMA:20:lc0:lp2 LZMA:20:lc0:lp2
+Block = 78
+--- stderr ---
+

@@ -1,0 +1,130 @@
+{
+  "runId": "2026-09-30T0706Z-elevated-retry3",
+  "scope": "Three real Electron + Playwright todo scenarios using the delivery out/ build and standard sandbox launch.",
+  "delivery": "D:/_projects/platform/arckeep/.worktrees/6-codex-mvp-delivery",
+  "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe",
+  "mainEntry": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\out\\main\\index.js",
+  "wrapperTemporaryPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\.codex-final-candidate-todo-20260930T0706Z-elevated-retry3.cjs",
+  "wrapperEvidencePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\.codex-final-candidate-todo-20260930T0706Z-elevated-retry3.cjs",
+  "runnerLaunchOptions": {
+    "noSandbox": false,
+    "reason": "Standard Electron sandbox launch after root applied the recorded local runtime read ACL for ALL APPLICATION PACKAGES."
+  },
+  "executionPermission": "require_escalated",
+  "buildHead": "5cbfc35e08aac2462e894b5d1b258f8b3fbbf4e4",
+  "sourceHeadAtRunnerStart": "e3ea343dd0c3d88dbbc47ce82e58351fbc44d35c",
+  "electronVersionExpected": "43.7.6",
+  "testHooksEnabled": true,
+  "profiles": [
+    {
+      "name": "scenario-1-draft-survives-expiry",
+      "profileRoot": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-1-draft-survives-expiry",
+      "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-1-draft-survives-expiry\\appdata",
+      "userDataExpected": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-1-draft-survives-expiry\\appdata\\Arckeep",
+      "appDataEnv": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-1-draft-survives-expiry\\appdata-env",
+      "localAppData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-1-draft-survives-expiry\\localappdata",
+      "temp": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-1-draft-survives-expiry\\temp",
+      "ghConfigDir": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-1-draft-survives-expiry\\gh-config",
+      "runtime": {
+        "mainPid": 18980,
+        "electronVersion": "43.7.6",
+        "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-1-draft-survives-expiry\\appdata",
+        "userData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-1-draft-survives-expiry\\appdata\\Arckeep",
+        "appPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+        "appName": "Arckeep"
+      },
+      "launcherPid": 5476,
+      "removedEnvironmentKeys": [],
+      "ghTokenPresent": false,
+      "wrapperAppDataApplied": false
+    },
+    {
+      "name": "scenario-2-navigation-undo-deadline",
+      "profileRoot": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-2-navigation-undo-deadline",
+      "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-2-navigation-undo-deadline\\appdata",
+      "userDataExpected": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-2-navigation-undo-deadline\\appdata\\Arckeep",
+      "appDataEnv": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-2-navigation-undo-deadline\\appdata-env",
+      "localAppData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-2-navigation-undo-deadline\\localappdata",
+      "temp": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-2-navigation-undo-deadline\\temp",
+      "ghConfigDir": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-2-navigation-undo-deadline\\gh-config",
+      "runtime": {
+        "mainPid": 53672,
+        "electronVersion": "43.7.6",
+        "appData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-2-navigation-undo-deadline\\appdata",
+        "userData": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\profiles-escalated-retry3\\scenario-2-navigation-undo-deadline\\appdata\\Arckeep",
+        "appPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery",
+        "appName": "Arckeep"
+      },
+      "launcherPid": 54324,
+      "removedEnvironmentKeys": [],
+      "ghTokenPresent": false,
+      "wrapperAppDataApplied": false
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "delete-a-edit-b-expiry-retains-draft",
+      "status": "passed",
+      "profile": "scenario-1-draft-survives-expiry",
+      "undoButtonShownAt": 1790753106225,
+      "undoExpiredAndButtonRemoved": true,
+      "beforeExpiryDraft": {
+        "text": "scenario 1 draft retained after expiry",
+        "repo": "evidence/edited-b",
+        "waiting": true
+      },
+      "afterExpiryDraft": {
+        "text": "scenario 1 draft retained after expiry",
+        "repo": "evidence/edited-b",
+        "waiting": true
+      },
+      "storedAfterExpiry": [
+        {
+          "id": "bd456886-0e33-416d-b492-4d95325521b9",
+          "text": "scenario 1 original B",
+          "repo": "evidence/original-b",
+          "waiting": false,
+          "waitingSince": null,
+          "createdAt": "2026-09-30T07:25:06.169Z",
+          "updatedAt": "2026-09-30T07:25:06.169Z",
+          "completed": false
+        }
+      ],
+      "expiredAt": 1790753111234,
+      "screenshot": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\scenario-1-draft-after-expiry.png",
+      "cleanup": {
+        "secondary": {
+          "action": "quit",
+          "pid": 58736,
+          "code": 0,
+          "signal": null,
+          "stdout": "\r\n",
+          "stderr": "libpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\nlibpng warning: iCCP: known incorrect sRGB profile\r\n"
+        },
+        "mainPid": 18980,
+        "launcherPid": 5476,
+        "gracefulExit": true,
+        "forcedClose": false,
+        "processClose": {
+          "code": 0,
+          "signal": null
+        },
+        "appProcessExitCode": 0,
+        "stdout": "",
+        "stderr": "Waiting for the debugger to disconnect...\r\n"
+      }
+    }
+  ],
+  "limitations": [
+    "Synthetic KeyboardEvent isComposing coverage does not test a real Windows IME.",
+    "Playwright Enter coverage does not test OS global shortcuts.",
+    "Tray construction is incidental startup only; tray interaction is not tested."
+  ],
+  "wrapperMovedToEvidence": true,
+  "completedAt": "2026-09-30T07:25:24.718Z",
+  "failure": {
+    "name": "TimeoutError",
+    "message": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-page=\"settings\"]') to be visible\u001b[22m\n",
+    "stack": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-page=\"settings\"]') to be visible\u001b[22m\n\n    at scenarioNavigationAndStaleUndo (D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\todo-lifecycle-run.cjs:306:58)\n    at async main (D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\todo-lifecycle-run.cjs:437:27)"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "runId": "2026-09-30T0706Z-retry1",
+  "scope": "Three real Electron + Playwright todo scenarios using the delivery out/ build; test-only source successor bd82115 recorded separately.",
+  "delivery": "D:/_projects/platform/arckeep/.worktrees/6-codex-mvp-delivery",
+  "executable": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe",
+  "mainEntry": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\out\\main\\index.js",
+  "wrapperTemporaryPath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\.codex-final-candidate-todo-20260930T0706Z-retry1.cjs",
+  "wrapperEvidencePath": "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\.codex-final-candidate-todo-20260930T0706Z-retry1.cjs",
+  "runnerLaunchOptions": {
+    "noSandbox": true,
+    "reason": "Windows AppContainer ACL denied the sandbox token access to the local Electron distribution; no filesystem ACL change was made."
+  },
+  "buildHead": "88f71eb3d725dccbe6fe797546efc763de6e080c",
+  "sourceHeadAtRunnerStart": "5cbfc35e08aac2462e894b5d1b258f8b3fbbf4e4",
+  "electronVersionExpected": "43.7.6",
+  "testHooksEnabled": true,
+  "profiles": [],
+  "scenarios": [],
+  "limitations": [
+    "Synthetic KeyboardEvent isComposing coverage does not test a real Windows IME.",
+    "Playwright Enter coverage does not test OS global shortcuts.",
+    "Tray construction is incidental startup only; tray interaction is not tested."
+  ],
+  "wrapperMovedToEvidence": true,
+  "completedAt": "2026-09-30T07:14:42.620Z",
+  "failure": {
+    "name": "Error",
+    "message": "electron.launch: Process failed to launch!\nCall log:\n\u001b[2m  - <launching> \"D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe\" \"--inspect=0\" \"--remote-debugging-port=0\" \"--no-sandbox\" \"D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\.codex-final-candidate-todo-20260930T0706Z-retry1.cjs\"\u001b[22m\n\u001b[2m  - <launched> pid=46296\u001b[22m\n\u001b[2m  - [pid=46296][out]\u001b[22m\n\u001b[2m  - [pid=46296][err] Debugger listening on ws://127.0.0.1:8500/19fe36fc-e77b-45ae-a5bd-e57444fcdc33\u001b[22m\n\u001b[2m  - [pid=46296][err] For help, see: https://nodejs.org/learn/getting-started/debugging\u001b[22m\n\u001b[2m  - <ws connecting> ws://127.0.0.1:8500/19fe36fc-e77b-45ae-a5bd-e57444fcdc33\u001b[22m\n\u001b[2m  - <ws connected> ws://127.0.0.1:8500/19fe36fc-e77b-45ae-a5bd-e57444fcdc33\u001b[22m\n\u001b[2m  - [pid=46296][err] Debugger attached.\u001b[22m\n\u001b[2m  - [pid=46296][err] [61340:0930/151441.279:FATAL:electron\\shell\\browser\\win\\install_dir_access.cc:52] Sandboxed processes cannot read D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist: its ACL has an entry for an AppContainer package SID but none for ALL APPLICATION PACKAGES, so Windows denies the sandbox token access. Grant it with: icacls \"D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\" /grant *S-1-15-2-1:(OI)(CI)(RX)\u001b[22m\n\u001b[2m  - <ws disconnected> ws://127.0.0.1:8500/19fe36fc-e77b-45ae-a5bd-e57444fcdc33 code=1006 reason=\u001b[22m\n\u001b[2m  - [pid=46296] <kill>\u001b[22m\n\u001b[2m  - [pid=46296] <will force kill>\u001b[22m\n\u001b[2m  - [pid=46296] taskkill stderr: ����: �ܾ�����\u001b[22m\n\u001b[2m  - [pid=46296] <process did exit: exitCode=2147483651, signal=null>\u001b[22m\n\u001b[2m  - [pid=46296] starting temporary directories cleanup\u001b[22m\n\u001b[2m  - [pid=46296] finished temporary directories cleanup\u001b[22m\n",
+    "stack": "electron.launch: Process failed to launch!\nCall log:\n\u001b[2m  - <launching> \"D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\\electron.exe\" \"--inspect=0\" \"--remote-debugging-port=0\" \"--no-sandbox\" \"D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\.codex-final-candidate-todo-20260930T0706Z-retry1.cjs\"\u001b[22m\n\u001b[2m  - <launched> pid=46296\u001b[22m\n\u001b[2m  - [pid=46296][out]\u001b[22m\n\u001b[2m  - [pid=46296][err] Debugger listening on ws://127.0.0.1:8500/19fe36fc-e77b-45ae-a5bd-e57444fcdc33\u001b[22m\n\u001b[2m  - [pid=46296][err] For help, see: https://nodejs.org/learn/getting-started/debugging\u001b[22m\n\u001b[2m  - <ws connecting> ws://127.0.0.1:8500/19fe36fc-e77b-45ae-a5bd-e57444fcdc33\u001b[22m\n\u001b[2m  - <ws connected> ws://127.0.0.1:8500/19fe36fc-e77b-45ae-a5bd-e57444fcdc33\u001b[22m\n\u001b[2m  - [pid=46296][err] Debugger attached.\u001b[22m\n\u001b[2m  - [pid=46296][err] [61340:0930/151441.279:FATAL:electron\\shell\\browser\\win\\install_dir_access.cc:52] Sandboxed processes cannot read D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist: its ACL has an entry for an AppContainer package SID but none for ALL APPLICATION PACKAGES, so Windows denies the sandbox token access. Grant it with: icacls \"D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron\\dist\" /grant *S-1-15-2-1:(OI)(CI)(RX)\u001b[22m\n\u001b[2m  - <ws disconnected> ws://127.0.0.1:8500/19fe36fc-e77b-45ae-a5bd-e57444fcdc33 code=1006 reason=\u001b[22m\n\u001b[2m  - [pid=46296] <kill>\u001b[22m\n\u001b[2m  - [pid=46296] <will force kill>\u001b[22m\n\u001b[2m  - [pid=46296] taskkill stderr: ����: �ܾ�����\u001b[22m\n\u001b[2m  - [pid=46296] <process did exit: exitCode=2147483651, signal=null>\u001b[22m\n\u001b[2m  - [pid=46296] starting temporary directories cleanup\u001b[22m\n\u001b[2m  - [pid=46296] finished temporary directories cleanup\u001b[22m\n\n    at async launchApp (D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\todo-lifecycle-run.cjs:140:15)\n    at async scenarioDraftSurvivesExpiry (D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\todo-lifecycle-run.cjs:248:19)\n    at async main (D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\final-candidate-todo-20260930T0706Z\\todo-lifecycle-run.cjs:433:27)"
+  }
+}

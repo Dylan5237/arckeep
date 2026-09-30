@@ -1,0 +1,16 @@
+{
+    "name":  "installer-extract-app-64",
+    "executable":  "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\node_modules\\electron-winstaller\\vendor\\7z-x64.exe",
+    "arguments":  [
+                      "e",
+                      "-y",
+                      "-oD:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-final-mvp\\evidence\\payload-verification-20260930T0802Z\\raw-payloads\\containers\\installer",
+                      "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-e3ea343\\Arckeep-Setup-0.1.0.exe",
+                      "$PLUGINSDIR\\app-64.7z"
+                  ],
+    "workingDirectory":  "D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-e3ea343",
+    "startedUtc":  "2026-09-30T08:00:34.2560283Z",
+    "exitCode":  0,
+    "stdout":  "\r\n7-Zip [64] 16.04 : Copyright (c) 1999-2016 Igor Pavlov : 2016-10-04\r\n\r\nScanning the drive for archives:\r\n1 file, 104494540 bytes (100 MiB)\r\n\r\nExtracting archive: D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-e3ea343\\Arckeep-Setup-0.1.0.exe\r\n--\r\nPath = D:\\_projects\\platform\\arckeep\\.worktrees\\6-codex-mvp-delivery\\dist\\candidate-e3ea343\\Arckeep-Setup-0.1.0.exe\r\nType = Nsis\r\nPhysical Size = 104494540\r\nMethod = Deflate\r\nSolid = -\r\nHeaders Size = 213426\r\nEmbedded Stub Size = 65536\r\nSubType = NSIS-3 Unicode\r\n\r\nEverything is Ok\r\n\r\nSize:       103910866\r\nCompressed: 104494540\r\n",
+    "stderr":  ""
+}

@@ -1,0 +1,34 @@
+
+> arckeep@0.1.0 test
+> vitest run --run test/tool-quote.test.ts test/tool-runner.test.ts
+
+
+ RUN  v3.2.7 D:/_projects/platform/arckeep/.worktrees/5-codex-shell-integrity
+
+ ✓ test/tool-quote.test.ts (8 tests) 7ms
+ ✓ test/tool-runner.test.ts (23 tests) 36724ms
+   ✓ process tree termination > kills a child that the command itself started  1734ms
+   ✓ live shell injection > cmd keeps hostile parameters as data  4251ms
+   ✓ live shell injection > cmd reports exit code 3  403ms
+   ✓ live shell injection > powershell powershell.exe keeps hostile parameters as data  3580ms
+   ✓ live shell injection > powershell powershell.exe reports exit code 3  335ms
+   ✓ live shell injection > powershell pwsh.exe keeps hostile parameters as data  5443ms
+   ✓ live shell injection > powershell pwsh.exe reports exit code 3  575ms
+   ✓ live shell injection > git-bash keeps hostile parameters as data  2098ms
+   ✓ live shell injection > streams stdout and stderr  429ms
+   ✓ live CMD builtin output encoding > preserves UTF-8 stdout and stderr with the actual planned script  387ms
+   ✓ live CMD builtin output encoding > preserves builtin and native UTF-8 output in either command order  968ms
+   ✓ live CMD builtin output encoding > passes cwd and stdin EOF through the hidden launcher  470ms
+   ✓ live CMD relay process tree cleanup > kills a native descendant when aborting the hidden cmd relay  1477ms
+   ✓ live PowerShell result and parameter fidelity > powershell.exe reports cmdlet errors and preserves explicit exit codes  1579ms
+   ✓ live PowerShell result and parameter fidelity > powershell.exe preserves quoted cmdlet, script, and native arguments  1171ms
+   ✓ live PowerShell result and parameter fidelity > powershell.exe resolves quoted parameters against nested, function, and module commands  3239ms
+   ✓ live PowerShell result and parameter fidelity > pwsh.exe reports cmdlet errors and preserves explicit exit codes  2027ms
+   ✓ live PowerShell result and parameter fidelity > pwsh.exe preserves quoted cmdlet, script, and native arguments  1757ms
+   ✓ live PowerShell result and parameter fidelity > pwsh.exe resolves quoted parameters against nested, function, and module commands  4593ms
+
+ Test Files  2 passed (2)
+      Tests  31 passed (31)
+   Start at  17:35:23
+   Duration  38.71s (transform 123ms, setup 0ms, collect 1.09s, tests 36.73s, environment 0ms, prepare 211ms)
+

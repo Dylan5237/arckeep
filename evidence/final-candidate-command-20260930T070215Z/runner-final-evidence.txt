@@ -1,0 +1,38 @@
+2026-09-30T07:34:01.194Z prepared source HEAD and compiled artifact hashes match; beginning authorized serial GUI run
+2026-09-30T07:34:16.111Z template-stale-params-page-same-id-command: PROBE_ERROR
+2026-09-30T07:34:31.299Z configuration-drift-rejects-confirmation: PROBE_ERROR
+2026-09-30T07:34:46.820Z parameter-drift-rejects-confirmation: PROBE_ERROR
+2026-09-30T07:35:02.224Z background-output-preserves-unsaved-settings-inputs: PROBE_ERROR
+2026-09-30T07:35:17.908Z fast-completion-and-startup-failure-terminal-events: PROBE_ERROR
+2026-09-30T07:35:33.404Z leave-page-during-rehearsal-observation: PROBE_ERROR
+2026-09-30T07:35:49.541Z quit-during-rehearsal-observation: PROBE_ERROR
+2026-09-30T07:35:49.542Z verdict=INCOMPLETE_OR_FAILED
+2026-09-30T07:35:49.546Z results=D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\final-candidate-command-20260930T070215Z\results.json
+2026-09-30T07:39:04.597Z prepared source HEAD and compiled artifact hashes match; beginning authorized serial GUI run
+2026-09-30T07:39:21.208Z template-stale-params-page-same-id-command: OBSERVED_WITH_RECORDED_SCOPE
+2026-09-30T07:39:21.210Z probe-only-verdict=PROBE_ONLY_COMPLETE
+2026-09-30T07:39:21.210Z results=D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\final-candidate-command-20260930T070215Z\results.json
+2026-09-30T07:40:09.598Z prepared source HEAD and compiled artifact hashes match; beginning authorized serial GUI run
+2026-09-30T07:40:28.147Z template-stale-params-page-same-id-command: OBSERVED_WITH_RECORDED_SCOPE
+2026-09-30T07:40:46.170Z configuration-drift-rejects-confirmation: OBSERVED_WITH_RECORDED_SCOPE
+2026-09-30T07:41:05.443Z parameter-drift-rejects-confirmation: OBSERVED_WITH_RECORDED_SCOPE
+2026-09-30T07:41:32.676Z background-output-preserves-unsaved-settings-inputs: OBSERVED_WITH_RECORDED_SCOPE
+2026-09-30T07:41:53.172Z fast-completion-and-startup-failure-terminal-events: OBSERVED_WITH_RECORDED_SCOPE
+2026-09-30T07:42:18.049Z leave-page-during-rehearsal-observation: PROBE_ERROR
+2026-09-30T07:42:42.874Z quit-during-rehearsal-observation: PROBE_ERROR
+2026-09-30T07:42:42.875Z verdict=INCOMPLETE_OR_FAILED
+2026-09-30T07:42:42.876Z results=D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\final-candidate-command-20260930T070215Z\results.json
+2026-09-30T07:47:26.627Z prepared source HEAD and compiled artifact hashes match; beginning authorized serial GUI run
+2026-09-30T07:48:02.559Z leave-page-during-rehearsal-observation: PROBE_ERROR
+2026-09-30T07:48:40.119Z quit-during-rehearsal-observation: PROBE_ERROR
+2026-09-30T07:48:40.120Z verdict=INCOMPLETE_OR_FAILED
+2026-09-30T07:48:40.121Z results=D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\final-candidate-command-20260930T070215Z\results.json
+2026-09-30T07:52:34.289Z prepared source HEAD and compiled artifact hashes match; beginning authorized serial GUI run
+2026-09-30T07:53:16.707Z leave-page-during-rehearsal-observation: OBSERVED_WITH_RECORDED_SCOPE
+2026-09-30T07:53:57.693Z quit-during-rehearsal-observation: OBSERVED_WITH_RECORDED_SCOPE
+2026-09-30T07:53:57.694Z verdict=SELECTED_SCENARIOS_COMPLETE_WITH_RECORDED_SCOPE
+2026-09-30T07:53:57.695Z results=D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\final-candidate-command-20260930T070215Z\results.json
+2026-09-30T08:01:37.740Z prepared source HEAD and compiled artifact hashes match; beginning authorized serial GUI run
+2026-09-30T08:02:22.082Z formal-long-command-app-quit-live-processes: PROBE_ERROR
+2026-09-30T08:02:22.083Z verdict=INCOMPLETE_OR_FAILED
+2026-09-30T08:02:22.084Z results=D:\_projects\platform\arckeep\.worktrees\6-codex-final-mvp\evidence\final-candidate-command-20260930T070215Z\results-formal-quit.json
