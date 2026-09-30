@@ -144,20 +144,25 @@ export async function presentScreenshot(options: {
     contents = capture.webContents
     const focused = `document.activeElement === document.querySelector('#text')
       && document.querySelector('#caret')?.hidden === false`
+    const hint = `document.body.innerText.includes('Enter 记下并关闭')
+      && !document.body.innerText.includes('Enter 保存')`
     const expected = scene === 'capture-filled'
       ? `document.querySelector('#text').value === '记一条带仓库的待办'
         && document.querySelector('#repo').value === 'example/demo'
         && document.querySelector('#waiting').checked === true
+        && ${hint}
         && ${focused}`
       : scene === 'capture-draft'
         ? `document.querySelector('#text').value === '把没写完的这半句留在'
           && document.querySelector('#repo').value === 'example/demo'
           && document.querySelector('#waiting').checked === true
           && document.querySelector('#text').selectionStart === document.querySelector('#text').value.length
+          && ${hint}
           && ${focused}`
         : `document.body.innerText.includes('快速捕获')
           && document.querySelector('#text').value === ''
           && document.querySelector('#text').selectionStart === 0
+          && ${hint}
           && ${focused}`
     await waitUntil(contents, expected, scene)
   } else if (scene === 'capture-saved') {
