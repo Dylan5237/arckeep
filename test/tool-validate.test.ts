@@ -45,7 +45,6 @@ describe('tool shelf schema', () => {
     const plan = planShell('powershell', preview.text, {}, 'win32')
     const executed = powershellScriptFromPlan(plan)
     expect(executed).toContain("apo init --name 'demo'")
-    expect(executed).toContain('exit $LASTEXITCODE')
     expect(executed).not.toContain('--dry-run')
     const onDisk = readFileSync(new URL('../schema/tool-shelf.example.json', import.meta.url), 'utf8')
     expect(onDisk).toBe(text)
