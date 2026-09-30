@@ -198,7 +198,14 @@ async function openAction(action: ToolAction, actions: ToolAction[]): Promise<vo
   await showPreview(action, actions, {})
 }
 
+function cancelActivePreview(): void {
+  const requestId = activePreviewRequestId
+  activePreviewRequestId = null
+  if (requestId) void window.arckeep.cancelToolPreview(requestId)
+}
+
 async function showPreview(action: ToolAction, actions: ToolAction[], values: Record<string, string>): Promise<void> {
+  cancelActivePreview()
   const requestId = crypto.randomUUID()
   activePreviewRequestId = requestId
   const result = await window.arckeep.previewTool(action.id, values, requestId)
@@ -311,6 +318,7 @@ function paintParams(page: HTMLElement, state: Params): void {
   const next = el('button', { type: 'button', class: 'primary' }, [nextLabel])
   if (state.rehearsing) next.disabled = true
   back.addEventListener('click', () => {
+    cancelActivePreview()
     session = { mode: 'shelf', actions: state.actions, query: '' }
     if (host) paint(host)
   })
