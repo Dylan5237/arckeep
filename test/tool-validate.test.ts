@@ -116,9 +116,12 @@ describe('launch plan matches the preview script', () => {
   it('wraps the cmd script once for /d /s /c', () => {
     const script = 'echo ""^&" echo pwned"'
     const plan = planShell('cmd', script, { ComSpec: 'cmd.exe' }, 'win32')
-    expect(plan.args.slice(0, 3)).toEqual(['/d', '/s', '/c'])
-    expect(plan.windowsVerbatimArguments).toBe(true)
-    expect(cmdScriptFromPlan(plan)).toBe(script)
+    expect(plan.file).toBe('powershell.exe')
+    expect(plan.args.slice(0, 4)).toEqual(['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass'])
+    expect(plan.args[4]).toBe('-EncodedCommand')
+    expect(plan.windowsVerbatimArguments).toBe(false)
+    expect(plan.script).toBe(`chcp 65001 >NUL & ${script}`)
+    expect(cmdScriptFromPlan(plan)).toBe(plan.script)
   })
 })
 

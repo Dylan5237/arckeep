@@ -3,10 +3,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { planShell, resolveBash } from '../src/main/tool-launch.js'
-import { IncrementalOutputDecoder, killProcessTree, normalizePowerShellStderr, runPlan, terminationCommand } from '../src/main/tool-runner.js'
+import { cmdScriptFromPlan, planShell, resolveBash } from '../src/main/tool-launch.js'
+import { IncrementalOutputDecoder, killProcessTree, normalizePowerShellStderr, runPlan, terminationCommand, ToolRunner } from '../src/main/tool-runner.js'
 import { expandCommand, quotePowerShellArg } from '../src/shared/tools/quote.js'
-import type { ShellKind } from '../src/shared/tools/types.js'
+import type { ShellKind, ToolRunEvent } from '../src/shared/tools/types.js'
 
 const markers: string[] = []
 
@@ -182,6 +182,99 @@ describe('live shell injection', () => {
     expect(result.stdout).toContain('北区')
     expect(result.stderr).toContain('错因')
     rmSync(cwd, { recursive: true, force: true })
+  }, 20_000)
+})
+
+describe('live CMD builtin output encoding', () => {
+  it.skipIf(process.platform !== 'win32')('preserves UTF-8 stdout and stderr with the actual planned script', async () => {
+    const command = 'echo 中文stdout & echo 中文stderr 1>&2'
+    const plan = planShell('cmd', command, process.env, 'win32')
+    expect(plan.script).toBe(`chcp 65001 >NUL & ${command}`)
+    expect(cmdScriptFromPlan(plan)).toBe(plan.script)
+    const cwd = mkdtempSync(path.join(tmpdir(), 'arckeep-cmd-output-'))
+    try {
+      const result = await runPlan(plan, cwd)
+      expect(result.code).toBe(0)
+      expect(result.stdout).toContain('中文stdout')
+      expect(result.stderr).toContain('中文stderr')
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  }, 20_000)
+
+  it.skipIf(process.platform !== 'win32')('preserves builtin and native UTF-8 output in either command order', async () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'arckeep-cmd-mixed-output-'))
+    try {
+      const builtinFirst = await runPlan(
+        planShell('cmd', `echo 中文builtin-first & node -e "process.stdout.write('中文native-tail')"`, process.env, 'win32'),
+        cwd
+      )
+      expect(builtinFirst.code).toBe(0)
+      expect(builtinFirst.stdout).toContain('中文builtin-first')
+      expect(builtinFirst.stdout).toContain('中文native-tail')
+
+      const nativeFirst = await runPlan(
+        planShell('cmd', `node -e "process.stdout.write('中文native-first'); process.stderr.write('中文native-stderr')" & echo 中文builtin-tail 1>&2`, process.env, 'win32'),
+        cwd
+      )
+      expect(nativeFirst.code).toBe(0)
+      expect(nativeFirst.stdout).toContain('中文native-first')
+      expect(nativeFirst.stderr).toContain('中文native-stderr')
+      expect(nativeFirst.stderr).toContain('中文builtin-tail')
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  }, 20_000)
+
+  it.skipIf(process.platform !== 'win32')('passes cwd and stdin EOF through the hidden launcher', async () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'arckeep-cmd-stdio-'))
+    try {
+      const script = `node -e "process.stdin.resume(); process.stdin.on('end', () => process.stdout.write(process.cwd() + '|stdin-ended'))"`
+      const result = await runPlan(planShell('cmd', script, process.env, 'win32'), cwd)
+      expect(result.code).toBe(0)
+      expect(result.stdout).toBe(`${cwd}|stdin-ended`)
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  }, 20_000)
+})
+
+describe('live CMD relay process tree cleanup', () => {
+  it.skipIf(process.platform !== 'win32')('kills a native descendant when aborting the hidden cmd relay', async () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'arckeep-cmd-tree-'))
+    const scriptFile = path.join(cwd, 'parent.js')
+    const pidFile = path.join(cwd, 'child.pid')
+    writeFileSync(scriptFile, `
+      const { spawn } = require('node:child_process')
+      const fs = require('node:fs')
+      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 500)'], { stdio: 'ignore' })
+      fs.writeFileSync(process.argv[2], String(child.pid))
+      setInterval(() => {}, 500)
+    `)
+    let resolveDone!: (event: ToolRunEvent) => void
+    const done = new Promise<ToolRunEvent>(resolve => { resolveDone = resolve })
+    const runner = new ToolRunner(event => {
+      if (event.type === 'done') resolveDone(event)
+    })
+    let runId: string | null = null
+    let abortTimer: NodeJS.Timeout | undefined
+    try {
+      runId = runner.start(planShell('cmd', `node "${scriptFile}" "${pidFile}"`, process.env, 'win32'), cwd)
+      const childPid = await waitForPid(pidFile)
+      expect(runner.abort(runId)).toBe(true)
+      const completion = await Promise.race([
+        done,
+        new Promise<ToolRunEvent>((_resolve, reject) => {
+          abortTimer = setTimeout(() => reject(new Error('cmd relay did not close after abort')), 10_000)
+        })
+      ])
+      expect(completion.aborted).toBe(true)
+      await waitUntilDead(childPid)
+    } finally {
+      if (abortTimer) clearTimeout(abortTimer)
+      if (runId) runner.abort(runId)
+      rmSync(cwd, { recursive: true, force: true })
+    }
   }, 20_000)
 })
 
