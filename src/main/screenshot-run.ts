@@ -86,10 +86,14 @@ async function assertSmallLogo(contents: WebContents): Promise<void> {
       if (!(symbol instanceof HTMLElement) || !(word instanceof HTMLElement)) return false
       const symbolStyle = getComputedStyle(symbol)
       const wordStyle = getComputedStyle(word)
-      return wordStyle.display === 'none'
-        && symbolStyle.display !== 'none'
-        && parseFloat(symbolStyle.width) > 0
-        && parseFloat(symbolStyle.width) <= 48
+      const width = parseFloat(symbolStyle.width)
+      const height = parseFloat(symbolStyle.height)
+      return symbolStyle.display !== 'none'
+        && wordStyle.display !== 'none'
+        && width > 0
+        && width <= 20
+        && height > 0
+        && height <= 20
     })()
   `)
   if (!ok) throw new Error('sidebar is not showing the small logo')
@@ -539,6 +543,13 @@ export async function presentScreenshot(options: {
   }
 
   await new Promise(resolve => setTimeout(resolve, 150))
+  if (scene === 'connected') {
+    await contents.executeJavaScript(`(() => {
+      const main = document.querySelector('main')
+      if (main) main.scrollTop = main.scrollHeight
+    })()`)
+    await new Promise(resolve => setTimeout(resolve, 200))
+  }
   const image = await contents.capturePage()
   mkdirSync(path.dirname(file), { recursive: true })
   writeFileSync(file, image.toPNG())

@@ -1,9 +1,16 @@
 :root {
-  --arckeep-deep-charcoal: #232323;
-  --arckeep-warm-ivory: #F5F2EA;
-  --arckeep-olive: #5B5E3B;
-  --arckeep-warm-sand: #C1A477;
-  --arckeep-soft-stone: #D8D4CB;
-  --arckeep-muted-graphite: #66635D;
-  --arckeep-white: #FFFFFF;
+  --arckeep-bg: #F3F3F4;
+  --arckeep-surface: #FFFFFF;
+  --arckeep-ink: #18181B;
+  --arckeep-muted: #6B6B73;
+  --arckeep-faint: #A0A0A8;
+  --arckeep-line: #ECECEE;
+  --arckeep-hair: #F1F1F3;
+  --arckeep-danger: #B42318;
+  --arckeep-nav-current: #E8E8EC;
+  --arckeep-hover: #FAFAFB;
+  --arckeep-on-accent: #FFFFFF;
+  --arckeep-sheet-shadow: 0 0 0 1px rgba(24,24,27,0.05), 0 8px 24px rgba(24,24,27,0.04);
+  --arckeep-overlay: rgb(24 24 27 / 0.35);
+  --arckeep-danger-wash: color-mix(in srgb, var(--arckeep-danger) 12%, var(--arckeep-surface));
 }

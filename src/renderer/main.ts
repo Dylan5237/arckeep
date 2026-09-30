@@ -1,5 +1,4 @@
-import brandMark from '../../docs/brand/logo/Arckeep_Master_Horizontal_Reverse.svg'
-import brandSymbol from '../../docs/brand/logo/Arckeep_Symbol_White.svg'
+import brandSymbol from '../../docs/brand/logo/Arckeep_Symbol_Charcoal.svg'
 import { activeHotkeyLabel, hotkeyUnavailableMessage } from '../shared/hotkey-status'
 import { pastedTokenAfterAttempt } from '../shared/token-field'
 import type { AppState } from '../shared/types'
@@ -14,8 +13,6 @@ import { renderWaitingSettings } from './waiting-settings'
 
 type ViewId = 'inbox' | 'projects' | 'todos' | 'tools' | 'settings'
 
-const brand = document.querySelector<HTMLImageElement>('#brand-mark')
-if (brand) brand.src = brandMark
 const symbol = document.querySelector<HTMLImageElement>('#brand-symbol')
 if (symbol) symbol.src = brandSymbol
 
@@ -53,7 +50,7 @@ function messageBox(parent: HTMLElement, kind: 'info' | 'error', text: string): 
 
 async function renderSettings(options?: { focusToken?: boolean, focusWatch?: boolean }): Promise<void> {
   if (!content) return
-  const page = el('section', { class: 'page' }, [
+  const page = el('section', { class: 'page settings' }, [
     el('h1', {}, ['设置']),
     el('p', { class: 'lede' }, ['GitHub 认证、关注仓库和全局热键保存在本机，重启后仍然在。'])
   ])
