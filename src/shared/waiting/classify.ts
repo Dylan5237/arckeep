@@ -1,6 +1,7 @@
 import { primaryAction } from './action.js'
 import { laterIso, waitingDays } from './days.js'
 import { pendingApoActions } from './apo-actions.js'
+import { pendingApoDecisions } from './apo-decision.js'
 import { waitingExcerpt } from './human-text.js'
 import { escapeRegex } from './parse-github.js'
 import { compileUserRegexList } from './rules.js'
@@ -227,6 +228,12 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
     reasons.push(fallbackUpdated(WAITING_REASONS.human, record, firstAction.requestAt))
     tier = 'strong'
     signal = { rule: 'APO 人工评论', excerpt: firstAction.requestText }
+  }
+  const decision = !closed && config.sources.humanIssues ? pendingApoDecisions(record)[0] : undefined
+  if (decision && (humanAllowed || prTextAllowed)) {
+    reasons.push(fallbackUpdated(WAITING_REASONS.human, record, decision.requestAt))
+    tier = 'strong'
+    signal = { rule: 'APO 决策请求', excerpt: decision.requestText }
   }
 
   if (review) {
