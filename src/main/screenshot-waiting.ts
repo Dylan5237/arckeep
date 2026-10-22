@@ -3,6 +3,7 @@ import type { WaitingSnapshot } from '../shared/waiting/types.js'
 import type { IpcResult } from '../shared/types.js'
 import type { ScreenshotScene } from './screenshot-scene.js'
 import { pendingApoActions } from '../shared/waiting/apo-actions.js'
+import { pendingApoDecisionActions } from '../shared/waiting/apo-reply.js'
 import { blankRecord } from '../shared/waiting/parse-github.js'
 
 function base(partial: Partial<WaitingSnapshot>): WaitingSnapshot {
@@ -43,6 +44,16 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
         quickActions: pendingApoActions(blankRecord({ repo: item.repo, number: item.number, kind: 'issue', title: item.title,
           url, body: text, createdAt: at, updatedAt: at, viewerLogin: 'mock-user', commentsTruncated: false })) }
     })
+    const decisionAt = new Date(now - 21 * 60_000).toISOString()
+    const decisionUrl = 'https://github.com/northwind/workbench/issues/71'
+    const decisionBody = '<!-- apo-decision v1 | id: D-4 | rev: 1 | type: 最终验收 | target: #71 | disposer: @mock-user -->\n请验收：导出报表已按验收标准完成。'
+    rows.push({ ...sample, id: 'northwind/workbench#71', repo: 'northwind/workbench', number: 71, type: 'issue' as const,
+      title: '导出报表：等待最终验收', url: decisionUrl, updatedAt: decisionAt, waitingSince: decisionAt, waitingDays: 0, daysEstimated: false,
+      tier: 'strong' as const, ignored: false, parent: null, parentNumber: null, childCount: 0,
+      reasons: ['要人动手'], action: '要你动手', signalText: '请验收：导出报表已按验收标准完成。', ownRequest: false,
+      quickActions: [], decisionActions: pendingApoDecisionActions(blankRecord({ repo: 'northwind/workbench', number: 71, kind: 'issue',
+        title: '导出报表：等待最终验收', url: decisionUrl, body: decisionBody, createdAt: decisionAt, updatedAt: decisionAt,
+        viewerLogin: 'mock-user', commentsTruncated: false })) })
     return base({ rows, hiddenCount: 0, refreshedAt: new Date(now).toISOString() })
   }
   if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover' || scene === 'waiting-ignore' || scene === 'waiting-related' || scene === 'waiting-related-open') {

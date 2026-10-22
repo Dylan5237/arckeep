@@ -813,6 +813,8 @@ button.apo-comment-button:disabled { opacity: 0.55; cursor: default; }
 button.apo-comment-button:not(:disabled):hover { background: var(--arckeep-hover); }
 .apo-target { overflow-wrap: anywhere; text-align: left; }
 .apo-comment-status { font-size: 12px; color: var(--arckeep-muted); overflow-wrap: anywhere; }
+.apo-decision-label { font-size: 12px; font-weight: 650; color: var(--arckeep-muted); }
+.apo-decision-reason { min-width: 120px; flex: 1 1 140px; max-width: 260px; font-size: 12px; padding: 5px 8px; }
 
 .hidden-repos {
   margin: 0;

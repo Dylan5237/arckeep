@@ -7,6 +7,7 @@ import type { KnownRepo } from './tools/repos.js'
 import type { ActionPreview, ToolAction, ToolRunEvent } from './tools/types.js'
 import type { WaitingConfig, WaitingSnapshot } from './waiting/types.js'
 import type { ApoCommentOutcome } from './waiting/apo-actions.js'
+import type { ApoReplyChoice } from './waiting/apo-reply.js'
 import type { RepoFetchWindow } from './repo-fetch-window.js'
 import type { ClaudeSession, ClaudeSessionTranscript, ClaudeWorkspace } from './claude-sessions.js'
 
@@ -97,6 +98,8 @@ export interface ArckeepApi {
   refreshWaiting(force?: boolean): Promise<WaitingSnapshot>
   commentWaitingApo(rowId: string, actionId: string): Promise<IpcResult<ApoCommentOutcome>>
   checkWaitingApo(rowId: string, actionId: string): Promise<IpcResult<ApoCommentOutcome>>
+  replyWaitingDecision(rowId: string, actionId: string, choice: ApoReplyChoice, reason?: string): Promise<IpcResult<ApoCommentOutcome>>
+  checkWaitingDecision(rowId: string, actionId: string): Promise<IpcResult<ApoCommentOutcome>>
   snoozeWaiting(id: string, days: 1 | 3 | 7): Promise<IpcResult<WaitingSnapshot>>
   ignoreWaiting(id: string): Promise<IpcResult<WaitingSnapshot>>
   restoreWaiting(id: string): Promise<IpcResult<WaitingSnapshot>>

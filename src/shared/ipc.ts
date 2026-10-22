@@ -36,6 +36,8 @@ export const IpcChannel = {
   refreshWaiting: 'waiting:refresh',
   commentWaitingApo: 'waiting:comment-apo',
   checkWaitingApo: 'waiting:check-apo-comment',
+  replyWaitingDecision: 'waiting:reply-apo-decision',
+  checkWaitingDecision: 'waiting:check-apo-decision',
   snoozeWaiting: 'waiting:snooze',
   ignoreWaiting: 'waiting:ignore',
   restoreWaiting: 'waiting:restore',

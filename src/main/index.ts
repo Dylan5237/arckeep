@@ -586,6 +586,14 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
     if (!(waiting instanceof WaitingService)) return { ok: false, error: '当前模式不能发送 GitHub 评论' }
     return waiting.commentApo(rowId, actionId, channel === IpcChannel.checkWaitingApo)
   })
+  for (const channel of [IpcChannel.replyWaitingDecision, IpcChannel.checkWaitingDecision]) ipcMain.handle(channel, (event, rowId: unknown, actionId: unknown, choice?: unknown, reason?: unknown) => {
+    backgroundTasks.assertOpen()
+    if (isQuitting) throw new TaskCancelledError()
+    requireSender(event, mainWindow?.webContents ?? null)
+    if (event.senderFrame !== mainWindow?.webContents.mainFrame) throw new Error('Blocked IPC from a child frame')
+    if (!(waiting instanceof WaitingService)) return { ok: false, error: '当前模式不能发送 GitHub 评论' }
+    return waiting.replyDecision(rowId, actionId, choice, reason, channel === IpcChannel.checkWaitingDecision)
+  })
   ipcMain.handle(IpcChannel.snoozeWaiting, (event, id: unknown, days: unknown) => {
     guard(event)
     return waiting?.snooze(id, days) ?? { ok: false, error: '等我处理尚未就绪' }

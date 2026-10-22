@@ -285,9 +285,22 @@ export class WaitingService {
     return checkOnly ? this.apoComments.check(action) : this.apoComments.submit(action)
   }
 
+  replyDecision(rowId: unknown, actionId: unknown, choice: unknown, reason: unknown, checkOnly = false): Promise<IpcResult<ApoCommentOutcome>> {
+    if (typeof rowId !== 'string' || rowId.length > 500 || typeof actionId !== 'string' || actionId.length > 3000
+      || (reason !== undefined && (typeof reason !== 'string' || reason.length > 2000))) {
+      return Promise.resolve({ ok: false, error: '决策回复参数无效' })
+    }
+    const row = this.snapshot.rows.find(item => item.id === rowId && item.tier === 'strong' && !item.ignored
+      && (item.type === 'issue' || item.type === 'pr'))
+    const action = row?.decisionActions?.find(item => item.id === actionId)
+    if (!action || this.snapshot.auth !== 'ok') return Promise.resolve({ ok: false, error: '找不到当前决策请求，请刷新列表' })
+    return checkOnly ? this.apoComments.checkReply(action) : this.apoComments.reply(action, choice, reason)
+  }
+
   private withCommentStates(snapshot: WaitingSnapshot): WaitingSnapshot {
     return { ...snapshot, rows: snapshot.rows.map(row => ({ ...row,
-      quickActions: row.quickActions?.map(action => ({ ...action, state: this.apoComments.state(action) }))
+      quickActions: row.quickActions?.map(action => ({ ...action, state: this.apoComments.state(action) })),
+      decisionActions: row.decisionActions?.map(action => ({ ...action, state: this.apoComments.replyState(action) }))
     })) }
   }
 

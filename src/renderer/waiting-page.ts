@@ -2,6 +2,7 @@ import { elapsedTime, localAbsolute, localClock, relativeLabel } from '../shared
 import { orderList, type ListOrder } from '../shared/list-order'
 import { listSortControl, readListOrder } from './list-sort'
 import type { ApoQuickAction } from '../shared/waiting/apo-actions'
+import { APO_REPLY_REASON_LIMIT, type ApoDecisionAction, type ApoReplyChoice } from '../shared/waiting/apo-reply'
 import type { WaitingRow, WaitingSnapshot } from '../shared/waiting/types'
 import { createRefreshStatus } from './refresh-status'
 import { DEFAULT_REPO_FETCH_WINDOW, type RepoFetchWindow } from '../shared/repo-fetch-window'
@@ -111,6 +112,10 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
   sort: (order: ListOrder) => void
   comment: (rowId: string, action: ApoQuickAction, checkOnly?: boolean) => void
   commentState: (action: ApoQuickAction) => { busy: boolean, message: string, blocked: boolean }
+  decide: (rowId: string, action: ApoDecisionAction, choice: ApoReplyChoice, reason?: string, checkOnly?: boolean) => void
+  decisionState: (action: ApoDecisionAction) => { busy: boolean, message: string, blocked: boolean }
+  decisionReason: (action: ApoDecisionAction) => string
+  setDecisionReason: (action: ApoDecisionAction, text: string) => void
   refresh: () => void
   setWindow: (value: RepoFetchWindow) => void
   settings: () => void
@@ -235,6 +240,10 @@ function renderHiddenRepos(repos: readonly string[], unhideRepo: (repo: string) 
 function renderMaybe(rows: readonly WaitingRow[], handlers: {
   comment: (rowId: string, action: ApoQuickAction, checkOnly?: boolean) => void
   commentState: (action: ApoQuickAction) => { busy: boolean, message: string, blocked: boolean }
+  decide: (rowId: string, action: ApoDecisionAction, choice: ApoReplyChoice, reason?: string, checkOnly?: boolean) => void
+  decisionState: (action: ApoDecisionAction) => { busy: boolean, message: string, blocked: boolean }
+  decisionReason: (action: ApoDecisionAction) => string
+  setDecisionReason: (action: ApoDecisionAction, text: string) => void
   snooze: (id: string, days: 1 | 3 | 7) => void
   ignore: (id: string) => void
   restore: (id: string) => void
@@ -259,6 +268,10 @@ function renderMaybe(rows: readonly WaitingRow[], handlers: {
 function renderGroups(rows: readonly WaitingRow[], handlers: {
   comment: (rowId: string, action: ApoQuickAction, checkOnly?: boolean) => void
   commentState: (action: ApoQuickAction) => { busy: boolean, message: string, blocked: boolean }
+  decide: (rowId: string, action: ApoDecisionAction, choice: ApoReplyChoice, reason?: string, checkOnly?: boolean) => void
+  decisionState: (action: ApoDecisionAction) => { busy: boolean, message: string, blocked: boolean }
+  decisionReason: (action: ApoDecisionAction) => string
+  setDecisionReason: (action: ApoDecisionAction, text: string) => void
   snooze: (id: string, days: 1 | 3 | 7) => void
   ignore: (id: string) => void
   restore: (id: string) => void
@@ -274,6 +287,10 @@ function renderGroups(rows: readonly WaitingRow[], handlers: {
 function renderRow(row: WaitingRow, handlers: {
   comment: (rowId: string, action: ApoQuickAction, checkOnly?: boolean) => void
   commentState: (action: ApoQuickAction) => { busy: boolean, message: string, blocked: boolean }
+  decide: (rowId: string, action: ApoDecisionAction, choice: ApoReplyChoice, reason?: string, checkOnly?: boolean) => void
+  decisionState: (action: ApoDecisionAction) => { busy: boolean, message: string, blocked: boolean }
+  decisionReason: (action: ApoDecisionAction) => string
+  setDecisionReason: (action: ApoDecisionAction, text: string) => void
   snooze: (id: string, days: 1 | 3 | 7) => void
   ignore: (id: string) => void
   restore: (id: string) => void
@@ -387,6 +404,44 @@ function renderRow(row: WaitingRow, handlers: {
     controls.push(el('span', { class: 'apo-comment-status', role: 'status' }, [state.message]))
     quick.append(el('div', { class: 'apo-action' }, controls))
   }
+  if (row.tier !== 'weak' && !row.ignored) for (const action of row.decisionActions ?? []) {
+    const state = handlers.decisionState(action)
+    const where = `${action.source.repo} #${action.source.number}`
+    const label = el('span', { class: 'apo-decision-label', title: action.requestText }, [`${action.decisionId} · ${action.decisionType}`])
+    const choice = (value: ApoReplyChoice) => {
+      const button = el('button', {
+        type: 'button', class: 'ghost apo-comment-button apo-decision-button', 'data-apo-decision': `${action.id}:${value}`,
+        title: `以 @${action.viewerLogin} 在 ${where} 回复：${action.decisionId} ${value}\n请求：${action.requestText}`
+      }, [state.busy ? '正在回复…' : value])
+      button.disabled = state.busy || state.blocked
+      button.addEventListener('click', () => handlers.decide(row.id, action, value))
+      return button
+    }
+    const reason = el('input', {
+      type: 'text', class: 'apo-decision-reason', maxlength: String(APO_REPLY_REASON_LIMIT), placeholder: '退回原因',
+      'aria-label': `${action.decisionId} 退回原因`
+    })
+    reason.value = handlers.decisionReason(action)
+    const back = el('button', {
+      type: 'button', class: 'ghost apo-comment-button apo-decision-button', 'data-apo-decision': `${action.id}:退回`,
+      title: `以 @${action.viewerLogin} 在 ${where} 回复：${action.decisionId} 退回：<原因>`
+    }, [state.busy ? '正在回复…' : '退回'])
+    const syncBack = () => { back.disabled = state.busy || state.blocked || reason.value.trim() === '' }
+    syncBack()
+    reason.addEventListener('input', () => { handlers.setDecisionReason(action, reason.value); syncBack() })
+    back.addEventListener('click', () => handlers.decide(row.id, action, '退回', reason.value))
+    const target = el('button', { type: 'button', class: 'ghost tiny apo-target' }, [where])
+    target.addEventListener('click', () => handlers.open(row.url))
+    const controls: Node[] = [label, choice('批准 A'), choice('改用 B'), reason, back, target]
+    if (!state.busy && (action.state === 'unknown' || state.message.includes('核对 GitHub'))) {
+      const check = el('button', { type: 'button', class: 'ghost tiny apo-check' }, ['核对回复结果'])
+      check.title = '只读取 GitHub 评论，不重新发送'
+      check.addEventListener('click', () => handlers.decide(row.id, action, '批准 A', undefined, true))
+      controls.push(check)
+    }
+    controls.push(el('span', { class: 'apo-comment-status', role: 'status' }, [state.message]))
+    quick.append(el('div', { class: 'apo-action apo-decision' }, controls))
+  }
   return el('div', {
     class: `waiting-row age-${age}${row.ignored ? ' is-ignored' : ''}`,
     'data-row-id': row.id
@@ -417,6 +472,8 @@ export async function renderWaiting(
   let refreshing = false
   let order = readListOrder('waiting')
   const commentStates = new Map<string, { busy: boolean, message: string, blocked: boolean }>()
+  const decisionStates = new Map<string, { busy: boolean, message: string, blocked: boolean }>()
+  const decisionReasons = new Map<string, string>()
   const refreshStatus = createRefreshStatus(host)
   const apply = (snapshot: WaitingSnapshot) => {
     if (!refreshStatus.ownsPage()) return
@@ -428,6 +485,12 @@ export async function renderWaiting(
       commentState: action => commentStates.get(action.id) ?? {
         busy: false, blocked: Boolean(action.state) || snapshot.auth !== 'ok', message: action.state === 'sent' ? '已评论' : action.state === 'unknown' ? '结果待核实，请先核对 GitHub' : ''
       },
+      decide: (rowId, action, choice, reason, checkOnly) => { void decide(rowId, action, choice, reason, checkOnly) },
+      decisionState: action => decisionStates.get(action.id) ?? {
+        busy: false, blocked: Boolean(action.state) || snapshot.auth !== 'ok', message: action.state === 'sent' ? '已回复' : action.state === 'unknown' ? '结果待核实，请先核对 GitHub' : ''
+      },
+      decisionReason: action => decisionReasons.get(action.id) ?? '',
+      setDecisionReason: (action, text) => { decisionReasons.set(action.id, text) },
       refresh: () => { void reload() },
       setWindow: value => { void setWindow(value) },
       settings: () => navigate('settings', { focusToken: true }),
@@ -455,6 +518,22 @@ export async function renderWaiting(
       })
     } catch {
       commentStates.set(action.id, { busy: false, blocked: true, message: '未收到结果，请先核对 GitHub，勿重复评论' })
+    }
+    apply(current)
+  }
+  const decide = async (rowId: string, action: ApoDecisionAction, choice: ApoReplyChoice, reason?: string, checkOnly = false) => {
+    if (!refreshStatus.ownsPage() || decisionStates.get(action.id)?.busy) return
+    decisionStates.set(action.id, { busy: true, message: '', blocked: true })
+    apply(current)
+    try {
+      const result = await (checkOnly ? window.arckeep.checkWaitingDecision(rowId, action.id) : window.arckeep.replyWaitingDecision(rowId, action.id, choice, reason))
+      const unknown = result.ok && result.data.state === 'unknown'
+      decisionStates.set(action.id, {
+        busy: false, blocked: result.ok || checkOnly || Boolean(action.state),
+        message: result.ok ? (unknown ? '结果待核实，请先核对 GitHub' : '已回复') : result.error
+      })
+    } catch {
+      decisionStates.set(action.id, { busy: false, blocked: true, message: '未收到结果，请先核对 GitHub，勿重复回复' })
     }
     apply(current)
   }

@@ -1,4 +1,5 @@
 import type { ApoQuickAction } from './apo-actions.js'
+import type { ApoDecisionAction } from './apo-reply.js'
 
 export const WAITING_REASONS = {
   assignee: '指派',
@@ -211,6 +212,7 @@ export interface WaitingDraft {
   /** Repository description or topics match a parked marker. */
   parked: boolean
   quickActions?: ApoQuickAction[]
+  decisionActions?: ApoDecisionAction[]
 }
 
 export interface WaitingJsonRow {
@@ -242,6 +244,7 @@ export interface WaitingRow {
   updatedAt: string
   waitingSince?: string | null
   quickActions?: ApoQuickAction[]
+  decisionActions?: ApoDecisionAction[]
   ignored: boolean
   parentNumber: number | null
   parent: string | number | null

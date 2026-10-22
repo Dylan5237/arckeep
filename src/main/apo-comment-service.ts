@@ -5,6 +5,7 @@ import { readHttpResponse } from '../github/http-request.js'
 import { pendingApoActions, APO_COMMENT_TOKENS, isApoRepoName, type ApoQuickAction, type ApoCommentOutcome } from '../shared/waiting/apo-actions.js'
 import { blankRecord } from '../shared/waiting/parse-github.js'
 import { apoDecision, apoDisposerMatches, apoWithdraws } from '../shared/waiting/apo-prose.js'
+import { apoReplyText, pendingApoDecisionActions, type ApoDecisionAction } from '../shared/waiting/apo-reply.js'
 import type { GithubRecord } from '../shared/waiting/types.js'
 import type { IpcResult } from '../shared/types.js'
 import { throwIfCancelled, type TaskScope } from '../shared/task-scope.js'
@@ -18,6 +19,9 @@ const object = (value: unknown): JsonObject => value && typeof value === 'object
 const str = (value: unknown) => typeof value === 'string' ? value : ''
 const keyOf = (action: ApoQuickAction) => createHash('sha256').update(action.id).digest('hex')
 const bindingOf = (action: ApoQuickAction) => JSON.stringify([action.viewerLogin.toLowerCase(), action.target.repo.toLowerCase(), action.target.number, action.token])
+const replyKeyOf = (action: ApoDecisionAction) => createHash('sha256').update(`reply\n${action.id}`).digest('hex')
+const replyBindingOf = (action: ApoDecisionAction) => JSON.stringify(['reply', action.viewerLogin.toLowerCase(), action.source.repo.toLowerCase(), action.source.number, action.decisionId, action.rev])
+const isReplyTo = (body: string, decisionId: string) => new RegExp(`^${decisionId}\\s+(?:批准 A|改用 B|退回[:：].+)$`, 'u').test(body.trim().split(/\r?\n/, 1)[0]?.trim() ?? '')
 
 /** One user click, one POST at most. Unknown outcomes survive restarts and cannot be replayed. */
 export class ApoCommentService {
@@ -79,6 +83,44 @@ export class ApoCommentService {
     if (active) return Promise.resolve({ ok: false, error: '同一目标的评论正在提交，请等待结果' })
     const promise = this.deps.tasks.run(signal => uncertain ? this.checkReceipt(action, uncertain, signal) : this.perform(action, signal), 'APO 快捷评论')
       .catch((): IpcResult<ApoCommentOutcome> => ({ ok: false, error: '快捷评论已取消或无法完成' }))
+      .finally(() => this.flights.delete(flightKey))
+    this.flights.set(flightKey, promise)
+    return promise
+  }
+
+  replyState(action: ApoDecisionAction): ApoCommentOutcome['state'] | undefined {
+    if (!this.journalValid) return 'unknown'
+    return this.receipts[replyKeyOf(action)]?.state ?? (this.unknownReply(action) ? 'unknown' : undefined)
+  }
+
+  private unknownReply(action: ApoDecisionAction): Receipt | undefined {
+    return Object.values(this.receipts).find(receipt => receipt.state === 'unknown' && receipt.binding === replyBindingOf(action))
+  }
+
+  checkReply(action: ApoDecisionAction): Promise<IpcResult<ApoCommentOutcome>> {
+    if (!this.journalValid) return Promise.resolve({ ok: false, error: '回复记录无法读取，请在 GitHub 上核对评论' })
+    const receipt = this.receipts[replyKeyOf(action)] ?? this.unknownReply(action)
+    if (!receipt) return Promise.resolve({ ok: true, data: { state: 'unknown' } })
+    if (receipt.state === 'sent') return Promise.resolve({ ok: true, data: { state: 'sent', ...(receipt.url ? { url: receipt.url } : {}) } })
+    return this.deps.tasks.run(signal => this.checkReplyReceipt(action, receipt, signal), '核对 APO 决策回复')
+      .catch(() => ({ ok: false, error: '无法核对回复结果，请在 GitHub 上查看' }))
+  }
+
+  /** Posts the disposer's own explicit choice (D-n 批准 A / 改用 B / 退回：原因) on the thread that holds the request. */
+  reply(action: ApoDecisionAction, choice: unknown, reason?: unknown): Promise<IpcResult<ApoCommentOutcome>> {
+    if (!this.journalValid) return Promise.resolve({ ok: false, error: '回复记录无法读取，请先核对 GitHub 上的评论' })
+    const text = apoReplyText(action.decisionId, choice, reason)
+    if (!text) return Promise.resolve({ ok: false, error: '回复内容无效：退回需要填写原因（200 字以内）' })
+    if (!isApoRepoName(action.source.repo) || !Number.isSafeInteger(action.source.number) || action.source.number < 1) {
+      return Promise.resolve({ ok: false, error: '回复目标无效' })
+    }
+    const saved = this.receipts[replyKeyOf(action)]
+    if (saved?.state === 'sent') return Promise.resolve({ ok: true, data: { state: saved.state, ...(saved.url ? { url: saved.url } : {}) } })
+    const uncertain = this.unknownReply(action)
+    const flightKey = `${action.source.repo.toLowerCase()}#${action.source.number}:${action.decisionId}`
+    if (this.flights.has(flightKey)) return Promise.resolve({ ok: false, error: '同一个决策的回复正在提交，请等待结果' })
+    const promise = this.deps.tasks.run(signal => uncertain ? this.checkReplyReceipt(action, uncertain, signal) : this.performReply(action, text, signal), 'APO 决策回复')
+      .catch((): IpcResult<ApoCommentOutcome> => ({ ok: false, error: '回复已取消或无法完成' }))
       .finally(() => this.flights.delete(flightKey))
     this.flights.set(flightKey, promise)
     return promise
@@ -242,6 +284,68 @@ export class ApoCommentService {
       delete this.receipts[key]
       return { ok: false, error: error instanceof Error && error.name !== 'TimeoutError' && !/fetch|network/i.test(error.message)
         ? error.message : '无法核对 GitHub，未发送评论，请稍后重试' }
+    }
+  }
+
+  private async checkReplyReceipt(action: ApoDecisionAction, receipt: Receipt, signal: AbortSignal): Promise<IpcResult<ApoCommentOutcome>> {
+    const token = await this.deps.resolveToken(signal)
+    if (!token) return { ok: false, error: '未配置 GitHub 认证，请先去设置' }
+    const user = await this.request(token, '/user', signal)
+    const login = str(object(user.data).login)
+    if (user.status !== 200 || login.toLowerCase() !== action.viewerLogin.toLowerCase()) return { ok: false, error: '无法核对回复账号，请刷新列表' }
+    const thread = await this.readThread(token, action.source, login, signal, false)
+    const found = thread.comments.some(comment => comment.authorLogin?.toLowerCase() === login.toLowerCase()
+      && isReplyTo(comment.body, action.decisionId) && Date.parse(comment.createdAt) >= Math.floor(Date.parse(receipt.startedAt) / 1000) * 1000)
+    if (!found) return { ok: true, data: { state: 'unknown' } }
+    for (const item of Object.values(this.receipts)) if (item.binding === receipt.binding && item.state === 'unknown') item.state = 'sent'
+    this.save()
+    return { ok: true, data: { state: 'sent' } }
+  }
+
+  private async performReply(action: ApoDecisionAction, text: string, signal: AbortSignal): Promise<IpcResult<ApoCommentOutcome>> {
+    const key = replyKeyOf(action)
+    const binding = replyBindingOf(action)
+    let sending = false
+    try {
+      const token = await this.deps.resolveToken(signal)
+      if (!token) return { ok: false, error: '未配置 GitHub 认证，请先去设置' }
+      const user = await this.request(token, '/user', signal)
+      if (user.status !== 200) return { ok: false, error: this.readError(user.status) }
+      const login = str(object(user.data).login)
+      if (!login || login.toLowerCase() !== action.viewerLogin.toLowerCase()) return { ok: false, error: 'GitHub 账号已变化，请刷新列表后处理' }
+      const source = await this.readThread(token, action.source, login, signal)
+      if (source.kind !== action.source.kind || !pendingApoDecisionActions(source).some(candidate => candidate.id === action.id)) {
+        return { ok: false, error: '这个决策请求已更新、已处理或已作废，请刷新列表' }
+      }
+      throwIfCancelled(signal)
+      if (await this.deps.resolveToken(signal) !== token) return { ok: false, error: 'GitHub 认证已变化，请刷新列表后处理' }
+      await this.verifyRevision(token, source, signal)
+      this.receipts[key] = { state: 'unknown', startedAt: new Date().toISOString(), binding }
+      this.save() // Durable attempt marker must precede the write.
+      throwIfCancelled(signal)
+      sending = true
+      const response = await this.request(token, `/repos/${action.source.repo}/issues/${action.source.number}/comments`, signal, text)
+      const data = object(response.data)
+      if (response.status === 201 && str(data.body) === text && str(object(data.user).login).toLowerCase() === login.toLowerCase()) {
+        const url = str(data.html_url)
+        this.receipts[key] = { state: 'sent', startedAt: this.receipts[key]?.startedAt ?? new Date().toISOString(), binding, ...(url ? { url } : {}) }
+        this.save()
+        return { ok: true, data: { state: 'sent', ...(url ? { url } : {}) } }
+      }
+      if ([401, 403, 404, 422, 429].includes(response.status)) {
+        delete this.receipts[key]
+        this.save()
+        return { ok: false, error: response.status === 422 ? 'GitHub 拒绝了回复，请核对目标与权限' : this.readError(response.status) }
+      }
+      return { ok: true, data: { state: 'unknown' } }
+    } catch (error) {
+      if (sending) {
+        this.receipts[key] ??= { state: 'unknown', startedAt: new Date().toISOString(), binding }
+        return { ok: true, data: { state: 'unknown' } }
+      }
+      delete this.receipts[key]
+      return { ok: false, error: error instanceof Error && error.name !== 'TimeoutError' && !/fetch|network/i.test(error.message)
+        ? error.message : '无法核对 GitHub，未发送回复，请稍后重试' }
     }
   }
 }

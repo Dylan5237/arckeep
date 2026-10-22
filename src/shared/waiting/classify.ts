@@ -2,6 +2,7 @@ import { primaryAction } from './action.js'
 import { laterIso, waitingDays } from './days.js'
 import { pendingApoActions } from './apo-actions.js'
 import { pendingApoDecisions } from './apo-decision.js'
+import { pendingApoDecisionActions } from './apo-reply.js'
 import { waitingExcerpt } from './human-text.js'
 import { escapeRegex } from './parse-github.js'
 import { compileUserRegexList } from './rules.js'
@@ -300,6 +301,7 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
     parked: repoIsParked(record.repoDescription ?? '', record.repoTopics ?? [], config.parkedMarkers)
   }, now)
   if (tier === 'strong') draft.quickActions = quickActions
+  if (tier === 'strong' && !closed && config.sources.humanIssues) draft.decisionActions = pendingApoDecisionActions(record)
   return draft
 }
 

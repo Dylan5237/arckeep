@@ -381,19 +381,19 @@ async function createHarness(options: { failDraftRemoval?: boolean } = {}) {
 }
 
 describe('主进程退出生命周期', () => {
-  it('APO 评论和只读核对只接收主窗口主 frame，并在退出后拒绝调用', async () => {
+  it('APO 评论、决策回复和只读核对只接收主窗口主 frame，并在退出后拒绝调用', async () => {
     const harness = await createHarness()
     harness.settingsOptions[0].onHotkey()
     const main = harness.mainWindows[0].webContents
     const capture = harness.captureWindows[0].webContents
-    for (const channel of [IpcChannel.commentWaitingApo, IpcChannel.checkWaitingApo]) {
+    for (const channel of [IpcChannel.commentWaitingApo, IpcChannel.checkWaitingApo, IpcChannel.replyWaitingDecision, IpcChannel.checkWaitingDecision]) {
       const handle = harness.handlers.get(channel)!
       expect(() => handle({ sender: capture, senderFrame: capture.mainFrame }, 'row', 'action')).toThrow('unexpected renderer')
       expect(() => handle({ sender: { id: -9 }, senderFrame: main.mainFrame }, 'row', 'action')).toThrow('unexpected renderer')
       expect(() => handle({ sender: main, senderFrame: {} }, 'row', 'action')).toThrow('child frame')
     }
     harness.emitAppEvent('before-quit', preventableEvent())
-    for (const channel of [IpcChannel.commentWaitingApo, IpcChannel.checkWaitingApo]) {
+    for (const channel of [IpcChannel.commentWaitingApo, IpcChannel.checkWaitingApo, IpcChannel.replyWaitingDecision, IpcChannel.checkWaitingDecision]) {
       expect(() => harness.handlers.get(channel)!({ sender: main, senderFrame: main.mainFrame }, 'row', 'action')).toThrow('应用正在关闭')
     }
     harness.pendingToolShutdown.resolve(undefined)

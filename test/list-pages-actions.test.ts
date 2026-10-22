@@ -6,6 +6,7 @@ import type { ArckeepApi } from '../src/shared/types.js'
 import type { WaitingRow, WaitingSnapshot } from '../src/shared/waiting/types.js'
 import type { OverviewRow, OverviewSnapshot } from '../src/shared/overview/types.js'
 import { pendingApoActions } from '../src/shared/waiting/apo-actions.js'
+import { pendingApoDecisionActions } from '../src/shared/waiting/apo-reply.js'
 import { blankRecord } from '../src/shared/waiting/parse-github.js'
 
 const now = new Date('2026-10-12T03:00:00Z')
@@ -125,5 +126,76 @@ describe('waiting quick comment interaction', () => {
     target.querySelector<HTMLButtonElement>('.apo-comment-button')!.click(); await settle()
     expect(target.querySelector('.apo-comment-status')?.textContent).toContain('权限不足')
     expect(target.querySelector<HTMLButtonElement>('.apo-comment-button')?.disabled).toBe(false)
+  })
+})
+
+describe('waiting decision reply interaction', () => {
+  function decisionRow(id = 'decision') {
+    const row = waitingRow(id, 3)
+    row.decisionActions = pendingApoDecisionActions(blankRecord({ repo: row.repo, number: 42, kind: 'issue', title: row.title,
+      url: row.url, body: '<!-- apo-decision v1 | id: D-3 | rev: 1 | type: 最终验收 | target: #42 | disposer: @ada -->\n请验收', createdAt: row.updatedAt, updatedAt: row.updatedAt, viewerLogin: 'ada' }))
+    return row
+  }
+  const buttons = (target: HTMLElement) => [...target.querySelectorAll<HTMLButtonElement>('.apo-decision-button')]
+  const choiceButton = (target: HTMLElement, text: string) => buttons(target).find(button => button.dataset.apoDecision?.endsWith(`:${text}`))!
+
+  it('sends nothing until a button is clicked, then sends the chosen reply once and locks every choice', async () => {
+    const row = decisionRow(), snap = waiting([row])
+    const reply = vi.fn(async () => ({ ok: true, data: { state: 'sent' } }))
+    window.arckeep = { getWaiting: async () => snap, refreshWaiting: async () => snap, replyWaitingDecision: reply } as unknown as ArckeepApi
+    const target = host(); await renderWaiting(target, () => {})
+    expect(reply).not.toHaveBeenCalled()
+    expect(target.querySelector('.apo-decision-label')?.textContent).toBe('D-3 · 最终验收')
+    expect(buttons(target).map(button => button.textContent)).toEqual(['批准 A', '改用 B', '退回'])
+    const approve = choiceButton(target, '批准 A')
+    approve.click(); approve.click()
+    expect(reply).toHaveBeenCalledOnce()
+    expect(reply).toHaveBeenCalledWith(row.id, row.decisionActions?.[0]?.id, '批准 A', undefined)
+    await settle()
+    expect(target.querySelector('.apo-decision .apo-comment-status')?.textContent).toBe('已回复')
+    expect(buttons(target).every(button => button.disabled)).toBe(true)
+  })
+
+  it('keeps 退回 disabled until a reason is typed, sends it, and remembers it across a re-render', async () => {
+    const row = decisionRow(), snap = waiting([row])
+    const reply = vi.fn(async () => ({ ok: false, error: 'GitHub 权限不足，请检查认证权限' }))
+    window.arckeep = { getWaiting: async () => snap, refreshWaiting: async () => snap, replyWaitingDecision: reply } as unknown as ArckeepApi
+    const target = host(); await renderWaiting(target, () => {})
+    expect(choiceButton(target, '退回').disabled).toBe(true)
+    const input = target.querySelector<HTMLInputElement>('.apo-decision-reason')!
+    input.value = '  缺回放步骤  '; input.dispatchEvent(new Event('input'))
+    expect(choiceButton(target, '退回').disabled).toBe(false)
+    const sort = target.querySelector('select')!; sort.value = 'name'; sort.dispatchEvent(new Event('change'))
+    expect(target.querySelector<HTMLInputElement>('.apo-decision-reason')?.value).toBe('  缺回放步骤  ')
+    choiceButton(target, '退回').click(); await settle()
+    expect(reply).toHaveBeenCalledWith(row.id, row.decisionActions?.[0]?.id, '退回', '  缺回放步骤  ')
+    expect(target.querySelector('.apo-decision .apo-comment-status')?.textContent).toContain('权限不足')
+    expect(choiceButton(target, '批准 A').disabled).toBe(false)
+  })
+
+  it('uses a separate read-only check after an unknown result, without another send', async () => {
+    const snap = waiting([decisionRow()])
+    const reply = vi.fn(async () => ({ ok: true, data: { state: 'unknown' } }))
+    const check = vi.fn(async () => ({ ok: true, data: { state: 'sent' } }))
+    window.arckeep = { getWaiting: async () => snap, refreshWaiting: async () => snap, replyWaitingDecision: reply, checkWaitingDecision: check } as unknown as ArckeepApi
+    const target = host(); await renderWaiting(target, () => {})
+    choiceButton(target, '改用 B').click(); await settle()
+    expect(buttons(target).every(button => button.disabled)).toBe(true)
+    target.querySelector<HTMLButtonElement>('.apo-decision .apo-check')!.click(); await settle()
+    expect(check).toHaveBeenCalledWith(snap.rows[0]!.id, snap.rows[0]!.decisionActions?.[0]?.id)
+    expect(reply).toHaveBeenCalledOnce()
+    expect(target.querySelector('.apo-decision .apo-comment-status')?.textContent).toBe('已回复')
+  })
+
+  it('shows a persisted unknown state with only the check button, and no buttons on weak or ignored rows', async () => {
+    const pending = decisionRow()
+    pending.decisionActions![0]!.state = 'unknown'
+    const snap = waiting([pending, { ...decisionRow(), id: 'weak', tier: 'weak' }, { ...decisionRow(), id: 'ignored', ignored: true }])
+    window.arckeep = { getWaiting: async () => snap, refreshWaiting: async () => snap } as unknown as ArckeepApi
+    const target = host(); await renderWaiting(target, () => {})
+    expect(target.querySelectorAll('.apo-decision')).toHaveLength(1)
+    expect(buttons(target).every(button => button.disabled)).toBe(true)
+    expect(target.querySelector('.apo-decision .apo-check')).not.toBeNull()
+    expect(target.querySelector('.apo-decision .apo-comment-status')?.textContent).toContain('结果待核实')
   })
 })

@@ -108,6 +108,7 @@ export function partitionDismissals(
         .filter(at => Number.isFinite(Date.parse(at)))
         .sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null,
       quickActions: draft.quickActions ?? [],
+      decisionActions: draft.decisionActions ?? [],
       ignored: deferred,
       parentNumber: draft.parentNumber,
       parent: draft.parent,
