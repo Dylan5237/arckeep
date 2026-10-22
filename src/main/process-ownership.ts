@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -7,6 +7,7 @@ import type { ShellPlan } from './tool-launch.js'
 type WindowsRelayPlan = Pick<ShellPlan, 'file' | 'args' | 'windowsVerbatimArguments'>
 
 interface RelayCache {
+  directory: string
   source: string
   bootstrap: string
   executable: string
@@ -20,6 +21,93 @@ interface RelayControl {
 
 const windowsJobRelays = new WeakMap<ChildProcess, RelayControl>()
 let relayCache: RelayCache | undefined
+let relayPreparation: Promise<boolean> | undefined
+
+/**
+ * Compiles the relay once per app run, outside any command's timeout. Production
+ * startup calls this; commands that arrive before it finishes use a direct,
+ * hidden spawn instead of compiling once per command.
+ */
+export function prepareWindowsJobRelay(env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  relayPreparation ??= prepareWindowsJobRelayOnce(env)
+  return relayPreparation
+}
+
+async function prepareWindowsJobRelayOnce(env: NodeJS.ProcessEnv): Promise<boolean> {
+  if (process.platform !== 'win32') return false
+  const cache = getRelayCache()
+  if (isReadyExecutable(cache.executable)) return true
+  try {
+    await runPrepareBootstrap(cache, env)
+    return isReadyExecutable(cache.executable)
+  } catch (error) {
+    console.error(`Arckeep relay 准备失败，后续命令改为直接启动：${error instanceof Error ? error.message : String(error)}`)
+    return false
+  } finally {
+    cleanupStaging(cache)
+  }
+}
+
+const PREPARE_SPEC = 'PREPARE'
+const PREPARE_TIMEOUT_MS = 60_000
+
+function runPrepareBootstrap(cache: RelayCache, env: NodeJS.ProcessEnv): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(windowsPowerShell(env), [
+      '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', cache.bootstrap
+    ], {
+      cwd: cache.directory,
+      env,
+      shell: false,
+      windowsHide: true,
+      stdio: ['pipe', 'ignore', 'pipe']
+    })
+    let stderr = ''
+    let settled = false
+    const finish = (error?: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (error) reject(error)
+      else resolve()
+    }
+    const timer = setTimeout(() => {
+      try { child.kill() } catch { /* already gone */ }
+      finish(new Error('relay 编译超时'))
+    }, PREPARE_TIMEOUT_MS)
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString('utf8')).slice(-512)
+    })
+    child.once('error', error => finish(error instanceof Error ? error : new Error(String(error))))
+    child.once('close', code => {
+      if (code === 0) finish()
+      else finish(new Error(`relay 编译进程退出 ${code}${stderr.trim() ? `：${stderr.trim()}` : ''}`))
+    })
+    child.stdin?.on('error', () => {})
+    child.stdin?.write(`${PREPARE_SPEC}\n`)
+  })
+}
+
+/** Always-hidden direct launch used before the relay is ready or after it fails. */
+function spawnDirect(plan: WindowsRelayPlan, cwd: string, env: NodeJS.ProcessEnv): ChildProcess {
+  return spawn(plan.file, plan.args, {
+    cwd,
+    env,
+    shell: false,
+    windowsHide: true,
+    windowsVerbatimArguments: plan.windowsVerbatimArguments ?? false,
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+}
+
+function cleanupStaging(cache: RelayCache): void {
+  let names: string[]
+  try { names = readdirSync(cache.directory) } catch { return }
+  for (const name of names) {
+    if (!name.startsWith('relay-') && !name.startsWith('publish-')) continue
+    try { rmSync(path.join(cache.directory, name), { force: true }) } catch { /* best effort */ }
+  }
+}
 
 /**
  * Starts a command behind a Windows Job Object owner. The first launch compiles
@@ -35,6 +123,11 @@ export function spawnWindowsJobRelay(
 ): ChildProcess {
   const cache = getRelayCache()
   const compiled = isReadyExecutable(cache.executable)
+  if (!compiled && relayPreparation !== undefined) {
+    // Production startup already started the one background compile. Never
+    // compile per command: run directly until (or unless) the relay is ready.
+    return spawnDirect(plan, cwd, env)
+  }
   const command = compiled
     ? { file: cache.executable, args: [] }
     : {
@@ -110,6 +203,7 @@ function getRelayCache(): RelayCache {
   if (relayCache) return relayCache
   const directory = mkdtempSync(path.join(tmpdir(), 'arckeep-job-relay-'))
   const cache: RelayCache = {
+    directory,
     source: path.join(directory, 'ArckeepProcessRelay.cs'),
     bootstrap: path.join(directory, 'bootstrap.ps1'),
     executable: path.join(directory, 'ArckeepProcessRelay.exe')
@@ -152,6 +246,9 @@ $sourcePath = Join-Path $PSScriptRoot 'ArckeepProcessRelay.cs'
 $stagePath = Join-Path $PSScriptRoot ('relay-' + [guid]::NewGuid().ToString('N') + '.exe')
 $publishPath = Join-Path $PSScriptRoot ('publish-' + [guid]::NewGuid().ToString('N') + '.exe')
 try {
+  if ([System.IO.File]::Exists($relayPath) -and (New-Object System.IO.FileInfo $relayPath).Length -eq 0) {
+    [System.IO.File]::Delete($relayPath)
+  }
   if (-not [System.IO.File]::Exists($relayPath)) {
     $compilerCandidates = @(
       (Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'),
@@ -162,14 +259,20 @@ try {
     & $compiler '/nologo' '/target:exe' "/out:$stagePath" $sourcePath *> $null
     if ($LASTEXITCODE -ne 0 -or -not [System.IO.File]::Exists($stagePath)) { throw 'relay compilation failed' }
     [System.IO.File]::Copy($stagePath, $publishPath)
-    try {
-      [System.IO.File]::Move($publishPath, $relayPath)
-    } catch {
-      if (-not [System.IO.File]::Exists($relayPath)) { throw }
+    for ($attempt = 0; $attempt -lt 5; $attempt++) {
+      try {
+        [System.IO.File]::Move($publishPath, $relayPath)
+        break
+      } catch {
+        if ([System.IO.File]::Exists($relayPath)) { break }
+        if ($attempt -eq 4) { throw }
+        Start-Sleep -Milliseconds 120
+      }
     }
   }
   $specLine = [System.Console]::In.ReadLine()
   if ($null -eq $specLine) { exit 125 }
+  if ($specLine -eq 'PREPARE') { exit 0 }
   $assembly = [System.Reflection.Assembly]::LoadFrom($relayPath)
   $relayType = $assembly.GetType('ArckeepProcessRelay', $true)
   $run = $relayType.GetMethod('Run', [System.Reflection.BindingFlags]::Public -bor [System.Reflection.BindingFlags]::Static)
@@ -180,7 +283,9 @@ try {
   exit 125
 } finally {
   foreach ($staged in @($stagePath, $publishPath)) {
-    if ([System.IO.File]::Exists($staged)) { [System.IO.File]::Delete($staged) }
+    try {
+      if ([System.IO.File]::Exists($staged)) { [System.IO.File]::Delete($staged) }
+    } catch { }
   }
 }`
 

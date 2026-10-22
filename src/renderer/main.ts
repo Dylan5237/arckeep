@@ -363,35 +363,28 @@ async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?:
   if (view !== 'settings') content.replaceChildren(host)
   if (view === 'settings') await renderSettings(options)
   else if (view === 'todos') {
-    await refreshHotkeyBanner()
     if (epoch !== navigationEpoch) return
     const leave = await renderTodos(host)
     if (epoch !== navigationEpoch) leave()
     else leaveTodos = leave
   } else if (view === 'ideas') {
-    await refreshHotkeyBanner()
     if (epoch !== navigationEpoch) return
     await renderIdeas(host)
   } else if (view === 'prompts') {
-    void refreshHotkeyBanner()
     if (epoch !== navigationEpoch) return
     await renderPrompts(host)
   } else if (view === 'inbox') {
-    void refreshHotkeyBanner()
     if (epoch !== navigationEpoch) return
     await renderWaiting(host, (next, nextOptions) => { void show(next, nextOptions) })
   } else if (view === 'projects') {
-    void refreshHotkeyBanner()
     if (epoch !== navigationEpoch) return
     await renderOverview(host, (next, nextOptions) => { void show(next, nextOptions) })
   } else if (view === 'claude') {
-    void refreshHotkeyBanner()
     if (epoch !== navigationEpoch) return
     const leave = await renderClaudeSessions(host, { repo: options?.repo, sessionId: options?.sessionId })
     if (epoch !== navigationEpoch) leave()
     else leaveClaudeSessions = leave
   } else if (view === 'tools') {
-    await refreshHotkeyBanner()
     if (epoch !== navigationEpoch) return
     await renderTools(host, () => { void show('settings') })
   }
@@ -409,6 +402,9 @@ for (const button of navButtons) {
 window.arckeep.onHotkeyStatus(combo => {
   paintHotkeyBanner(combo)
 })
+
+// Paint the startup banner once; later changes arrive through onHotkeyStatus.
+void refreshHotkeyBanner()
 
 window.arckeep.onFocusHotkey(() => {
   pendingHotkeyFocus = true

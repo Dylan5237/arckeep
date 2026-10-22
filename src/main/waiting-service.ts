@@ -17,6 +17,7 @@ import { collectWaiting, emptyWaitingMemory, type WaitingMemory } from '../waiti
 import { loadUnpushedBranches, type GitRunner } from '../waiting/local-git.js'
 import { resolveWaitingToken, waitingTokenIdentityHash, type WaitingTokenVia } from '../waiting/token.js'
 import type { GhLookup } from './github-auth.js'
+import { readGhAuthTokenCached } from './gh-auth-cache.js'
 import { testHooksEnabled } from './test-hooks.js'
 import type { SettingsService } from './settings-service.js'
 import { pendingTodoProvider } from '../shared/waiting/todo-source.js'
@@ -405,7 +406,7 @@ export class WaitingService {
       accessPromise = this.authFlight.promise
     } else {
       const operation = resolveWaitingToken({
-        readGh: this.deps.readGh,
+        readGh: this.deps.readGh ?? (context => readGhAuthTokenCached(context, this.deps.log)),
         envToken: inputs.envToken,
         signal,
         tasks: this.tasks,

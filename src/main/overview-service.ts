@@ -6,6 +6,7 @@ import type { OverviewRow, OverviewSnapshot } from '../shared/overview/types.js'
 import { loadOverview } from '../overview/load.js'
 import { resolveWaitingToken, waitingTokenIdentityHash, type WaitingTokenVia } from '../waiting/token.js'
 import type { GhLookup } from './github-auth.js'
+import { readGhAuthTokenCached } from './gh-auth-cache.js'
 import type { SettingsService } from './settings-service.js'
 import { abortable, isCancellation, throwIfCancelled, TaskScope } from '../shared/task-scope.js'
 import { isCommandCenterRead, retainCommandCenter } from '../shared/overview/command-center-types.js'
@@ -218,7 +219,7 @@ export class OverviewService {
       accessPromise = this.authFlight.promise
     } else {
       const operation = resolveWaitingToken({
-        readGh: this.deps.readGh,
+        readGh: this.deps.readGh ?? (context => readGhAuthTokenCached(context, this.deps.log)),
         envToken: inputs.envToken,
         signal,
         tasks: this.tasks,

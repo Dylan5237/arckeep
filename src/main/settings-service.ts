@@ -6,13 +6,13 @@ import type { AppState, IpcResult } from '../shared/types.js'
 import { isCancellation, throwIfCancelled, type TaskScope } from '../shared/task-scope.js'
 import { validateToolShelfText } from './tool-validate.js'
 import {
-  readGhAuthToken,
   resolveGithubAuth,
   testGithubConnection,
   toPublicGithubAuth,
   type GithubAuthTaskOptions,
   type GhLookup
 } from './github-auth.js'
+import { invalidateGhAuthTokenCache, readGhAuthTokenCached } from './gh-auth-cache.js'
 import { applyHotkey, hotkeyConflictWarning, type HotkeyRegistrar } from './hotkey.js'
 import { hotkeyRuntimeAfterApply, type HotkeyRuntime } from '../shared/hotkey-status.js'
 import { normalizePat, normalizeWatchedRepos } from './ipc-validators.js'
@@ -243,6 +243,8 @@ export class SettingsService {
         const token = normalizePat(pasted)
         return await testGithubConnection({ token, fetchImpl: this.deps.fetchImpl, signal })
       }
+      // An explicit connection test must observe a fresh `gh auth login`.
+      invalidateGhAuthTokenCache()
       const resolved = await this.resolveAuth({ signal, tasks: this.deps.tasks })
       return await testGithubConnection({
         token: resolved.token,
@@ -276,7 +278,7 @@ export class SettingsService {
   }
 
   private resolveAuth(options: GithubAuthTaskOptions = {}) {
-    const readGh = this.deps.readGh ?? (context => readGhAuthToken(undefined, this.deps.log, context))
+    const readGh = this.deps.readGh ?? (context => readGhAuthTokenCached(context, this.deps.log))
     return resolveGithubAuth({
       readGh,
       readPat: () => this.readPat(),

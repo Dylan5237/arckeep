@@ -76,6 +76,7 @@ import { createSafeStorageBox } from './token-store.js'
 import type { HotkeyRegistrar } from './hotkey.js'
 import { registerToolIpc } from './tool-ipc.js'
 import { ToolRunner } from './tool-runner.js'
+import { prepareWindowsJobRelay } from './process-ownership.js'
 import { createToolRehearsals } from './tool-rehearse.js'
 import { createUrlGuard, isTrustedBrowserUrl } from './url-trust.js'
 import { hardenedWebPreferences } from './window-prefs.js'
@@ -670,6 +671,9 @@ if (!gotLock) {
   })
   app.whenReady().then(() => {
     if (isQuitting) return
+    // Compile the Windows relay once, outside any command timeout, so menu
+    // navigation never launches a compiler.
+    if (!screenshotPath && !process.env.VITEST) void prepareWindowsJobRelay()
     Menu.setApplicationMenu(null)
     if (screenshotPath && screenshotScene === 'capture-draft') {
       saveCaptureDraft(captureDraftPath(app.getPath('userData')), {
