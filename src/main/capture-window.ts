@@ -14,12 +14,15 @@ export interface CaptureWindowOptions {
 /** Puts the caret in the capture field, at the end of any restored draft. */
 export const focusCaptureInputScript = `(() => {
   const input = document.querySelector('#text');
-  if (!(input instanceof HTMLInputElement)) return false;
-  input.focus();
-  const end = input.value.length;
-  input.setSelectionRange(end, end);
+  const kind = document.querySelector('#capture-kind');
+  const idea = document.querySelector('#idea-text');
+  const field = kind instanceof HTMLSelectElement && kind.value === 'idea' && idea instanceof HTMLTextAreaElement ? idea : input;
+  if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return false;
+  field.focus();
+  const end = field.value.length;
+  field.setSelectionRange(end, end);
   document.dispatchEvent(new Event('selectionchange'));
-  return document.activeElement === input;
+  return document.activeElement === field;
 })()`
 
 /** Shows the capture window and moves keyboard focus to it. No timer. */
@@ -40,7 +43,7 @@ export function focusCaptureInput(window: BrowserWindow): void {
 export function createCaptureWindow(options: CaptureWindowOptions): BrowserWindow {
   const window = new BrowserWindow({
     width: 460,
-    height: 348,
+    height: 480,
     show: false,
     title: '快速捕获',
     backgroundColor: WINDOW_BACKGROUND,
@@ -72,12 +75,18 @@ export function createCaptureWindow(options: CaptureWindowOptions): BrowserWindo
     window.on('blur', () => {
       if (blurTimer) clearTimeout(blurTimer)
       blurTimer = setTimeout(() => {
+        blurTimer = null
         if (window.isDestroyed() || window.isFocused()) return
         window.close()
       }, 200)
     })
     window.on('focus', () => {
       if (blurTimer) clearTimeout(blurTimer)
+      blurTimer = null
+    })
+    window.on('closed', () => {
+      if (blurTimer) clearTimeout(blurTimer)
+      blurTimer = null
     })
   }
   options.load(window)
@@ -125,8 +134,9 @@ export function showSavedToast(options: {
   })
   options.load(window)
   const holdMs = options.holdMs ?? SAVED_TOAST_MS
-  setTimeout(() => {
+  const closeTimer = setTimeout(() => {
     if (!window.isDestroyed()) window.close()
   }, holdMs)
+  window.once('closed', () => clearTimeout(closeTimer))
   return window
 }

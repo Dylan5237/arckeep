@@ -103,6 +103,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     token: access.token,
     config: settings.waiting,
     watchedRepos: settings.watchedRepos,
+    repoFetchWindow: settings.repoFetchWindow,
     now: io.now ?? new Date(),
     fetchImpl: io.fetchImpl,
     todos

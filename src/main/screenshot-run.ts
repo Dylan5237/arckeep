@@ -349,8 +349,77 @@ export async function presentScreenshot(options: {
       for (const row of document.querySelectorAll('.todo-row')) row.classList.remove('show-actions')
       true
     `)
+  } else if (scene === 'overview-auth-checking' || scene === 'waiting-auth-checking') {
+    await waitUntil(contents, includesText('正在检查 GitHub 认证'), scene)
+    const hasAuthWarning = await contents.executeJavaScript(`Boolean(document.querySelector('.auth-alert'))`)
+    if (hasAuthWarning) throw new Error('Pending authentication was rendered as a credential warning')
+  } else if (scene === 'waiting-apo' || scene === 'waiting-apo-narrow') {
+    await waitUntil(contents, includesText('EXCEPTION ACCEPT'), scene)
+    const checks = await contents.executeJavaScript(`(async () => {
+      const numbers = () => [...document.querySelectorAll('.waiting-number')].map(node => node.textContent);
+      if (numbers().join(',') !== '#87,#63,#42') throw new Error('Default order is not newest first');
+      const select = document.querySelector('.list-sort select');
+      select.value = 'oldest'; select.dispatchEvent(new Event('change'));
+      if (numbers().join(',') !== '#42,#63,#87') throw new Error('Oldest order did not apply');
+      const restored = document.querySelector('.list-sort select');
+      restored.value = 'newest'; restored.dispatchEvent(new Event('change'));
+      const buttons = [...document.querySelectorAll('.apo-comment-button')];
+      if (buttons.map(node => node.textContent).join(',') !== 'EXCEPTION ACCEPT,PHASE ACCEPT,FREEZE ACK') throw new Error('APO buttons missing');
+      const blocked = await window.arckeep.commentWaitingApo('fixture-row', 'fixture-action');
+      if (blocked.ok || !blocked.error.includes('当前模式')) throw new Error('Screenshot mode allowed comment write');
+      const page = document.querySelector('.page.waiting');
+      if (page.scrollWidth > page.clientWidth + 1) throw new Error('Page has horizontal overflow');
+      for (const button of buttons) {
+        const rect = button.getBoundingClientRect();
+        if (rect.width < 10 || rect.left < 0 || rect.right > innerWidth + 1) throw new Error('APO button is clipped');
+      }
+      const weight = getComputedStyle(document.querySelector('.waiting-number')).fontWeight;
+      if (Number(weight) < 600) throw new Error('Issue number is not emphasized');
+      const ages = [...document.querySelectorAll('.days')].map(node => node.textContent);
+      if (ages.join(',') !== '8 分钟,38 分钟,1 小时') throw new Error('Fine waiting durations missing');
+      return { defaultOrder: ['#87','#63','#42'], oldestOrder: ['#42','#63','#87'], ages, buttons: buttons.map(node => node.textContent), screenshotWriteBlocked: true, horizontalOverflow: false };
+    })()`)
+    mkdirSync(path.dirname(file), { recursive: true })
+    writeFileSync(`${file}.checks.json`, JSON.stringify({ scene, checks }, null, 2))
+  } else if (scene.startsWith('prompts')) {
+    await waitUntil(contents, includesText(scene === 'prompts-empty' ? '还没有提示词' : 'APO 项目初始化'), scene)
+    await waitUntil(contents, `(() => {
+      const page = document.querySelector('[data-page="prompts"]');
+      if (!page) return false;
+      return page.scrollWidth <= page.clientWidth + 1;
+    })()`, 'prompt library without horizontal overflow')
   } else if (scene.startsWith('overview')) {
     await waitUntil(contents, includesText(screenshotReadyText(scene)), scene)
+    if (scene.startsWith('overview-progress')) {
+      const checks = await contents.executeJavaScript(`(() => {
+        const names = () => [...document.querySelectorAll('.project-card .waiting-title-text')].map(node => node.textContent);
+        if (names().join(',') !== 'harbor/lumen,harbor/keel,harbor/moor,harbor/tidal') throw new Error('Board default order is incorrect');
+        const sort = document.querySelector('.list-sort select');
+        sort.value = 'oldest'; sort.dispatchEvent(new Event('change'));
+        if (names().join(',') !== 'harbor/tidal,harbor/moor,harbor/keel,harbor/lumen') throw new Error('Shared sorting failed');
+        const restored = document.querySelector('.list-sort select');
+        restored.value = 'newest'; restored.dispatchEvent(new Event('change'));
+        const filters = [...document.querySelectorAll('.cc-board-filter')];
+        const blocked = filters.find(node => node.textContent.startsWith('阻塞'));
+        blocked.click();
+        const expectedBlocked = ${scene === 'overview-progress-errors' ? '0' : '1'};
+        if (names().length !== expectedBlocked) throw new Error('Status filtering failed');
+        document.querySelector('.cc-board-filter').click();
+        if (${scene === 'overview-progress-expanded' ? 'true' : 'false'}) document.querySelector('.cc-details').open = true;
+        const badges = [...document.querySelectorAll('.cc-badge')].map(node => node.textContent);
+        if (${scene === 'overview-progress-errors' ? 'true' : 'false'} && !badges.includes('缓存 · 验证中')) throw new Error('Cached progress was not labelled');
+        const page = document.querySelector('.page.overview');
+        if (page.scrollWidth > page.clientWidth + 1) throw new Error('Board has horizontal overflow');
+        for (const card of document.querySelectorAll('.project-card')) {
+          const box = card.getBoundingClientRect();
+          if (box.left < 0 || box.right > innerWidth + 1 || card.scrollWidth > card.clientWidth + 1) throw new Error('Project card is clipped');
+        }
+        if (document.querySelector('[role="progressbar"], progress')) throw new Error('Board invented a completion percentage');
+        return { names: names(), badges, filterWorks: true, sortingWorks: true, horizontalOverflow: false, noInventedPercentage: true };
+      })()`)
+      mkdirSync(path.dirname(file), { recursive: true })
+      writeFileSync(`${file}.checks.json`, JSON.stringify({ scene, checks }, null, 2))
+    }
     if (scene === 'overview-archived') {
       await contents.executeJavaScript(`
         const details = document.querySelector('details.archived-group')
@@ -366,24 +435,59 @@ export async function presentScreenshot(options: {
       `)
     }
     if (scene === 'overview-settings') {
+      // Exercise the real renderer -> preload -> main settings write in the
+      // isolated screenshot profile, then leave the documented default visible.
+      for (const choice of ['3d', '7d']) {
+        await contents.executeJavaScript(`(() => {
+          const card = document.querySelector('#repo-fetch-window-settings')
+          const select = card?.querySelector('select')
+          const save = card?.querySelector('button')
+          if (!(select instanceof HTMLSelectElement) || !(save instanceof HTMLButtonElement)) throw new Error('Missing shared repository range controls')
+          select.value = ${JSON.stringify(choice)}
+          save.click()
+          return true
+        })()`)
+        await waitUntil(contents, `(() => {
+          const card = document.querySelector('#repo-fetch-window-settings')
+          const select = card?.querySelector('select')
+          return select instanceof HTMLSelectElement && !select.disabled && select.value === ${JSON.stringify(choice)}
+        })()`, `saved repository range ${choice}`)
+        const state = await contents.executeJavaScript('window.arckeep.getState()') as { repoFetchWindow?: string }
+        if (state.repoFetchWindow !== choice) throw new Error('Repository range IPC write did not persist')
+      }
       await contents.executeJavaScript(`
-        document.querySelector('#overview-settings')?.scrollIntoView({ block: 'start' })
+        document.querySelector('#repo-fetch-window-settings')?.scrollIntoView({ block: 'start' })
         true
       `)
+      const settingsCheck = await contents.executeJavaScript(`(() => {
+        const overview = document.querySelector('#overview-settings')
+        const range = document.querySelector('#repo-fetch-window-settings')
+        const rect = range?.getBoundingClientRect()
+        const select = range?.querySelector('select')
+        return { overviewText: overview?.innerText, rangeText: range?.innerText, value: select?.value,
+          options: [...(select?.options ?? [])].map(option => option.value), viewportHeight: window.innerHeight,
+          rect: rect ? { top: rect.top, bottom: rect.bottom, height: rect.height } : null }
+      })()`)
+      writeFileSync(`${file}.settings-checks.json`, JSON.stringify(settingsCheck, null, 2))
       await waitUntil(contents, `(() => {
         const card = document.querySelector('#overview-settings')
-        if (!card) return false
+        const range = document.querySelector('#repo-fetch-window-settings')
+        const select = range?.querySelector('select')
+        if (!card || !range || !(select instanceof HTMLSelectElement)) return false
         const text = card.innerText
-        const rect = card.getBoundingClientRect()
+        const rect = range.getBoundingClientRect()
+        const pickerRect = select.getBoundingClientRect()
         return text.includes('默认 7 天')
           && text.includes('默认 30 天')
-          && text.includes('没有单独的最近推送窗口')
+          && text.includes('共用的推送时间范围')
           && !text.includes('推送窗口天数')
-          && !card.querySelector('[aria-label*="推送"]')
+          && select.value === '7d'
+          && JSON.stringify([...select.options].map(option => option.value)) === JSON.stringify(['3d', '7d', '15d', '30d', 'all'])
           && rect.top >= -2
           && rect.top < 120
-          && rect.bottom > 400
+          && rect.height > 0
           && rect.bottom <= window.innerHeight
+          && pickerRect.height > 0 && pickerRect.width > 0 && pickerRect.bottom <= rect.bottom
       })()`, 'overview settings')
     }
     if (scene === 'overview-chip-hover') {

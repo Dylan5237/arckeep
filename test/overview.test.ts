@@ -333,10 +333,10 @@ describe('overview warnings', () => {
     expect(visibleWarningChips(failed)[0]?.targets).toEqual([
       { url: 'https://github.com/example/failed/actions/runs/9' }
     ])
-    expect(overviewMetaText(failed, NOW)).toBe('1 天前 · 2 个 PR 待合并')
+    expect(overviewMetaText(failed, NOW)).toBe('最近活动 1 天前 · 2 个 PR 待合并')
     expect(overviewMetaText(failed, NOW)).not.toContain('open PR')
     expect(visibleWarningChips(quiet)).toEqual([])
-    expect(overviewMetaText(quiet, NOW)).toBe('1 天前 · CI 通过')
+    expect(overviewMetaText(quiet, NOW)).toBe('最近活动 1 天前 · CI 通过')
     expect(overviewMetaText(pending, NOW)).toContain('CI 进行中')
     expect(overviewMetaText(none, NOW)).toContain('无 CI')
     expect(stale.warnings.map(item => item.kind)).toContain('陈旧')
@@ -603,7 +603,7 @@ describe('overview loading', () => {
     expect(result.rows[0]?.ciState).toBe('success')
   })
 
-  it('falls back per repository when a batch fails', async () => {
+  it('reports a transport failure without expanding it into repository retries', async () => {
     let calls = 0
     const result = await loadOverview({
       token: 'test-token',
@@ -635,11 +635,10 @@ describe('overview loading', () => {
         })
       }
     })
-    expect(calls).toBeGreaterThan(1)
-    expect(result.rows.map(row => [row.name, row.error, row.ciState])).toEqual([
-      ['example/ok', null, 'failure'],
-      ['example/denied', '仓库不存在或无权访问', 'unknown']
-    ])
+    expect(calls).toBe(1)
+    expect(result.rows.map(row => row.name)).toEqual(['example/ok', 'example/denied'])
+    expect(result.rows.every(row => row.error?.includes('连不上 GitHub'))).toBe(true)
+    expect(result.rows.every(row => row.ciState === 'unknown')).toBe(true)
   })
 
   it('keeps every pushable age band and drops watch-only or read-only repos', async () => {
@@ -802,6 +801,7 @@ describe('overview loading', () => {
     })
     service.init()
     expect(service.setRepos(['example/live']).ok).toBe(true)
+    expect(service.setRepoFetchWindow('all').ok).toBe(true)
     let fetches = 0
     const live = jsonResponse({
       data: {

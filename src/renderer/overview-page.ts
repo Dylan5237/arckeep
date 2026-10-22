@@ -1,7 +1,13 @@
 import { overviewCounts } from '../shared/overview/classify'
 import { canRemoveFromWatchList, overviewMetaText, visibleWarningChips } from '../shared/overview/present'
-import { localAbsolute, localClock, relativeLabel } from '../shared/waiting/local-time'
+import { localAbsolute, localClock, relativeLabel } from '../shared/time'
+import { orderList, type ListOrder } from '../shared/list-order'
+import { listSortControl, readListOrder } from './list-sort'
 import type { OverviewRow, OverviewSnapshot, OverviewWarning } from '../shared/overview/types'
+import { createRefreshStatus } from './refresh-status'
+import { commandCenterBadge, commandCenterPanel, progressCategory, type ProgressFilter } from './command-center-panel'
+import { DEFAULT_REPO_FETCH_WINDOW, type RepoFetchWindow } from '../shared/repo-fetch-window'
+import { repoFetchWindowControl } from './repo-fetch-window'
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -40,14 +46,25 @@ function externalIcon(): SVGElement {
 }
 
 function paint(host: HTMLElement, snapshot: OverviewSnapshot, handlers: {
+  order: ListOrder
+  filter: ProgressFilter
+  setFilter: (filter: ProgressFilter) => void
+  sort: (order: ListOrder) => void
   refresh: () => void
+  setWindow: (value: RepoFetchWindow) => void
   settings: () => void
   focusWatch: () => void
   open: (url: string) => void
   remove: (name: string) => void
-}): void {
-  const archived = snapshot.rows.filter(row => row.archived || row.group === 'archived')
-  const visible = snapshot.rows.filter(row => !row.archived && row.group !== 'archived')
+  startClaude: (repo: string, name: string) => void
+  viewClaude: (repo: string) => void
+}): HTMLElement {
+  const sorted = orderList(snapshot.rows, handlers.order, {
+    time: row => row.lastActivityAt ?? row.stallBasis?.at ?? row.lastCommitAt, name: row => row.name, id: row => row.name
+  })
+  const matches = (row: OverviewRow) => handlers.filter === 'all' || progressCategory(row.commandCenter) === handlers.filter
+  const archived = sorted.filter(row => (row.archived || row.group === 'archived') && matches(row))
+  const visible = sorted.filter(row => !row.archived && row.group !== 'archived' && matches(row))
   const active = visible.filter(row => row.group !== 'stale')
   const stale = visible.filter(row => row.group === 'stale')
   const counts = overviewCounts(snapshot.rows)
@@ -59,7 +76,7 @@ function paint(host: HTMLElement, snapshot: OverviewSnapshot, handlers: {
   const toolbar = el('div', { class: 'waiting-toolbar' })
   if (counts.repos > 0 || archived.length > 0) {
     toolbar.append(el('p', { class: 'waiting-summary' }, [
-      `${counts.repos} 个仓库 · ${counts.attention} 个需要看一眼`
+      `${counts.repos} 个项目 · ${counts.attention} 个有仓库提醒`
     ]))
   }
   toolbar.append(stamp)
@@ -67,12 +84,30 @@ function paint(host: HTMLElement, snapshot: OverviewSnapshot, handlers: {
   const authBlocked = snapshot.auth === 'missing' || snapshot.auth === 'invalid'
   refresh.disabled = snapshot.refreshing || authBlocked
   refresh.addEventListener('click', handlers.refresh)
-  toolbar.append(refresh)
+  toolbar.append(refresh, repoFetchWindowControl(snapshot.repoFetchWindow ?? DEFAULT_REPO_FETCH_WINDOW, handlers.setWindow, snapshot.refreshing), listSortControl('overview', handlers.order, handlers.sort))
+  if (snapshot.refreshing) {
+    toolbar.append(el('span', {
+      class: 'waiting-stamp refresh-elapsed', 'data-refresh-elapsed': '', 'aria-live': 'off'
+    }, ['已用 0 秒']))
+  }
 
   const page = el('section', { class: 'page overview' }, [
     el('h1', {}, ['项目总览']),
     toolbar
   ])
+  page.append(el('p', { class: 'lede cc-board-lede' }, ['项目进度看板 · 当前阶段、门禁与下一动作来自各项目 Command Center']))
+  if (snapshot.rows.length > 0) {
+    const filters = el('div', { class: 'cc-board-filters', role: 'group', 'aria-label': '筛选项目进度' })
+    const projects = snapshot.rows.filter(row => !row.archived && row.group !== 'archived')
+    const options: Array<[ProgressFilter, string]> = [['all', '全部项目'], ['running', '实现中'], ['review', '验证 / 待验收'], ['blocked', '阻塞'], ['maintenance', '待核对']]
+    for (const [value, label] of options) {
+      const count = value === 'all' ? projects.length : projects.filter(row => progressCategory(row.commandCenter) === value).length
+      const button = el('button', { type: 'button', class: 'cc-board-filter', 'aria-pressed': String(handlers.filter === value) }, [label, el('span', {}, [String(count)])])
+      button.addEventListener('click', () => handlers.setFilter(value))
+      filters.append(button)
+    }
+    page.append(filters)
+  }
   if (snapshot.auth === 'missing' || snapshot.auth === 'invalid') {
     const go = el('button', { type: 'button', class: 'primary' }, ['去设置'])
     go.addEventListener('click', handlers.settings)
@@ -97,44 +132,57 @@ function paint(host: HTMLElement, snapshot: OverviewSnapshot, handlers: {
     page.append(el('div', { class: 'alert error', role: 'status' }, [`${error.source}：${error.message}`]))
   }
   if (snapshot.refreshing && snapshot.rows.length === 0) {
-    page.append(el('p', { class: 'waiting-loading', role: 'status' }, ['正在刷新…']))
+    page.append(el('p', { class: 'waiting-loading', role: 'status' }, [
+      snapshot.auth === 'unknown' ? '正在检查 GitHub 认证…' : '正在刷新…'
+    ]))
   } else if (!snapshot.refreshing && counts.repos === 0 && archived.length === 0 && snapshot.auth === 'ok') {
     const add = el('button', { type: 'button', class: 'primary' }, ['去设置添加关注的仓库'])
     add.addEventListener('click', handlers.focusWatch)
     page.append(el('div', { class: 'overview-empty' }, [
       el('p', {}, ['还没有可显示的仓库']),
+      ...((snapshot.repoFetchWindow ?? DEFAULT_REPO_FETCH_WINDOW) !== 'all'
+        ? [el('p', { class: 'hint' }, ['当前范围内没有符合条件的仓库；可扩大上方推送时间范围，检查历史项目。'])] : []),
       add
     ]))
   } else if (counts.repos > 0 || archived.length > 0) {
     if (active.length > 0) {
-      const list = el('div', { class: 'overview-list' })
+      const list = el('div', { class: 'overview-list cc-board-grid' })
       for (const row of active) list.append(renderRow(row, handlers))
       page.append(list)
     }
-    if (stale.length > 0) page.append(renderStale(stale, handlers))
+    if (stale.length > 0) page.append(renderStale(stale, handlers, handlers.filter !== 'all'))
     if (archived.length > 0) page.append(renderArchived(archived, handlers))
+    if (active.length === 0 && stale.length === 0 && archived.length === 0) page.append(el('p', { class: 'overview-empty' }, ['没有符合当前筛选的项目']))
   }
   host.replaceChildren(page)
+  return page
 }
 
 function renderArchived(rows: readonly OverviewRow[], handlers: RowHandlers): HTMLElement {
   const details = el('details', { class: 'archived-group' })
   details.append(el('summary', {}, [`已归档 · ${rows.length}`]))
-  for (const row of rows) details.append(renderRow(row, handlers))
+  const grid = el('div', { class: 'cc-board-grid' })
+  for (const row of rows) grid.append(renderRow(row, handlers))
+  details.append(grid)
   return details
 }
 
-function renderStale(rows: readonly OverviewRow[], handlers: RowHandlers): HTMLElement {
+function renderStale(rows: readonly OverviewRow[], handlers: RowHandlers, open = false): HTMLElement {
   const details = el('details', { class: 'stale-group' })
+  details.open = open
   const summary = el('summary', {}, [`陈旧 · ${rows.length}`])
   details.append(summary)
-  for (const row of rows) details.append(renderRow(row, handlers))
+  const grid = el('div', { class: 'cc-board-grid' })
+  for (const row of rows) grid.append(renderRow(row, handlers))
+  details.append(grid)
   return details
 }
 
 interface RowHandlers {
   open: (url: string) => void
   remove: (name: string) => void
+  startClaude: (repo: string, name: string) => void
+  viewClaude: (repo: string) => void
 }
 
 function renderRow(row: OverviewRow, handlers: RowHandlers): HTMLElement {
@@ -156,14 +204,24 @@ function renderRow(row: OverviewRow, handlers: RowHandlers): HTMLElement {
   const meta = el('span', {
     class: row.error ? 'waiting-meta overview-error' : 'waiting-meta'
   }, [overviewMetaText(row, new Date())])
-  if (row.lastCommitAt) meta.title = localAbsolute(row.lastCommitAt)
-  const children: Array<Node | string> = [title, chips, meta]
+  const activity = row.lastActivityAt ?? row.lastCommitAt
+  if (activity) meta.title = `最近活动 ${localAbsolute(activity)}${row.lastCommitAt ? ` · 最近提交 ${localAbsolute(row.lastCommitAt)}` : ''}`
+  const health = el('details', { class: 'cc-health' }, [el('summary', {}, ['仓库状态']), chips, meta])
   if (canRemoveFromWatchList(row)) {
     const remove = el('button', { type: 'button', class: 'ghost tiny overview-remove' }, ['从关注列表移除'])
     remove.addEventListener('click', () => { void handlers.remove(row.name) })
-    children.push(remove)
+    health.append(remove)
   }
-  return el('div', { class: `overview-row${row.error ? ' is-error' : ''}` }, children)
+  const claudeActions = el('div', { class: 'project-claude-actions' })
+  const startClaude = el('button', { type: 'button', class: 'primary tiny', title: '在此项目目录打开 Claude' }, ['使用 Claude 工作'])
+  startClaude.addEventListener('click', () => handlers.startClaude(row.name, row.name))
+  const sessions = el('button', { type: 'button', class: 'ghost tiny', title: '查看此项目的 Claude 会话' }, ['会话'])
+  sessions.addEventListener('click', () => handlers.viewClaude(row.name))
+  claudeActions.append(startClaude, sessions)
+  return el('article', { class: `overview-row project-card${row.error ? ' is-error' : ''}` }, [
+    el('header', { class: 'project-card-head' }, [title, commandCenterBadge(row.commandCenter)]),
+    commandCenterPanel(row.commandCenter, handlers.open), claudeActions, health
+  ])
 }
 
 function warningChip(warning: OverviewWarning, open: (url: string) => void): HTMLElement {
@@ -184,25 +242,52 @@ function warningChip(warning: OverviewWarning, open: (url: string) => void): HTM
 
 export async function renderOverview(
   host: HTMLElement,
-  navigate: (view: 'settings', options?: { focusToken?: boolean, focusWatch?: boolean }) => void
+  navigate: (view: 'settings' | 'claude', options?: { focusToken?: boolean, focusWatch?: boolean, repo?: string, sessionId?: string }) => void
 ): Promise<void> {
   const loading: OverviewSnapshot = {
     rows: [],
     refreshedAt: null,
     refreshing: true,
-    auth: 'ok',
+    auth: 'unknown',
     rateLimitResetAt: null,
     sourceErrors: [],
     notices: []
   }
+  let current = loading
+  let requestVersion = 0
+  let order = readListOrder('overview')
+  let filter: ProgressFilter = 'all'
+  const refreshStatus = createRefreshStatus(host)
+  const showClaudeError = (message: string) => {
+    host.querySelector('.project-claude-error')?.remove()
+    const alert = el('p', { class: 'alert error project-claude-error', role: 'alert' }, [message])
+    host.querySelector('.page.overview')?.prepend(alert)
+  }
   const apply = (snapshot: OverviewSnapshot) => {
-    paint(host, snapshot, {
+    if (!refreshStatus.ownsPage()) return
+    current = snapshot
+    refreshStatus.attach(paint(host, snapshot, {
+      order,
+      filter,
+      setFilter: value => { filter = value; apply(current) },
+      sort: value => { order = value; apply(current) },
       refresh: () => { void reload() },
+      setWindow: value => { void setWindow(value) },
       settings: () => navigate('settings', { focusToken: true }),
       focusWatch: () => navigate('settings', { focusWatch: true }),
       open: url => { void window.arckeep.openExternal(url) },
-      remove: name => { void removeWatched(name) }
-    })
+    remove: name => { void removeWatched(name) },
+    startClaude: (repo, name) => {
+      void window.arckeep.startClaudeSession(repo, name).then(result => {
+        if (!refreshStatus.ownsPage()) return
+        if (result.ok) navigate('claude', { repo, sessionId: result.data.id })
+        else showClaudeError(result.error)
+      }).catch(error => {
+        if (refreshStatus.ownsPage()) showClaudeError(error instanceof Error ? error.message : 'Claude 启动失败')
+      })
+    },
+    viewClaude: repo => navigate('claude', { repo })
+    }))
   }
   const removeWatched = async (name: string) => {
     const state = await window.arckeep.getState()
@@ -211,18 +296,51 @@ export async function renderOverview(
     if (!result.ok) return
     await reload()
   }
-  const reload = async () => {
-    apply({ ...loading, refreshing: true, rows: [] })
+  const setWindow = async (value: RepoFetchWindow) => {
+    if (!refreshStatus.ownsPage() || current.refreshing) return
+    const previous = current
+    apply({ ...current, refreshing: true })
     try {
-      apply(await window.arckeep.refreshOverview())
+      const result = await window.arckeep.setRepoFetchWindow(value)
+      if (!result.ok) throw new Error(result.error)
+      current = { ...current, rows: [], refreshedAt: null, repoFetchWindow: value }
+      await reload()
     } catch (error) {
+      apply({ ...previous, refreshing: false, sourceErrors: [{ source: '查询范围', message: error instanceof Error ? error.message : '查询范围保存失败' }] })
+    }
+  }
+  const reload = async (force = true) => {
+    if (!refreshStatus.ownsPage()) return
+    const version = ++requestVersion
+    const finish = refreshStatus.start()
+    apply({
+      ...current,
+      refreshing: true,
+      auth: current.auth === 'ok' ? 'ok' : 'unknown',
+      sourceErrors: current.auth === 'missing' || current.auth === 'invalid' ? [] : current.sourceErrors
+    })
+    try {
+      const snapshot = await window.arckeep.refreshOverview(force)
+      if (version === requestVersion) apply(snapshot)
+    } catch (error) {
+      if (version !== requestVersion) return
       apply({
-        ...loading,
+        ...current,
         refreshing: false,
         sourceErrors: [{ source: '刷新', message: error instanceof Error ? error.message : '刷新失败' }]
       })
+    } finally {
+      finish()
     }
   }
+  const finishLoading = refreshStatus.start()
   apply(loading)
-  await reload()
+  try {
+    apply(await window.arckeep.getOverview())
+  } catch {
+    // A missing cache does not prevent a fresh request.
+  } finally {
+    finishLoading()
+  }
+  if (refreshStatus.ownsPage()) await reload(false)
 }

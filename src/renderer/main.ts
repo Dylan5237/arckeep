@@ -6,12 +6,16 @@ import { DEFAULT_HOTKEY } from '../shared/types'
 import { renderOverview } from './overview-page'
 import { renderOverviewSettings } from './overview-settings'
 import { renderTodos } from './todos-page'
+import { deactivateIdeas, renderIdeas } from './ideas-page'
+import { deactivatePrompts, renderPrompts } from './prompts-page'
 import { renderToolSettings } from './tool-settings'
-import { renderTools } from './tools-page'
+import { deactivateTools, renderTools } from './tools-page'
 import { renderWaiting } from './waiting-page'
 import { renderWaitingSettings } from './waiting-settings'
+import { renderRepoFetchWindowSettings } from './repo-fetch-window'
+import { renderClaudeSessions } from './claude-sessions-page'
 
-type ViewId = 'inbox' | 'projects' | 'todos' | 'tools' | 'settings'
+type ViewId = 'inbox' | 'projects' | 'claude' | 'todos' | 'ideas' | 'prompts' | 'tools' | 'settings'
 
 const symbol = document.querySelector<HTMLImageElement>('#brand-symbol')
 if (symbol) symbol.src = brandSymbol
@@ -52,6 +56,9 @@ async function renderSettings(options?: { focusToken?: boolean, focusWatch?: boo
   if (!content) return
   const page = el('section', { class: 'page settings' }, [
     el('h1', {}, ['设置']),
+    el('p', { class: 'hint', 'data-app-version': '' }, [
+      `Arckeep ${typeof __ARCKEEP_VERSION__ === 'string' ? __ARCKEEP_VERSION__ : '开发版'}`
+    ]),
     el('p', { class: 'lede' }, ['GitHub 认证、关注仓库和全局热键保存在本机，重启后仍然在。'])
   ])
   content.replaceChildren(page)
@@ -70,6 +77,7 @@ async function renderSettings(options?: { focusToken?: boolean, focusWatch?: boo
     renderLaunchCard(state),
     renderGithubCard(state),
     renderReposCard(state),
+    renderRepoFetchWindowSettings(state, () => renderSettings()),
     renderWaitingSettings(state, () => renderSettings()),
     renderOverviewSettings(state, () => renderSettings()),
     await renderToolSettings(state, () => renderSettings())
@@ -184,7 +192,7 @@ function renderGithubCard(state: AppState): HTMLElement {
 function renderReposCard(state: AppState): HTMLElement {
   const card = el('section', { class: 'card' }, [
     el('h2', {}, ['关注仓库']),
-    el('p', { class: 'hint' }, ['填写 owner/repo。留空表示自动模式，供项目总览使用。'])
+    el('p', { class: 'hint' }, ['填写 owner/repo。留空表示自动发现仓库；两个 GitHub 页面均使用下方的仓库查询时间范围。'])
   ])
   const list = el('ul', { class: 'repo-list' })
   if (state.watchedRepos.length === 0) {
@@ -335,32 +343,64 @@ async function refreshHotkeyBanner(): Promise<void> {
 }
 
 let leaveTodos: (() => void) | null = null
+let leaveClaudeSessions: (() => void) | null = null
+let navigationEpoch = 0
 
-async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?: boolean }): Promise<void> {
+async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?: boolean, repo?: string, sessionId?: string }): Promise<void> {
+  const epoch = ++navigationEpoch
+  if (view !== 'tools') deactivateTools()
+  deactivateIdeas()
+  deactivatePrompts()
   leaveTodos?.()
   leaveTodos = null
+  leaveClaudeSessions?.()
+  leaveClaudeSessions = null
   setActive(view)
   if (!content) return
+  // Each navigation owns a host so an older asynchronous refresh cannot
+  // replace the current page after the user has moved on.
+  const host = el('div', { class: 'view-host' })
+  if (view !== 'settings') content.replaceChildren(host)
   if (view === 'settings') await renderSettings(options)
   else if (view === 'todos') {
     await refreshHotkeyBanner()
-    leaveTodos = await renderTodos(content)
+    if (epoch !== navigationEpoch) return
+    const leave = await renderTodos(host)
+    if (epoch !== navigationEpoch) leave()
+    else leaveTodos = leave
+  } else if (view === 'ideas') {
+    await refreshHotkeyBanner()
+    if (epoch !== navigationEpoch) return
+    await renderIdeas(host)
+  } else if (view === 'prompts') {
+    void refreshHotkeyBanner()
+    if (epoch !== navigationEpoch) return
+    await renderPrompts(host)
   } else if (view === 'inbox') {
-    await refreshHotkeyBanner()
-    await renderWaiting(content, (next, nextOptions) => { void show(next, nextOptions) })
+    void refreshHotkeyBanner()
+    if (epoch !== navigationEpoch) return
+    await renderWaiting(host, (next, nextOptions) => { void show(next, nextOptions) })
   } else if (view === 'projects') {
-    await refreshHotkeyBanner()
-    await renderOverview(content, (next, nextOptions) => { void show(next, nextOptions) })
+    void refreshHotkeyBanner()
+    if (epoch !== navigationEpoch) return
+    await renderOverview(host, (next, nextOptions) => { void show(next, nextOptions) })
+  } else if (view === 'claude') {
+    void refreshHotkeyBanner()
+    if (epoch !== navigationEpoch) return
+    const leave = await renderClaudeSessions(host, { repo: options?.repo, sessionId: options?.sessionId })
+    if (epoch !== navigationEpoch) leave()
+    else leaveClaudeSessions = leave
   } else if (view === 'tools') {
     await refreshHotkeyBanner()
-    await renderTools(content, () => { void show('settings') })
+    if (epoch !== navigationEpoch) return
+    await renderTools(host, () => { void show('settings') })
   }
 }
 
 for (const button of navButtons) {
   button.addEventListener('click', () => {
     const view = button.dataset.view
-    if (view === 'inbox' || view === 'projects' || view === 'todos' || view === 'tools' || view === 'settings') {
+    if (view === 'inbox' || view === 'projects' || view === 'claude' || view === 'todos' || view === 'ideas' || view === 'prompts' || view === 'tools' || view === 'settings') {
       void show(view)
     }
   })
@@ -379,7 +419,10 @@ const initial = new URLSearchParams(location.search).get('page')
 void show(
   initial === 'settings' ? 'settings'
     : initial === 'projects' ? 'projects'
+      : initial === 'claude' ? 'claude'
       : initial === 'todos' ? 'todos'
-        : initial === 'tools' ? 'tools'
-          : 'inbox'
+        : initial === 'ideas' ? 'ideas'
+          : initial === 'prompts' ? 'prompts'
+            : initial === 'tools' ? 'tools'
+              : 'inbox'
 )

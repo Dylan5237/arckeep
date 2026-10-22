@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { type HotkeyRegistrar } from '../src/main/hotkey.js'
 import { settingsFilePath, todosFilePath, userDataDir } from '../src/main/paths.js'
 import { SettingsService } from '../src/main/settings-service.js'
-import { loadSettings } from '../src/main/settings-store.js'
+import { loadSettings, parseSettings } from '../src/main/settings-store.js'
 import { toolShelfExampleText } from '../src/main/tool-assets.js'
 import type { SecretBox } from '../src/main/token-store.js'
 import { DEFAULT_HOTKEY } from '../src/shared/types.js'
@@ -44,6 +44,22 @@ class FakeShortcuts implements HotkeyRegistrar {
 
 function tempFile(): string {
   return settingsFilePath(mkdtempSync(path.join(tmpdir(), 'arckeep-settings-')))
+}
+
+const legacyDefaultApoAction = {
+  id: 'apo-init',
+  title: 'apo 项目初始化',
+  description: '初始化一个 apo 项目。',
+  confirmLabel: '在 {{cwd}} 初始化 {{name}}',
+  type: 'run-command',
+  shell: 'powershell',
+  cwd: '{{cwd}}',
+  previewCommand: 'apo init --dry-run --name {{name}}',
+  command: 'apo init --name {{name}}',
+  params: [
+    { key: 'cwd', label: '工作目录', required: true, input: 'directory', default: 'C:\\work\\demo' },
+    { key: 'name', label: '项目名', required: true, default: 'demo' }
+  ]
 }
 
 describe('settings persistence', () => {
@@ -278,6 +294,60 @@ describe('settings persistence', () => {
     const result = await service.testConnection()
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toMatch(/HTTP 401/)
+  })
+})
+
+describe('saved tool shelf migration', () => {
+  it('upgrades only the exact default APO action and preserves customized actions and settings', () => {
+    const customizedApoAction = { ...legacyDefaultApoAction, description: '保留我自定义的 APO 动作' }
+    const unrelatedAction = {
+      id: 'custom-command',
+      title: '保留的命令',
+      description: '保留另一个用户命令。',
+      confirmLabel: '运行命令',
+      type: 'run-command',
+      shell: 'powershell',
+      cwd: '{{cwd}}',
+      previewCommand: 'Write-Output preview',
+      command: 'Write-Output retained',
+      params: []
+    }
+    const savedShelf = {
+      version: 1,
+      actions: [legacyDefaultApoAction, customizedApoAction, unrelatedAction],
+      userOption: { keep: true }
+    }
+    const defaultShelf = JSON.parse(toolShelfExampleText()) as { actions: unknown[] }
+    const replacement = defaultShelf.actions.find(action =>
+      typeof action === 'object' && action !== null && 'id' in action && 'type' in action
+      && action.id === 'apo-init' && action.type === 'template')
+    const state = parseSettings({
+      version: 2,
+      watchedRepos: ['Dylan5237/arckeep'],
+      hotkey: 'Ctrl+Alt+K',
+      toolShelfJson: JSON.stringify(savedShelf, null, 4) + '\n'
+    })
+    const migratedShelf = JSON.parse(state.toolShelfJson) as typeof savedShelf
+
+    expect(migratedShelf).toEqual({
+      ...savedShelf,
+      actions: [replacement, customizedApoAction, unrelatedAction]
+    })
+    expect(state.watchedRepos).toEqual(['Dylan5237/arckeep'])
+    expect(state.hotkey).toBe('Ctrl+Alt+K')
+  })
+
+  it('keeps a custom APO action and unrelated commands byte-for-byte when no legacy default matches', () => {
+    const customApoAction = { ...legacyDefaultApoAction, command: 'apo init --name {{name}} --custom' }
+    const unrelatedAction = { id: 'other', type: 'run-command', command: 'echo keep' }
+    const toolShelfJson = `${JSON.stringify({ version: 1, actions: [customApoAction, unrelatedAction] }, null, 4)}\n`
+
+    expect(parseSettings({ toolShelfJson }).toolShelfJson).toBe(toolShelfJson)
+  })
+
+  it('keeps malformed tool shelf JSON unchanged', () => {
+    const toolShelfJson = '{\n  "version": 1,\n  "actions": [\n'
+    expect(parseSettings({ toolShelfJson }).toolShelfJson).toBe(toolShelfJson)
   })
 })
 

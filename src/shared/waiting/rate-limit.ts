@@ -34,9 +34,16 @@ export function rateLimitFromResponse(
   const limited = status === 429 || (status === 403 && (remaining === '0' || bodyLimited))
   if (!limited) return null
   const fromHeader = rateLimitResetIso(headers.get('x-ratelimit-reset'), now)
-  if (fromHeader) return fromHeader
   const retrySeconds = Number(retryAfter)
-  if (Number.isFinite(retrySeconds) && retrySeconds > 0) return new Date(now + retrySeconds * 1000).toISOString()
+  const retryAt = Number.isFinite(retrySeconds) && retrySeconds > 0
+    ? new Date(now + retrySeconds * 1000).toISOString()
+    : null
+  // The hourly reset belongs to the primary quota, not a secondary cooldown.
+  if (remaining === '0' && fromHeader) return fromHeader
+  if (retryAt) return retryAt
+  const secondary = /secondary rate limit|abuse detection/i.test(bodyText)
+    || (bodyLimited && remaining !== null && remaining !== '0')
+  if (!secondary && fromHeader) return fromHeader
   return new Date(now + 60_000).toISOString()
 }
 

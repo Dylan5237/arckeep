@@ -1,3 +1,5 @@
+import type { ApoQuickAction } from './apo-actions.js'
+
 export const WAITING_REASONS = {
   assignee: '指派',
   review: '请求 review',
@@ -104,6 +106,8 @@ export interface GithubRecord {
   isDraft: boolean
   labels: string[]
   comments: { body: string, createdAt: string, authorLogin?: string }[]
+  /** Whether earlier decisions may be absent from the loaded comment window. */
+  commentsTruncated?: boolean
   repoDescription: string
   repoTopics: string[]
   reviewRequestedBy: string | null
@@ -206,6 +210,7 @@ export interface WaitingDraft {
   tier: WaitingTier
   /** Repository description or topics match a parked marker. */
   parked: boolean
+  quickActions?: ApoQuickAction[]
 }
 
 export interface WaitingJsonRow {
@@ -235,6 +240,8 @@ export interface WaitingRow {
   waitingDays: number
   daysEstimated: boolean
   updatedAt: string
+  waitingSince?: string | null
+  quickActions?: ApoQuickAction[]
   ignored: boolean
   parentNumber: number | null
   parent: string | number | null
@@ -251,9 +258,11 @@ export interface SourceError {
   message: string
 }
 
-export type WaitingAuth = 'ok' | 'missing' | 'invalid'
+/** Unknown until this run has resolved authentication; it is not a missing credential. */
+export type WaitingAuth = 'unknown' | 'ok' | 'missing' | 'invalid'
 
 export interface WaitingSnapshot {
+  repoFetchWindow?: import('../repo-fetch-window.js').RepoFetchWindow
   rows: WaitingRow[]
   refreshedAt: string | null
   refreshing: boolean

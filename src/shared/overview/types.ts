@@ -1,3 +1,6 @@
+import type { CommandCenterRead } from './command-center-types.js'
+import type { RepoFetchWindow } from '../repo-fetch-window.js'
+
 export const OVERVIEW_WARNING_KINDS = ['卡住', '停滞', '空仓', '陈旧'] as const
 
 export type OverviewWarningKind = (typeof OVERVIEW_WARNING_KINDS)[number]
@@ -69,6 +72,7 @@ export interface OverviewPullRequest {
 
 /** Facts collected from GitHub before warning rules run. */
 export interface OverviewRepoFacts {
+  commandCenter?: CommandCenterRead
   name: string
   url: string
   isEmpty: boolean
@@ -96,9 +100,13 @@ export interface OverviewRepoFacts {
 }
 
 export interface OverviewRow {
+  /** Missing only in pre-board caches and legacy CLI fixtures. */
+  commandCenter?: CommandCenterRead
   name: string
   url: string
   lastCommitAt: string | null
+  /** Newest commit, issue/PR activity, push, or creation; sorting clock. */
+  lastActivityAt?: string | null
   openPrCount: number
   ciState: CiState
   warnings: OverviewWarning[]
@@ -112,7 +120,8 @@ export interface OverviewRow {
   fromWatchList?: boolean
 }
 
-export type OverviewAuth = 'ok' | 'missing' | 'invalid'
+/** Unknown until this run has resolved authentication; it is not a missing credential. */
+export type OverviewAuth = 'unknown' | 'ok' | 'missing' | 'invalid'
 
 export interface OverviewSourceError {
   source: string
@@ -120,6 +129,7 @@ export interface OverviewSourceError {
 }
 
 export interface OverviewSnapshot {
+  repoFetchWindow?: RepoFetchWindow
   rows: OverviewRow[]
   refreshedAt: string | null
   refreshing: boolean

@@ -377,6 +377,7 @@ describe('repo activity scope', () => {
       updatedAt: '2026-08-01T00:00:00.000Z',
       labels: { nodes: [] },
       comments: { nodes: [] },
+      subIssues: { nodes: [] },
       timelineItems: { nodes: [] }
     }
   }
@@ -414,6 +415,8 @@ describe('repo activity scope', () => {
         return new Response(JSON.stringify({
           data: {
             viewer: {
+              login: 'ada',
+              watching: { pageInfo: { hasNextPage: false }, nodes: [] },
               repositories: {
                 pageInfo: { hasNextPage: true, endCursor: 'NEXT' },
                 nodes: [
@@ -560,6 +563,8 @@ describe('repo activity scope', () => {
         return new Response(JSON.stringify({
           data: {
             viewer: {
+              login: 'ada',
+              watching: { pageInfo: { hasNextPage: false }, nodes: [] },
               repositories: {
                 pageInfo: { hasNextPage: true, endCursor: 'NEXT' },
                 nodes: [
@@ -654,6 +659,7 @@ describe('rate limit', () => {
                 repository: { nameWithOwner: 'example/demo', isEmpty: false, pushedAt: '2026-09-27T00:00:00.000Z' },
                 labels: { nodes: [] },
                 comments: { nodes: [] },
+                subIssues: { nodes: [] },
                 timelineItems: { nodes: [{ __typename: 'AssignedEvent', createdAt: '2026-09-10T00:00:00.000Z', assignee: { login: 'ada' } }] }
               }]
             }
@@ -778,6 +784,7 @@ describe('snooze and ignore', () => {
               repository: { nameWithOwner: 'example/demo', isEmpty: false, pushedAt: '2026-09-27T00:00:00.000Z' },
               labels: { nodes: [] },
               comments: { nodes: [] },
+              subIssues: { nodes: [] },
               timelineItems: { nodes: [{ __typename: 'AssignedEvent', createdAt: '2026-09-01T00:00:00.000Z', assignee: { login: 'ada' } }] }
             }]
           }

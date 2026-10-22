@@ -3,8 +3,13 @@ import { classifyOverview, hasOverviewPushAccess, inAutoScope, mapCiState, selec
 import type { OverviewConfig, OverviewPullRequest, OverviewRepoFacts, OverviewRow, OverviewSourceError } from '../shared/overview/types.js'
 import { laterIso } from '../shared/waiting/days.js'
 import { GithubAuthError, GithubRateLimitError, earlierReset } from '../shared/waiting/rate-limit.js'
+import { MAX_GITHUB_REQUESTS, createGithubRequestScheduler, mapConcurrentOrdered, type GithubRequestScheduler } from '../github/concurrency.js'
+import { isCancellation, throwIfCancelled } from '../shared/task-scope.js'
+import { COMMAND_CENTER_LABEL_LIMIT, COMMAND_CENTER_TITLE_LIMIT, readCommandCenter } from '../shared/overview/command-center.js'
+import { recentRepoPage, repoPushedInWindow, repoPushCutoff, type RepoFetchWindow } from '../shared/repo-fetch-window.js'
+import { repositoryScopeData, repositoryScopePage } from '../github/repository-scope.js'
 
-const BATCH = 8
+const BATCH = 3
 const REPO_PAGE_SIZE = 40
 
 export interface OverviewLoadResult {
@@ -18,8 +23,6 @@ export interface OverviewLoadResult {
 
 interface ListedRepo {
   name: string
-  isEmpty: boolean
-  pushedAt: string | null
   archived: boolean
   permission: string | null
 }
@@ -34,16 +37,6 @@ function repoUrl(name: string): string {
   return `https://github.com/${name}`
 }
 
-function connectionPage(value: unknown): { nodes: unknown[], cursor: string | null } {
-  if (!value || typeof value !== 'object') return { nodes: [], cursor: null }
-  const connection = value as { nodes?: unknown, pageInfo?: { hasNextPage?: boolean, endCursor?: string } }
-  const nodes = Array.isArray(connection.nodes) ? connection.nodes : []
-  const cursor = connection.pageInfo?.hasNextPage && connection.pageInfo.endCursor
-    ? connection.pageInfo.endCursor
-    : null
-  return { nodes, cursor }
-}
-
 function readListed(node: unknown): ListedRepo | null {
   if (!node || typeof node !== 'object') return null
   const name = 'nameWithOwner' in node && typeof node.nameWithOwner === 'string' ? node.nameWithOwner : ''
@@ -54,8 +47,6 @@ function readListed(node: unknown): ListedRepo | null {
   if (!hasOverviewPushAccess(permission)) return null
   return {
     name,
-    isEmpty: 'isEmpty' in node && node.isEmpty === true,
-    pushedAt: 'pushedAt' in node && typeof node.pushedAt === 'string' ? node.pushedAt : null,
     archived: 'isArchived' in node && node.isArchived === true,
     permission
   }
@@ -64,7 +55,9 @@ function readListed(node: unknown): ListedRepo | null {
 async function discoverRepos(
   token: string,
   fetchImpl: typeof fetch,
-  limit: number
+  limit: number,
+  scheduler: GithubRequestScheduler,
+  cutoff: number | null
 ): Promise<{ repos: ListedRepo[], truncated: boolean }> {
   const repos: ListedRepo[] = []
   let cursor: string | null = null
@@ -76,17 +69,18 @@ async function discoverRepos(
         viewer {
           repositories(first: ${REPO_PAGE_SIZE}, after: $cursor, ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER], orderBy: {field: PUSHED_AT, direction: DESC}) {
             pageInfo { hasNextPage endCursor }
-            nodes { nameWithOwner isEmpty pushedAt isArchived viewerPermission }
+            nodes { nameWithOwner isArchived viewerPermission pushedAt }
           }
         }
       }
-    `, { cursor }, fetchImpl)
-    const viewer = githubData(payload).viewer
+    `, { cursor }, fetchImpl, scheduler)
+    const viewer = repositoryScopeData(payload).viewer
     const listed = viewer && typeof viewer === 'object' && 'repositories' in viewer
       ? (viewer as { repositories?: unknown }).repositories
       : null
-    const batch = connectionPage(listed)
-    for (const node of batch.nodes) {
+    const batch = repositoryScopePage(listed)
+    const recent = recentRepoPage(batch.nodes, cutoff)
+    for (const node of recent.nodes) {
       const repo = readListed(node)
       if (!repo) continue
       if (repos.length >= limit) {
@@ -95,8 +89,8 @@ async function discoverRepos(
       }
       repos.push(repo)
     }
-    if (repos.length >= limit && batch.cursor) truncated = true
-    if (truncated || !batch.cursor) break
+    if (repos.length >= limit && batch.cursor && !recent.reachedCutoff) truncated = true
+    if (truncated || recent.reachedCutoff || !batch.cursor) break
     if (page === pageCap - 1) {
       truncated = true
       break
@@ -104,6 +98,46 @@ async function discoverRepos(
     cursor = batch.cursor
   }
   return { repos, truncated }
+}
+
+/** Explicit lists need only push metadata before the expensive CI/PR/CC query. */
+async function recentExplicitRepos(
+  token: string, fetchImpl: typeof fetch, names: readonly string[],
+  scheduler: GithubRequestScheduler, cutoff: number, checkedAt: string
+): Promise<{ names: string[], errors: OverviewRepoFacts[] }> {
+  const slices: string[][] = []
+  for (let offset = 0; offset < names.length; offset += 20) slices.push(names.slice(offset, offset + 20))
+  const results = await mapConcurrentOrdered(slices, 2, async slice => {
+    const variables: Record<string, string> = {}
+    const fields = slice.map((full, index) => {
+      const parts = splitRepo(full)
+      variables[`o${index}`] = parts?.owner ?? ''
+      variables[`n${index}`] = parts?.name ?? ''
+      return `r${index}: repository(owner: $o${index}, name: $n${index}) { nameWithOwner pushedAt }`
+    })
+    const definitions = slice.flatMap((_, index) => [`$o${index}: String!`, `$n${index}: String!`])
+    const payload = await githubGraphql(token, `query(${definitions.join(', ')}) { ${fields.join('\n')} }`, variables, fetchImpl, scheduler)
+    const data = githubData(payload)
+    const apiErrors = githubErrorMessages(payload)
+    const selected: string[] = []
+    const errors: OverviewRepoFacts[] = []
+    for (const [index, full] of slice.entries()) {
+      const alias = `r${index}`
+      const node = data[alias]
+      const failure = apiErrors.filter(error => !error.path || error.path === alias).map(error => error.message).join('；')
+      if (failure || !node || typeof node !== 'object') {
+        errors.push(errorFacts(full, rowErrorMessage(failure || (Object.hasOwn(data, alias) ? '' : 'GitHub 返回的仓库数据不完整')), checkedAt))
+      } else if (repoPushedInWindow(node, cutoff)) {
+        const canonical = 'nameWithOwner' in node && typeof node.nameWithOwner === 'string' ? node.nameWithOwner : full
+        selected.push(splitRepo(canonical) ? canonical : full)
+      }
+    }
+    return { names: selected, errors }
+  })
+  return {
+    names: [...new Set(results.flatMap(result => result?.names ?? []))],
+    errors: results.flatMap(result => result?.errors ?? [])
+  }
 }
 
 const REPO_FIELDS = `
@@ -114,6 +148,11 @@ const REPO_FIELDS = `
   diskUsage
   createdAt
   pushedAt
+  commandCenters: issues(states: OPEN, labels: ["type:command-center"], first: ${COMMAND_CENTER_LABEL_LIMIT}, orderBy: {field: UPDATED_AT, direction: DESC}) {
+    totalCount
+    pageInfo { hasNextPage }
+    nodes { number title url body updatedAt state }
+  }
   defaultBranchRef {
     target {
       oid
@@ -160,23 +199,58 @@ const REPO_FIELDS = `
   }
 `
 
+const CENTER_SEARCH_FIELDS = `
+  issueCount
+  pageInfo { hasNextPage }
+  nodes { ... on Issue { number title url body updatedAt state repository { nameWithOwner } } }
+`
+
 function detailQuery(count: number): string {
-  const vars: string[] = []
+  const vars: string[] = ['$ccEnglishSearch: String!', '$ccChineseSearch: String!']
   const fields: string[] = []
   for (let index = 0; index < count; index += 1) {
     vars.push(`$o${index}: String!`, `$n${index}: String!`)
     fields.push(`r${index}: repository(owner: $o${index}, name: $n${index}) { ${REPO_FIELDS} }`)
   }
+  fields.push(`ccEnglish: search(query: $ccEnglishSearch, type: ISSUE, first: ${COMMAND_CENTER_TITLE_LIMIT * count}) { ${CENTER_SEARCH_FIELDS} }`)
+  fields.push(`ccChinese: search(query: $ccChineseSearch, type: ISSUE, first: ${COMMAND_CENTER_TITLE_LIMIT * count}) { ${CENTER_SEARCH_FIELDS} }`)
   return `query(${vars.join(', ')}) { ${fields.join('\n')} }`
+}
+
+/** A batch-wide title search saves repeated index work; repository identity still bounds every card. */
+function repositorySearch(connection: unknown, repo: string, knownNames: Set<string>, requestedRepo: string): unknown {
+  if (!connection || typeof connection !== 'object') return undefined
+  const record = connection as { nodes?: unknown, issueCount?: unknown, pageInfo?: { hasNextPage?: unknown } }
+  if (!Array.isArray(record.nodes) || typeof record.issueCount !== 'number' || !Number.isSafeInteger(record.issueCount) || record.issueCount < 0 || typeof record.pageInfo?.hasNextPage !== 'boolean') return undefined
+  const nodes: unknown[] = []
+  for (const item of record.nodes) {
+    if (!item || typeof item !== 'object') return undefined
+    const value = item as { repository?: { nameWithOwner?: unknown }, number?: unknown, title?: unknown, body?: unknown, updatedAt?: unknown, url?: unknown, state?: unknown }
+    const name = value.repository?.nameWithOwner
+    if (typeof name !== 'string' || !knownNames.has(name.toLowerCase()) || !Number.isSafeInteger(value.number) || Number(value.number) < 1
+      || typeof value.title !== 'string' || typeof value.body !== 'string' || typeof value.updatedAt !== 'string' || !Number.isFinite(Date.parse(value.updatedAt))
+      || value.state !== 'OPEN' || typeof value.url !== 'string' || value.url.toLowerCase() !== `https://github.com/${name}/issues/${value.number}`.toLowerCase()) return undefined
+    // A repository rename must resolve consistently in both observations. An old-name
+    // search node is not evidence that the canonical new-name repository has no CC.
+    if (requestedRepo.toLowerCase() !== repo.toLowerCase() && name.toLowerCase() === requestedRepo.toLowerCase()) return undefined
+    if (name.toLowerCase() === repo.toLowerCase()) nodes.push(item)
+  }
+  const truncated = record.pageInfo.hasNextPage || record.issueCount > record.nodes.length
+  if (record.issueCount < record.nodes.length) return undefined
+  return { nodes, issueCount: nodes.length + (truncated ? 1 : 0), pageInfo: { hasNextPage: truncated } }
 }
 
 function rowErrorMessage(message: string): string {
   if (/disabled|blocked|locked/i.test(message)) return '仓库已停用或无权访问'
-  return '仓库不存在或无权访问'
+  if (!message || /could not resolve to a repository|not found|does not exist|forbidden|access denied|not accessible|permission/i.test(message)) {
+    return '仓库不存在或无权访问'
+  }
+  return `仓库查询失败：${message}`
 }
 
-function errorFacts(name: string, message: string): OverviewRepoFacts {
+function errorFacts(name: string, message: string, checkedAt = new Date().toISOString()): OverviewRepoFacts {
   return {
+    commandCenter: { kind: 'unavailable', message, checkedAt },
     name,
     url: repoUrl(name),
     isEmpty: false,
@@ -350,7 +424,9 @@ export function parseRepositoryNode(node: unknown, requestedName: string): Overv
 async function queryBatch(
   token: string,
   fetchImpl: typeof fetch,
-  names: readonly string[]
+  names: readonly string[],
+  scheduler: GithubRequestScheduler,
+  checkedAt: string
 ): Promise<OverviewRepoFacts[]> {
   const variables: Record<string, string> = {}
   names.forEach((full, index) => {
@@ -358,52 +434,99 @@ async function queryBatch(
     variables[`o${index}`] = parts?.owner ?? ''
     variables[`n${index}`] = parts?.name ?? ''
   })
-  const payload = await githubGraphql(token, detailQuery(names.length), variables, fetchImpl)
+  const repoTerms = names.map(full => `repo:${full}`).join(' ')
+  variables.ccEnglishSearch = `${repoTerms} is:issue is:open in:title "Command Center"`
+  variables.ccChineseSearch = `${repoTerms} is:issue is:open in:title "项目总控台"`
+  const payload = await githubGraphql(token, detailQuery(names.length), variables, fetchImpl, scheduler)
   const data = githubData(payload)
   const errors = githubErrorMessages(payload)
+  const aliases = new Set([...names.map((_, index) => `r${index}`), 'ccEnglish', 'ccChinese'])
+  const knownNames = new Set(names.map(name => name.toLowerCase()))
+  for (const name of names.map((_, index) => data[`r${index}`])) {
+    if (name && typeof name === 'object' && 'nameWithOwner' in name && typeof name.nameWithOwner === 'string') knownNames.add(name.nameWithOwner.toLowerCase())
+  }
+  const globalMessage = errors
+    .filter(error => !aliases.has(error.path))
+    .map(error => error.message)
+    .join('；')
   return names.map((name, index) => {
-    const node = data[`r${index}`]
-    if (node && typeof node === 'object') return parseRepositoryNode(node, name)
-    const message = errors.find(error => error.path === `r${index}`)?.message ?? ''
-    return errorFacts(name, rowErrorMessage(message))
+    const alias = `r${index}`
+    const node = data[alias]
+    const message = errors
+      .filter(error => !aliases.has(error.path) || error.path === alias)
+      .map(error => error.message)
+      .join('；')
+    if (node && typeof node === 'object') {
+      const facts = parseRepositoryNode(node, name)
+      const rawErrors = payload && typeof payload === 'object' && 'errors' in payload && Array.isArray(payload.errors) ? payload.errors : []
+      const centerErrors = rawErrors.filter(error => {
+        if (!error || typeof error !== 'object' || !('path' in error) || !Array.isArray(error.path)) return false
+        return error.path[0] === 'ccEnglish' || error.path[0] === 'ccChinese'
+          || (error.path[0] === alias && error.path[1] === 'commandCenters')
+      }).map(error => error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : '总控台查询失败')
+      const commandCenter = readCommandCenter({
+        repo: facts.name, labeled: 'commandCenters' in node ? node.commandCenters : undefined,
+        english: repositorySearch(data.ccEnglish, facts.name, knownNames, name), chinese: repositorySearch(data.ccChinese, facts.name, knownNames, name), checkedAt,
+        error: [...centerErrors, globalMessage].filter(Boolean).join('；') || undefined
+      })
+      // Optional fields can fail (for example, Issues disabled) while the repo
+      // and its CI/PR data remain usable. Preserve that existing partial-node behavior.
+      return { ...facts, commandCenter, ...(globalMessage ? { error: rowErrorMessage(globalMessage) } : {}) }
+    }
+    const missing = Object.hasOwn(data, alias) ? '' : 'GitHub 返回的仓库数据不完整'
+    return errorFacts(name, rowErrorMessage(message || missing), checkedAt)
   })
 }
 
 async function loadDetails(
   token: string,
   fetchImpl: typeof fetch,
-  names: readonly string[]
+  names: readonly string[],
+  scheduler: GithubRequestScheduler,
+  checkedAt: string
 ): Promise<{ facts: OverviewRepoFacts[], rateLimitResetAt: string | null, authInvalid: boolean, aborted: boolean }> {
-  const facts: OverviewRepoFacts[] = []
-  for (let offset = 0; offset < names.length; offset += BATCH) {
-    const slice = names.slice(offset, offset + BATCH)
-    try {
-      facts.push(...await queryBatch(token, fetchImpl, slice))
-    } catch (error) {
-      if (error instanceof GithubAuthError) return { facts, rateLimitResetAt: null, authInvalid: true, aborted: true }
-      if (error instanceof GithubRateLimitError) {
-        return { facts, rateLimitResetAt: error.resetAt, authInvalid: false, aborted: true }
-      }
-      if (slice.length === 1) {
-        const message = error instanceof Error ? error.message : '仓库查询失败'
-        facts.push(errorFacts(slice[0] ?? '', rowErrorMessage(message)))
-        continue
-      }
-      for (const name of slice) {
-        try {
-          facts.push(...await queryBatch(token, fetchImpl, [name]))
-        } catch (single) {
-          if (single instanceof GithubAuthError) return { facts, rateLimitResetAt: null, authInvalid: true, aborted: true }
-          if (single instanceof GithubRateLimitError) {
-            return { facts, rateLimitResetAt: single.resetAt, authInvalid: false, aborted: true }
-          }
-          const message = single instanceof Error ? single.message : '仓库查询失败'
-          facts.push(errorFacts(name, rowErrorMessage(message)))
-        }
-      }
-    }
+  interface SliceResult {
+    facts: OverviewRepoFacts[]
+    rateLimitResetAt: string | null
+    authInvalid: boolean
+    aborted: boolean
   }
-  return { facts, rateLimitResetAt: null, authInvalid: false, aborted: false }
+
+  const slices: string[][] = []
+  for (let offset = 0; offset < names.length; offset += BATCH) slices.push(names.slice(offset, offset + BATCH))
+  const loaded = await mapConcurrentOrdered(
+    slices,
+    MAX_GITHUB_REQUESTS,
+    async (slice): Promise<SliceResult> => {
+      const facts: OverviewRepoFacts[] = []
+      try {
+        facts.push(...await queryBatch(token, fetchImpl, slice, scheduler, checkedAt))
+        return { facts, rateLimitResetAt: null, authInvalid: false, aborted: false }
+      } catch (error) {
+        if (isCancellation(error)) throw error
+        if (error instanceof GithubAuthError) return { facts, rateLimitResetAt: null, authInvalid: true, aborted: true }
+        if (error instanceof GithubRateLimitError) return { facts, rateLimitResetAt: error.resetAt, authInvalid: false, aborted: true }
+        // Transport/query failures do not identify an individual repository.
+        // Retrying every repo would multiply requests during an outage.
+        const message = error instanceof Error ? error.message : '仓库查询失败'
+        facts.push(...slice.map(name => errorFacts(name, rowErrorMessage(message), checkedAt)))
+        return { facts, rateLimitResetAt: null, authInvalid: false, aborted: false }
+      }
+    },
+    result => result.aborted
+  )
+  const facts: OverviewRepoFacts[] = []
+  let rateLimitResetAt: string | null = null
+  let authInvalid = false
+  let aborted = false
+  for (const result of loaded) {
+    if (!result) continue
+    facts.push(...result.facts)
+    rateLimitResetAt = earlierReset(rateLimitResetAt, result.rateLimitResetAt)
+    authInvalid ||= result.authInvalid
+    aborted ||= result.aborted
+  }
+  return { facts, rateLimitResetAt, authInvalid, aborted }
 }
 
 export async function loadOverview(options: {
@@ -411,26 +534,38 @@ export async function loadOverview(options: {
   config: OverviewConfig
   watchedRepos: readonly string[]
   now: Date
+  /** Application/CLI callers pass the shared setting; omitted preserves the loader's full-range API. */
+  repoFetchWindow?: RepoFetchWindow
   fetchImpl?: typeof fetch
+  signal?: AbortSignal
   /** Defaults to the settings toggle. The CLI passes this explicitly. */
   includeArchived?: boolean
 }): Promise<OverviewLoadResult> {
   const fetchImpl = options.fetchImpl ?? fetch
+  const scheduler = createGithubRequestScheduler({ signal: options.signal })
+  try {
   const includeArchived = options.includeArchived ?? options.config.showArchived
   const notices: string[] = []
   const errors: OverviewSourceError[] = []
   let rateLimitResetAt: string | null = null
   const limit = options.config.maxScopeRepos
+  const cutoff = repoPushCutoff(options.repoFetchWindow ?? 'all', options.now)
   let names: string[] = []
+  let metadataErrors: OverviewRepoFacts[] = []
 
   try {
     if (options.watchedRepos.length > 0) {
-      if (options.watchedRepos.length > limit) {
+      const recent = cutoff === null ? { names: [...options.watchedRepos], errors: [] } : await recentExplicitRepos(
+        options.token, fetchImpl, options.watchedRepos, scheduler, cutoff, options.now.toISOString()
+      )
+      metadataErrors = recent.errors
+      if (recent.names.length > limit) {
         notices.push(`仓库数量达到上限 ${limit}，其余仓库没有继续查询。到设置里调高「仓库数量上限」。`)
       }
-      names = options.watchedRepos.slice(0, limit)
+      names = recent.names.slice(0, limit)
     } else {
-      const owned = await discoverRepos(options.token, fetchImpl, limit)
+      const owned = await discoverRepos(options.token, fetchImpl, limit, scheduler, cutoff)
+      throwIfCancelled(options.signal)
       if (owned.truncated) {
         notices.push(`仓库数量达到上限 ${limit}，其余仓库没有继续查询。到设置里调高「仓库数量上限」。`)
       }
@@ -444,6 +579,7 @@ export async function loadOverview(options: {
       }
     }
   } catch (error) {
+    if (isCancellation(error)) throw error
     if (error instanceof GithubAuthError) {
       return { rows: [], fresh: false, rateLimitResetAt: null, auth: 'invalid', errors: [{ source: 'GitHub', message: error.message }], notices }
     }
@@ -467,7 +603,8 @@ export async function loadOverview(options: {
     }
   }
 
-  const loaded = await loadDetails(options.token, fetchImpl, names)
+  const loaded = await loadDetails(options.token, fetchImpl, names, scheduler, options.now.toISOString())
+  throwIfCancelled(options.signal)
   rateLimitResetAt = earlierReset(rateLimitResetAt, loaded.rateLimitResetAt)
   if (loaded.authInvalid) {
     return {
@@ -484,7 +621,7 @@ export async function loadOverview(options: {
   }
   const fromWatchList = options.watchedRepos.length > 0
   const rows = selectOverviewRows(
-    classifyOverview(loaded.facts, options.config, options.now),
+    classifyOverview([...loaded.facts, ...metadataErrors], options.config, options.now),
     includeArchived
   ).map(row => ({ ...row, fromWatchList }))
   return {
@@ -494,5 +631,8 @@ export async function loadOverview(options: {
     auth: 'ok',
     errors,
     notices
+  }
+  } finally {
+    scheduler.dispose()
   }
 }

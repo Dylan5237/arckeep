@@ -1,6 +1,7 @@
 import { assembleWaiting, mergeRecords } from '../shared/waiting/assemble.js'
 import { GithubAuthError, GithubRateLimitError, earlierReset } from '../shared/waiting/rate-limit.js'
 import { pendingTodoProvider } from '../shared/waiting/todo-source.js'
+import { abortable, isCancellation, throwIfCancelled, type TaskScope } from '../shared/task-scope.js'
 import type {
   GithubRecord,
   LocalBranchHit,
@@ -14,6 +15,7 @@ import type {
 import { loadGithubRecords, type GithubSourceBundle } from './github-load.js'
 import { loadUnpushedBranches, type GitRunner } from './local-git.js'
 import { loadStatusDocs } from './status-docs.js'
+import type { RepoFetchWindow } from '../shared/repo-fetch-window.js'
 
 export interface WaitingMemory {
   assignee: GithubRecord[]
@@ -58,12 +60,16 @@ export async function collectWaiting(options: {
   token: string | null
   config: WaitingConfig
   watchedRepos: readonly string[]
+  repoFetchWindow?: RepoFetchWindow
   now: Date
   memory?: WaitingMemory
   fetchImpl?: typeof fetch
   git?: GitRunner
   todos?: TodoWaitingProvider
+  signal?: AbortSignal
+  tasks?: TaskScope
 }): Promise<CollectResult> {
+  throwIfCancelled(options.signal)
   const memory = options.memory ?? emptyWaitingMemory()
   const next: WaitingMemory = { ...memory }
   const errors: SourceError[] = []
@@ -75,12 +81,16 @@ export async function collectWaiting(options: {
 
   if (options.token) {
     try {
-      const github = await loadGithubRecords({
+      const github = await abortable(loadGithubRecords({
         token: options.token,
         config: options.config,
         watchedRepos: options.watchedRepos,
-        fetchImpl: options.fetchImpl
-      })
+        repoFetchWindow: options.repoFetchWindow,
+        now: options.now,
+        fetchImpl: options.fetchImpl,
+        signal: options.signal
+      }), options.signal)
+      throwIfCancelled(options.signal)
       auth = github.auth
       rateLimitResetAt = github.rateLimitResetAt
       errors.push(...github.errors)
@@ -93,21 +103,26 @@ export async function collectWaiting(options: {
         }
       }
     } catch (error) {
+      if (isCancellation(error)) throw error
       if (error instanceof GithubAuthError) auth = 'invalid'
       if (error instanceof GithubRateLimitError) rateLimitResetAt = earlierReset(rateLimitResetAt, error.resetAt)
       errors.push({ source: 'GitHub', message: error instanceof Error ? error.message : 'GitHub 查询失败' })
     }
 
+    throwIfCancelled(options.signal)
     if (auth !== 'invalid' && options.config.sources.statusDocs) {
       try {
-        const docs = await loadStatusDocs({
+        const docs = await abortable(loadStatusDocs({
           token: options.token,
           rules: options.config.statusDocRules,
-          fetchImpl: options.fetchImpl
-        })
+          fetchImpl: options.fetchImpl,
+          signal: options.signal
+        }), options.signal)
+        throwIfCancelled(options.signal)
         next.statusDocs = docs.hits
         errors.push(...docs.errors)
       } catch (error) {
+        if (isCancellation(error)) throw error
         if (error instanceof GithubAuthError) auth = 'invalid'
         if (error instanceof GithubRateLimitError) rateLimitResetAt = earlierReset(rateLimitResetAt, error.resetAt)
         errors.push({
@@ -120,10 +135,16 @@ export async function collectWaiting(options: {
 
   if (options.config.sources.localBranches) {
     try {
-      const local = await loadUnpushedBranches(options.config.localRepoDirs, options.git)
+      throwIfCancelled(options.signal)
+      const local = await abortable(loadUnpushedBranches(options.config.localRepoDirs, options.git, {
+        signal: options.signal,
+        tasks: options.tasks
+      }), options.signal)
+      throwIfCancelled(options.signal)
       next.branches = local.hits
       errors.push(...local.errors)
     } catch (error) {
+      if (isCancellation(error)) throw error
       errors.push({ source: '本地没推送', message: error instanceof Error ? error.message : '本地仓库读取失败' })
     }
   } else {
@@ -132,14 +153,18 @@ export async function collectWaiting(options: {
 
   if (options.config.sources.todos && todos.available) {
     try {
-      next.todos = await todos.listWaitingOnMe()
+      throwIfCancelled(options.signal)
+      next.todos = await abortable(Promise.resolve().then(() => todos.listWaitingOnMe()), options.signal)
+      throwIfCancelled(options.signal)
     } catch (error) {
+      if (isCancellation(error)) throw error
       errors.push({ source: '待办', message: error instanceof Error ? error.message : '待办读取失败' })
     }
   } else {
     next.todos = []
   }
 
+  throwIfCancelled(options.signal)
   const showGithub = auth !== 'missing'
   const records = showGithub
     ? mergeRecords([

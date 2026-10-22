@@ -75,18 +75,11 @@ const shelfActions: ToolAction[] = [
   },
   {
     id: 'apo-init',
-    title: 'apo 项目初始化',
-    description: '初始化一个 apo 项目。',
-    confirmLabel: '在 {{cwd}} 初始化 {{name}}',
-    type: 'run-command',
-    shell: 'powershell',
-    cwd: '{{cwd}}',
-    previewCommand: 'apo init --dry-run --name {{name}}',
-    command: 'apo init --name {{name}}',
-    params: [
-      { key: 'cwd', label: '工作目录', required: true, input: 'directory', default: 'C:\\work\\demo' },
-      { key: 'name', label: '项目名', required: true, default: 'demo' }
-    ]
+    title: 'APO 项目初始化',
+    description: '复制提示词，在目标项目的 Coding Agent 会话中粘贴使用。',
+    confirmLabel: '复制初始化提示词',
+    type: 'template',
+    text: '使用 https://github.com/Dylan5237/agent-project-ops 初始化当前项目。'
   },
   {
     id: 'dispatch-note',
@@ -173,10 +166,19 @@ const invalidDraft = `{
 }
 `
 
-function apoAction(): ToolAction {
-  const action = shelfActions.find(item => item.id === 'apo-init')
-  if (!action || action.type !== 'run-command') throw new Error('missing apo fixture')
-  return action
+function commandAction(): ToolAction {
+  return {
+    id: 'list-project-files',
+    title: '查看项目文件',
+    description: '列出本地项目目录中的文件。',
+    confirmLabel: '查看 {{cwd}} 中的文件',
+    type: 'run-command',
+    shell: 'powershell',
+    cwd: '{{cwd}}',
+    previewCommand: 'Get-ChildItem -LiteralPath {{cwd}} -Name',
+    command: 'Get-ChildItem -LiteralPath {{cwd}} -Name',
+    params: [{ key: 'cwd', label: '工作目录', required: true, input: 'directory' }]
+  }
 }
 
 function openRepoAction(): ToolAction {
@@ -205,8 +207,8 @@ export function buildToolFixture(scene: string): ToolFixture | null {
     }
   }
   if (scene === 'tools-preview' || scene === 'tools-preview-failed') {
-    const action = apoAction()
-    const values = { cwd: 'C:\\work\\demo', name: 'demo' }
+    const action = commandAction()
+    const values = { cwd: 'C:\\work\\demo' }
     const preview = buildPreview(action, values, 'C:\\work\\demo')
     const failed = scene === 'tools-preview-failed'
     const rehearsal = summarizeDryRun({
@@ -215,13 +217,13 @@ export function buildToolFixture(scene: string): ToolFixture | null {
       stdout: failed
         ? ''
         : [
-          'create README.md',
-          'create src/app.ts',
-          'create package.json',
-          'create tsconfig.json',
-          'create .gitignore'
+          'README.md',
+          'src',
+          'package.json',
+          'tsconfig.json',
+          '.gitignore'
         ].join('\n'),
-      stderr: failed ? '目标目录不为空' : '',
+      stderr: failed ? '目录不存在' : '',
       aborted: false
     })
     return {
@@ -236,14 +238,14 @@ export function buildToolFixture(scene: string): ToolFixture | null {
       rehearsal
     }
   }
-  const command = "apo init --name '北区'"
+  const command = "Get-ChildItem -LiteralPath 'C:\\work\\demo' -Name"
   if (scene === 'tools-running') {
     return {
       page: 'tools',
       scene: 'running',
-      title: 'apo 项目初始化',
+      title: '查看项目文件',
       command,
-      lines: [{ stream: 'stdout', text: '正在初始化北区' }],
+      lines: [{ stream: 'stdout', text: '正在列出项目文件' }],
       status: '运行中'
     }
   }
@@ -251,9 +253,9 @@ export function buildToolFixture(scene: string): ToolFixture | null {
     return {
       page: 'tools',
       scene: 'success',
-      title: 'apo 项目初始化',
+      title: '查看项目文件',
       command,
-      lines: [{ stream: 'stdout', text: '已创建项目 北区' }],
+      lines: [{ stream: 'stdout', text: 'README.md\nsrc\npackage.json' }],
       status: '完成'
     }
   }
@@ -261,11 +263,11 @@ export function buildToolFixture(scene: string): ToolFixture | null {
     return {
       page: 'tools',
       scene: 'failed',
-      title: 'apo 项目初始化',
+      title: '查看项目文件',
       command,
       lines: [
-        { stream: 'stdout', text: '正在准备北区' },
-        { stream: 'stderr', text: '初始化失败：目标目录不为空' }
+        { stream: 'stdout', text: '正在列出项目文件' },
+        { stream: 'stderr', text: '读取失败：目录不存在' }
       ],
       status: '失败（退出码 3）'
     }
@@ -274,9 +276,9 @@ export function buildToolFixture(scene: string): ToolFixture | null {
     return {
       page: 'tools',
       scene: 'aborted',
-      title: 'apo 项目初始化',
+      title: '查看项目文件',
       command,
-      lines: [{ stream: 'stdout', text: '正在初始化北区' }],
+      lines: [{ stream: 'stdout', text: '正在列出项目文件' }],
       status: '已终止'
     }
   }
@@ -284,8 +286,8 @@ export function buildToolFixture(scene: string): ToolFixture | null {
     return {
       page: 'tools',
       scene: 'copied',
-      title: '派工说明',
-      text: '派工说明\n项目：北区\n任务：补齐验收步骤\n截止：本周五\n请按上面的范围处理，完成后回复结果。'
+      title: 'APO 项目初始化',
+      text: '使用 https://github.com/Dylan5237/agent-project-ops 初始化当前项目。'
     }
   }
   if (scene === 'tools-invalid') {
@@ -311,11 +313,11 @@ export function toolScreenshotExpectation(scene: string): string | null {
     case 'tools-params':
       return '将打开 https://github.com/north/atlas'
     case 'tools-preview':
-      return '将在 C:\\work\\demo 创建 5 个文件：README.md、src/app.ts、package.json、tsconfig.json、.gitignore'
+      return 'README.md'
     case 'tools-preview-failed':
-      return '预演失败（退出码 2）：目标目录不为空'
+      return '预演失败（退出码 2）：目录不存在'
     case 'tools-running':
-      return '正在初始化北区'
+      return '正在列出项目文件'
     case 'tools-success':
       return '完成'
     case 'tools-failed':
@@ -363,7 +365,7 @@ export function toolScreenshotCheck(scene: string): string | null {
     return `!document.body.innerText.includes('（无）')
       && !document.body.innerText.includes('标准错误')
       && document.body.innerText.includes('标准输出')
-      && document.body.innerText.includes('已创建项目 北区')`
+      && document.body.innerText.includes('README.md')`
   }
   if (scene === 'tools-narrow') {
     return 'window.innerWidth < 900'

@@ -15,6 +15,18 @@ export function todosFilePath(userData: string, join: (...parts: string[]) => st
   return join(userData, 'todos.jsonl')
 }
 
+export function ideasFilePath(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'ideas.json')
+}
+
+export function promptsFilePath(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'prompts.json')
+}
+
+export function claudeSessionsFilePath(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'claude-sessions.json')
+}
+
 export function testHookTodosPath(userData: string, join: (...parts: string[]) => string = path.join): string {
   return join(userData, 'test-hook-todos.json')
 }

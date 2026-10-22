@@ -4,11 +4,12 @@ import { clipboard, dialog, shell, type BrowserWindow } from 'electron'
 import type { KnownRepo } from '../shared/tools/repos.js'
 import type { ActionPreview, ToolRunEvent } from '../shared/tools/types.js'
 import type { IpcResult } from '../shared/types.js'
-import { planShell } from './tool-launch.js'
+import type { ShellPlan } from './tool-launch.js'
 import { normalizeActionId, normalizeParamInput, previewStoredAction } from './tool-request.js'
 import { ToolRunner } from './tool-runner.js'
 import { toolShelfExampleText } from './tool-assets.js'
 import type { SettingsService } from './settings-service.js'
+import { throwIfCancelled } from '../shared/task-scope.js'
 
 async function openFolder(preview: ActionPreview): Promise<void> {
   const argv = preview.argv ?? []
@@ -40,6 +41,7 @@ export async function confirmToolAction(options: {
   params: unknown
   baseCwd?: string
   knownRepos?: readonly KnownRepo[]
+  confirmedCommand?: { preview: ActionPreview, plan: ShellPlan }
 }): Promise<IpcResult<
   | { kind: 'run', runId: string }
   | { kind: 'open-url' }
@@ -79,6 +81,9 @@ export async function confirmToolAction(options: {
       await openFolder(preview)
       return { ok: true, data: { kind: 'open-folder' } }
     }
+    if (!options.confirmedCommand) return { ok: false, error: '请先预览要执行的命令' }
+    preview = options.confirmedCommand.preview
+    if (preview.type !== 'run-command') return { ok: false, error: '预览已失效，请重新预览' }
     if (!preview.shell || !preview.cwd) throw new Error('命令缺少 shell 或工作目录')
     if (!existsSync(preview.cwd) || !statSync(preview.cwd).isDirectory()) {
       throw new Error('工作目录不存在')
@@ -87,18 +92,18 @@ export async function confirmToolAction(options: {
     if (preview.shell === 'powershell' && process.platform !== 'win32') {
       throw new Error('PowerShell 只能在 Windows 上运行')
     }
-    // Confirm runs preview.text. The dry-run script is only executed while building the preview.
-    const plan = planShell(preview.shell, preview.text)
-    const runId = options.runner.start(plan, preview.cwd)
+    // Start the exact plan created with the preview; never rebuild it during confirmation.
+    const runId = options.runner.start(options.confirmedCommand.plan, preview.cwd)
     return { ok: true, data: { kind: 'run', runId } }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : '执行失败' }
   }
 }
 
-export async function pickToolFolder(window: BrowserWindow | null): Promise<
+export async function pickToolFolder(window: BrowserWindow | null, signal?: AbortSignal): Promise<
   IpcResult<{ cancelled: true } | { cancelled: false, path: string }>
 > {
+  throwIfCancelled(signal)
   const dialogOptions = {
     title: '选择文件夹',
     properties: ['openDirectory'] as Array<'openDirectory'>
@@ -106,13 +111,15 @@ export async function pickToolFolder(window: BrowserWindow | null): Promise<
   const result = window
     ? await dialog.showOpenDialog(window, dialogOptions)
     : await dialog.showOpenDialog(dialogOptions)
+  throwIfCancelled(signal)
   if (result.canceled || result.filePaths.length === 0) return { ok: true, data: { cancelled: true } }
   return { ok: true, data: { cancelled: false, path: result.filePaths[0] } }
 }
 
-export async function importToolShelfFile(window: BrowserWindow | null): Promise<
+export async function importToolShelfFile(window: BrowserWindow | null, signal?: AbortSignal): Promise<
   IpcResult<{ cancelled: true } | { cancelled: false, text: string }>
 > {
+  throwIfCancelled(signal)
   const dialogOptions = {
     title: '导入工具架 JSON',
     filters: [{ name: 'JSON', extensions: ['json'] }],
@@ -121,7 +128,9 @@ export async function importToolShelfFile(window: BrowserWindow | null): Promise
   const result = window
     ? await dialog.showOpenDialog(window, dialogOptions)
     : await dialog.showOpenDialog(dialogOptions)
+  throwIfCancelled(signal)
   if (result.canceled || result.filePaths.length === 0) return { ok: true, data: { cancelled: true } }
+  throwIfCancelled(signal)
   try {
     const text = readFileSync(result.filePaths[0], 'utf8')
     if (text.length > 200_000) return { ok: false, error: '文件太大' }
@@ -133,8 +142,10 @@ export async function importToolShelfFile(window: BrowserWindow | null): Promise
 
 export async function exportToolShelfFile(
   window: BrowserWindow | null,
-  text: unknown
+  text: unknown,
+  signal?: AbortSignal
 ): Promise<IpcResult<{ cancelled: boolean }>> {
+  throwIfCancelled(signal)
   if (typeof text !== 'string') return { ok: false, error: '没有可导出的内容' }
   if (text.length > 200_000) return { ok: false, error: '内容太大' }
   const dialogOptions = {
@@ -145,6 +156,7 @@ export async function exportToolShelfFile(
   const result = window
     ? await dialog.showSaveDialog(window, dialogOptions)
     : await dialog.showSaveDialog(dialogOptions)
+  throwIfCancelled(signal)
   if (result.canceled || !result.filePath) return { ok: true, data: { cancelled: true } }
   try {
     writeFileSync(result.filePath, text, 'utf8')

@@ -19,12 +19,12 @@ describe('tool shelf schema', () => {
     expect(result.config.actions.map(action => action.title)).toEqual([
       '打开仓库',
       '在编辑器中打开文件夹',
-      'apo 项目初始化',
+      'APO 项目初始化',
       '派工说明'
     ])
     expect(text).not.toMatch(/C:\\Users\\/i)
     expect(text).not.toMatch(/\/home\//)
-    expect(text).not.toContain('Dylan5237')
+    expect(text).toContain('https://github.com/Dylan5237/agent-project-ops')
     expect(text).not.toContain('演练')
     expect(text).not.toContain('确认前不会运行')
     for (const action of result.config.actions) {
@@ -34,19 +34,13 @@ describe('tool shelf schema', () => {
       expect(action.description ?? '').not.toContain('确认前不会运行')
     }
     expect(text).toContain('C:\\\\work\\\\demo')
-    expect(text).toContain('apo init --dry-run')
+    expect(text).not.toContain('apo init')
     const apo = result.config.actions[2]
-    const preview = buildPreview(apo, { cwd: 'C:\\work\\demo', name: 'demo' }, 'C:\\work\\demo')
-    expect(preview.dryRun).toBe("apo init --dry-run --name 'demo'")
-    expect(preview.text).toBe("apo init --name 'demo'")
-    expect(preview.text).not.toContain('--dry-run')
-    expect(preview.text).not.toContain('LASTEXITCODE')
-    expect(preview.shell).toBe('powershell')
-    const plan = planShell('powershell', preview.text, {}, 'win32')
-    const executed = powershellScriptFromPlan(plan)
-    expect(executed).toContain("apo init --name 'demo'")
-    expect(executed).toContain('exit $LASTEXITCODE')
-    expect(executed).not.toContain('--dry-run')
+    const preview = buildPreview(apo, {}, 'C:\\work\\demo')
+    expect(preview.type).toBe('template')
+    expect(preview.text).toBe('使用 https://github.com/Dylan5237/agent-project-ops 初始化当前项目。')
+    expect(preview.dryRun).toBeUndefined()
+    expect(preview.shell).toBeUndefined()
     const onDisk = readFileSync(new URL('../schema/tool-shelf.example.json', import.meta.url), 'utf8')
     expect(onDisk).toBe(text)
   })
@@ -117,9 +111,12 @@ describe('launch plan matches the preview script', () => {
   it('wraps the cmd script once for /d /s /c', () => {
     const script = 'echo ""^&" echo pwned"'
     const plan = planShell('cmd', script, { ComSpec: 'cmd.exe' }, 'win32')
-    expect(plan.args.slice(0, 3)).toEqual(['/d', '/s', '/c'])
-    expect(plan.windowsVerbatimArguments).toBe(true)
-    expect(cmdScriptFromPlan(plan)).toBe(script)
+    expect(plan.file).toBe('powershell.exe')
+    expect(plan.args.slice(0, 4)).toEqual(['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass'])
+    expect(plan.args[4]).toBe('-EncodedCommand')
+    expect(plan.windowsVerbatimArguments).toBe(false)
+    expect(plan.script).toBe(`chcp 65001 >NUL & ${script}`)
+    expect(cmdScriptFromPlan(plan)).toBe(plan.script)
   })
 })
 
@@ -186,9 +183,9 @@ describe('run outcome, copy, and known repositories', () => {
     const [openRepo, openFolder, init, note] = validated.config.actions
     expect(confirmButtonLabel(openRepo, { repo: 'owner/repo' })).toBe('打开 owner/repo')
     expect(confirmButtonLabel(openFolder, { folder: 'owner/repo' })).toBe('用编辑器打开 owner/repo')
-    expect(confirmButtonLabel(init, { cwd: 'C:\\work\\demo', name: 'demo' })).toBe('在 C:\\work\\demo 初始化 demo')
+    expect(confirmButtonLabel(init, {})).toBe('复制初始化提示词')
     expect(confirmButtonLabel(note, { project: '北区', task: '补齐验收步骤', due: '本周五' })).toBe('复制派工说明')
-    expect(confirmButtonLabel(init, { cwd: 'C:\\work\\demo', name: 'demo' })).not.toBe('确认执行')
+    expect(confirmButtonLabel(init, {})).not.toBe('确认执行')
   })
 
   it('filters the shelf as the query is typed', () => {

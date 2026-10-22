@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Notification, Tray, globalShortcut, ipcMain, nativeImage, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, globalShortcut, ipcMain, nativeImage, net, safeStorage, shell } from 'electron'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -11,6 +11,8 @@ import { mergeRepoOptions } from '../shared/todos/repos.js'
 import { createTodoWaitingProvider } from '../shared/waiting/todo-source.js'
 import { createCaptureWindow, focusCaptureInput, showSavedToast } from './capture-window.js'
 import { createGracefulShutdownHandler } from './graceful-shutdown.js'
+import { TaskScope, TaskCancelledError } from '../shared/task-scope.js'
+import { flushCaptureOnShutdown } from './capture-shutdown.js'
 import {
   normalizeTodoCompletion,
   normalizeTodoId,
@@ -22,6 +24,7 @@ import {
 import { OverviewService } from './overview-service.js'
 import {
   captureDraftPath,
+  claudeSessionsFilePath,
   overviewCachePath,
   settingsFilePath,
   testHookTodosPath,
@@ -56,12 +59,24 @@ import {
   type TestHookExtras,
   type TrayActions
 } from './test-hooks.js'
-import { clearCaptureDraft, loadCaptureDraft, saveCaptureDraft } from './todos/draft.js'
+import { clearCaptureDraft, emptyCaptureDraft, loadCaptureDraft, saveCaptureDraft } from './todos/draft.js'
 import { TodoStore } from './todos/store.js'
+import { IdeaStore } from './ideas/store.js'
+import { registerIdeaIpc } from './ideas/ipc.js'
+import { ideasFilePath } from './paths.js'
+import { PromptStore } from './prompts/store.js'
+import { registerPromptIpc } from './prompts/ipc.js'
+import { promptsFilePath } from './paths.js'
+import { ClaudeSessionStore } from './claude/session-store.js'
+import { ClaudeSessionService } from './claude/service.js'
+import { activateClaudeTerminal, createClaudeLaunchPlan, createClaudeTerminalTitle, launchClaudeInTerminal } from './claude/launcher.js'
+import { registerClaudeIpc } from './claude/ipc.js'
+import { seedScreenshotPrompts } from './screenshot-prompts.js'
 import { createSafeStorageBox } from './token-store.js'
 import type { HotkeyRegistrar } from './hotkey.js'
 import { registerToolIpc } from './tool-ipc.js'
 import { ToolRunner } from './tool-runner.js'
+import { createToolRehearsals } from './tool-rehearse.js'
 import { createUrlGuard, isTrustedBrowserUrl } from './url-trust.js'
 import { hardenedWebPreferences } from './window-prefs.js'
 
@@ -84,6 +99,11 @@ let captureWindow: BrowserWindow | null = null
 let savedToast: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
+let shutdownFinished = false
+const closingFailures: string[] = []
+const backgroundTasks = new TaskScope()
+let captureRecordCommitted = false
+let captureDraftConsumed = false
 let service: SettingsService | null = null
 let todos: TodoStore | null = null
 let waiting: WaitingService | ReturnType<typeof createScreenshotWaiting> | null = null
@@ -94,6 +114,8 @@ const toolRunner = new ToolRunner(event => {
   if (!win || win.isDestroyed()) return
   win.webContents.send(IpcChannel.toolEvent, event)
 })
+const toolRehearsals = createToolRehearsals()
+let toolIpcLifecycle: ReturnType<typeof registerToolIpc> | null = null
 
 const devServerOrigin = process.env.ARCKEEP_DEV === '1' ? process.env.VITE_DEV_SERVER_URL ?? null : null
 const rendererDir = path.join(__dirname, '../renderer')
@@ -113,6 +135,7 @@ function trayIconPath(): string {
 }
 
 function showMainWindow(): void {
+  if (isQuitting) return
   if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
@@ -120,6 +143,7 @@ function showMainWindow(): void {
 }
 
 function openHotkeySettings(): void {
+  if (isQuitting) return
   showMainWindow()
   if (!mainWindow || mainWindow.isDestroyed()) return
   mainWindow.webContents.send(IpcChannel.focusHotkey)
@@ -139,7 +163,7 @@ function maybeNotifyStartupHotkeyFailure(windowVisible: boolean): void {
 }
 
 function quitFromTray(): void {
-  isQuitting = true
+  beginClosing()
   app.quit()
 }
 
@@ -157,7 +181,7 @@ function trayActions(): TrayActions {
 
 function testHookExtras(): TestHookExtras {
   return {
-    openCapture: () => openCaptureWindow(),
+    openCapture: () => { if (!isQuitting) openCaptureWindow() },
     readTodos: () => todos?.listTodos() ?? [],
     onTodos: snapshot => {
       const file = testHookTodosPath(app.getPath('userData'))
@@ -187,6 +211,16 @@ function draftFile(): string {
   return captureDraftPath(app.getPath('userData'))
 }
 
+function consumeCaptureDraft(event: Electron.IpcMainInvokeEvent): void {
+  if (!captureWindow || event.sender !== captureWindow.webContents) return
+  captureRecordCommitted = true
+  captureDraftConsumed = true
+  try { clearCaptureDraft(draftFile()) } catch {
+    // The record is durable. Suppress the consumed draft in this session and retry cleanup.
+    console.error('捕获记录已保存，但对应草稿未能清理')
+  }
+}
+
 function showSavedConfirmation(): void {
   if (savedToast && !savedToast.isDestroyed()) savedToast.close()
   const toast = showSavedToast({
@@ -202,10 +236,15 @@ function showSavedConfirmation(): void {
 }
 
 function openCaptureWindow(): BrowserWindow {
+  if (isQuitting) throw new TaskCancelledError()
   if (captureWindow && !captureWindow.isDestroyed()) {
     focusCaptureInput(captureWindow)
     return captureWindow
   }
+  if (captureDraftConsumed) {
+    try { clearCaptureDraft(draftFile()) } catch { /* The consumed draft remains suppressed. */ }
+  }
+  captureRecordCommitted = false
   const fixture = screenshotPath ? screenshotCaptureFixture(screenshotScene) : null
   const query: Record<string, string> = {}
   if (fixture) query.fixture = fixture
@@ -218,6 +257,9 @@ function openCaptureWindow(): BrowserWindow {
     load: target => {
       loadRenderer(target, 'capture.html', query)
     }
+  })
+  window.on('close', event => {
+    if (isQuitting && !shutdownFinished) event.preventDefault()
   })
   window.on('closed', () => {
     if (captureWindow === window) captureWindow = null
@@ -242,7 +284,7 @@ function applyTrayState(): void {
     click: entry.role === 'open'
       ? () => showMainWindow()
       : entry.role === 'capture'
-        ? () => openCaptureWindow()
+        ? () => { if (!isQuitting) openCaptureWindow() }
         : entry.role === 'quit'
           ? () => quitFromTray()
           : undefined
@@ -325,6 +367,7 @@ function createWindow(): BrowserWindow {
     window.hide()
   })
   window.once('ready-to-show', () => {
+    if (isQuitting) return
     const showWindow = shouldShowMainWindowOnReady({
       screenshot: Boolean(screenshotPath),
       screenshotShowsMainWindow: screenshotShowsMainWindow(screenshotScene),
@@ -389,8 +432,33 @@ function ipcError(error: unknown, fallback: string): { ok: false, error: string 
 
 function registerIpc(settings: SettingsService, store: TodoStore): void {
   const guard = (event: Electron.IpcMainInvokeEvent) => {
+    backgroundTasks.assertOpen()
+    if (isQuitting) throw new TaskCancelledError()
     requireTrustedSender(event, [mainWindow?.webContents, captureWindow?.webContents])
   }
+  registerIdeaIpc({
+    store: new IdeaStore({ file: ideasFilePath(app.getPath('userData')) }),
+    guard,
+    onCreated: consumeCaptureDraft,
+    onChanged: () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      mainWindow.webContents.send(IpcChannel.ideasChanged)
+    }
+  })
+  const prompts = new PromptStore({ file: promptsFilePath(app.getPath('userData')) })
+  if (screenshotPath) seedScreenshotPrompts(screenshotScene, prompts)
+  registerPromptIpc({
+    store: prompts,
+    guard: event => {
+      backgroundTasks.assertOpen()
+      if (isQuitting) throw new TaskCancelledError()
+      requireSender(event, mainWindow?.webContents ?? null)
+    },
+    onChanged: () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      mainWindow.webContents.send(IpcChannel.promptsChanged)
+    }
+  })
   ipcMain.handle(IpcChannel.getState, event => {
     guard(event)
     return settings.getState()
@@ -398,6 +466,10 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
   ipcMain.handle(IpcChannel.setRepos, (event, repos: unknown) => {
     guard(event)
     return settings.setRepos(repos)
+  })
+  ipcMain.handle(IpcChannel.setRepoFetchWindow, (event, window: unknown) => {
+    guard(event)
+    return settings.setRepoFetchWindow(window)
   })
   ipcMain.handle(IpcChannel.setHotkey, (event, hotkey: unknown) => {
     guard(event)
@@ -433,6 +505,7 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
     guard(event)
     try {
       const created = store.create(normalizeTodoInput(input))
+      consumeCaptureDraft(event)
       notifyTodosChanged()
       return { ok: true, data: created }
     } catch (error) {
@@ -481,11 +554,13 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
   })
   ipcMain.handle(IpcChannel.getCaptureDraft, event => {
     guard(event)
-    return loadCaptureDraft(draftFile())
+    return captureDraftConsumed ? emptyCaptureDraft() : loadCaptureDraft(draftFile())
   })
   ipcMain.handle(IpcChannel.setCaptureDraft, (event, input: unknown) => {
     guard(event)
-    return saveCaptureDraft(draftFile(), input)
+    const draft = saveCaptureDraft(draftFile(), input)
+    captureDraftConsumed = false
+    return draft
   })
   ipcMain.handle(IpcChannel.closeCapture, (event, mode: unknown) => {
     guard(event)
@@ -498,9 +573,18 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
     guard(event)
     return waiting?.current()
   })
-  ipcMain.handle(IpcChannel.refreshWaiting, event => {
+  ipcMain.handle(IpcChannel.refreshWaiting, (event, force: unknown) => {
     guard(event)
-    return waiting?.refresh() ?? Promise.reject(new Error('等我处理尚未就绪'))
+    if (force !== undefined && typeof force !== 'boolean') throw new Error('刷新参数无效')
+    return waiting?.refresh(force) ?? Promise.reject(new Error('等我处理尚未就绪'))
+  })
+  for (const channel of [IpcChannel.commentWaitingApo, IpcChannel.checkWaitingApo]) ipcMain.handle(channel, (event, rowId: unknown, actionId: unknown) => {
+    backgroundTasks.assertOpen()
+    if (isQuitting) throw new TaskCancelledError()
+    requireSender(event, mainWindow?.webContents ?? null)
+    if (event.senderFrame !== mainWindow?.webContents.mainFrame) throw new Error('Blocked IPC from a child frame')
+    if (!(waiting instanceof WaitingService)) return { ok: false, error: '当前模式不能发送 GitHub 评论' }
+    return waiting.commentApo(rowId, actionId, channel === IpcChannel.checkWaitingApo)
   })
   ipcMain.handle(IpcChannel.snoozeWaiting, (event, id: unknown, days: unknown) => {
     guard(event)
@@ -554,9 +638,10 @@ function registerIpc(settings: SettingsService, store: TodoStore): void {
     guard(event)
     return overview?.current()
   })
-  ipcMain.handle(IpcChannel.refreshOverview, event => {
+  ipcMain.handle(IpcChannel.refreshOverview, (event, force: unknown) => {
     guard(event)
-    return overview?.refresh() ?? Promise.reject(new Error('项目总览尚未就绪'))
+    if (force !== undefined && typeof force !== 'boolean') throw new Error('刷新参数无效')
+    return overview?.refresh(force) ?? Promise.reject(new Error('项目总览尚未就绪'))
   })
   ipcMain.handle(IpcChannel.setOverview, (event, config: unknown) => {
     guard(event)
@@ -571,10 +656,12 @@ if (!gotLock) {
   app.quit()
 } else {
   app.on('second-instance', (_event, argv) => {
+    if (isQuitting) return
     if (dispatchTestHook(process.env, parseTestHookAction(argv), trayActions(), testHookExtras())) return
     showMainWindow()
   })
   app.whenReady().then(() => {
+    if (isQuitting) return
     Menu.setApplicationMenu(null)
     if (screenshotPath && screenshotScene === 'capture-draft') {
       saveCaptureDraft(captureDraftPath(app.getPath('userData')), {
@@ -597,10 +684,11 @@ if (!gotLock) {
       overview = createScreenshotOverview(screenshotScene)
     } else {
       service = new SettingsService({
+        tasks: backgroundTasks,
         file: settingsFilePath(userData),
         secretBox: createSafeStorageBox(safeStorage),
         registrar: captureRegistrar(),
-        onHotkey: () => openCaptureWindow(),
+        onHotkey: () => { if (!isQuitting) openCaptureWindow() },
         log: message => console.error(message)
       })
       service.init()
@@ -608,19 +696,60 @@ if (!gotLock) {
         cache: waitingCachePath(userData),
         dismissals: waitingDismissalPath(userData)
       }, {
+        tasks: backgroundTasks,
         todos: todoProvider,
+        fetchImpl: (input, init) => net.fetch(input instanceof URL ? input.href : input, init),
         log: message => console.error(message)
       })
       overview = new OverviewService(service, overviewCachePath(userData), {
+        tasks: backgroundTasks,
+        fetchImpl: (input, init) => net.fetch(input instanceof URL ? input.href : input, init),
         log: message => console.error(message)
       })
     }
     registerIpc(service, todos)
-    registerToolIpc({
-      guard: event => requireSender(event, mainWindow?.webContents ?? null),
+    const claudeStore = new ClaudeSessionStore({ file: claudeSessionsFilePath(userData) })
+    const claudeService = new ClaudeSessionService({
+      store: claudeStore,
+      chooseDirectory: async (repo, name) => {
+        const options: Electron.OpenDialogOptions = {
+          title: '选择 ' + name + '（' + repo + '）的本地工作目录',
+          properties: ['openDirectory']
+        }
+        const selected = mainWindow && !mainWindow.isDestroyed()
+          ? await dialog.showOpenDialog(mainWindow, options)
+          : await dialog.showOpenDialog(options)
+        return selected.canceled ? null : selected.filePaths[0] ?? null
+      },
+      linkedDirectories: repo => (waiting?.observedLocalLinks() ?? [])
+        .filter(link => link.github.toLowerCase() === repo.toLowerCase())
+        .map(link => link.path),
+      activate: input => activateClaudeTerminal(createClaudeTerminalTitle(input.repo, input.sessionId)),
+      launch: async input => {
+        const plan = createClaudeLaunchPlan(input)
+        await launchClaudeInTerminal(plan)
+      }
+    })
+    registerClaudeIpc({
+      service: claudeService,
+      guard: event => {
+        backgroundTasks.assertOpen()
+        if (isQuitting) throw new TaskCancelledError()
+        requireSender(event, mainWindow?.webContents ?? null)
+        if (event.senderFrame !== mainWindow?.webContents.mainFrame) throw new Error('Blocked IPC from a child frame')
+      }
+    })
+    toolIpcLifecycle = registerToolIpc({
+      tasks: backgroundTasks,
+      guard: event => {
+        backgroundTasks.assertOpen()
+        if (isQuitting) throw new TaskCancelledError()
+        requireSender(event, mainWindow?.webContents ?? null)
+      },
       getWindow: () => mainWindow,
       settings: service,
       runner: toolRunner,
+      rehearsals: toolRehearsals,
       repos: waiting,
       todoRepos: () => (todos?.listTodos() ?? []).flatMap(item => item.repo ? [item.repo] : []),
       screenshotScene
@@ -638,18 +767,87 @@ if (!gotLock) {
   })
 }
 
+function beginClosing(): void {
+  if (isQuitting) return
+  isQuitting = true
+  const gates = [
+    { label: '后台任务', close: () => backgroundTasks.close() },
+    { label: '工具命令', close: () => toolRunner.close() },
+    { label: '工具预演', close: () => toolRehearsals.close() },
+    { label: '工具请求', close: () => toolIpcLifecycle?.close() },
+    { label: '全局热键', close: () => { if (app.isReady()) globalShortcut.unregisterAll() } }
+  ]
+  for (const gate of gates) {
+    try { gate.close() } catch { closingFailures.push(`${gate.label}停止失败`) }
+  }
+}
+
+async function flushCaptureBeforeQuit(): Promise<void> {
+  if (captureRecordCommitted) {
+    clearCaptureDraft(draftFile())
+    return
+  }
+  const window = captureWindow
+  if (!window || window.isDestroyed()) return
+  if (window.webContents.isLoading()) return
+  const result = await flushCaptureOnShutdown({
+    file: draftFile(),
+    isCommitted: () => captureRecordCommitted,
+    readDraft: () => window.webContents.executeJavaScript(`(() => {
+    if (!document.querySelector('#capture-form')) throw new Error('Capture form is not ready');
+    const idea = document.querySelector('#capture-kind')?.value === 'idea';
+    const text = document.querySelector(idea ? '#idea-text' : '#text')?.value ?? '';
+    return { ...(idea ? { kind: 'idea' } : {}), text,
+      repo: document.querySelector('#repo')?.value ?? '',
+      waiting: !idea && document.querySelector('#waiting')?.checked === true };
+    })()`)
+  })
+  if (result === 'preserved') throw new Error('快速捕获草稿读取失败，保留已有草稿')
+}
+
+function reportShutdownFailure(error: unknown): void {
+  const record = {
+    at: new Date().toISOString(),
+    event: 'shutdown_incomplete',
+    message: error instanceof Error ? error.message : '应用关闭清理失败',
+    pendingTasks: backgroundTasks.pendingCount,
+    ownedResources: backgroundTasks.resourceCount
+  }
+  console.error(JSON.stringify(record))
+  let recorded = false
+  try {
+    fs.appendFileSync(path.join(app.getPath('userData'), 'lifecycle-errors.jsonl'), `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: 0o600 })
+    recorded = true
+  } catch { /* A read-only data directory must not prevent exit. */ }
+  if (!screenshotPath && Notification.isSupported()) {
+    const body = recorded ? '退出清理未完整完成，诊断信息已记录。' : '退出清理未完整完成，诊断文件无法写入，请检查数据目录权限。'
+    try { new Notification({ title: 'Arckeep', body }).show() } catch { /* OS notification unavailable. */ }
+  }
+}
+
 const handleBeforeQuit = createGracefulShutdownHandler({
-  quit: () => app.quit(),
-  shutdown: () => {
-    toolRunner.abortAll()
-    globalShortcut.unregisterAll()
-    tray?.destroy()
+  quit: () => { shutdownFinished = true; app.quit() },
+  onError: reportShutdownFailure,
+  timeoutMs: 15_000,
+  shutdown: async () => {
+    const stages = [
+      { label: '后台任务', run: () => backgroundTasks.drain() },
+      { label: '工具预演', run: () => toolIpcLifecycle?.shutdown() ?? toolRehearsals.cancelAll() },
+      { label: '工具命令', run: () => toolRunner.abortAll() },
+      { label: '快速捕获草稿', run: () => flushCaptureBeforeQuit() }
+    ]
+    const results = await Promise.allSettled(stages.map(stage => Promise.resolve().then(stage.run)))
+    try { tray?.destroy() } catch { closingFailures.push('托盘释放失败') }
     tray = null
+    const failures = [...closingFailures.map(message => new Error(message)), ...results.flatMap((result, index) => result.status === 'rejected'
+      ? [new Error(`${stages[index].label}关闭失败`)] : [])
+    ]
+    if (failures.length > 0) throw new AggregateError(failures, failures.map(error => error.message).join('；'))
   }
 })
 
 app.on('before-quit', event => {
-  isQuitting = true
+  beginClosing()
   handleBeforeQuit(event)
 })
 

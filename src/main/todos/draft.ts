@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { CaptureDraft } from '../../shared/todos/types.js'
+import { MAX_IDEA_LENGTH } from '../../shared/ideas/types.js'
 
 export type { CaptureDraft }
 
@@ -14,10 +15,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function normalizeCaptureDraft(input: unknown): CaptureDraft {
   if (!isRecord(input)) return emptyCaptureDraft()
+  const idea = input.kind === 'idea'
   return {
-    text: typeof input.text === 'string' ? input.text.slice(0, 500) : '',
+    ...(idea ? { kind: 'idea' as const } : {}),
+    text: typeof input.text === 'string' ? input.text.slice(0, idea ? MAX_IDEA_LENGTH : 500) : '',
     repo: typeof input.repo === 'string' ? input.repo.slice(0, 200) : '',
-    waiting: input.waiting === true
+    waiting: !idea && input.waiting === true
   }
 }
 

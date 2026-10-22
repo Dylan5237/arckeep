@@ -1,4 +1,6 @@
-import { execFile } from 'node:child_process'
+import { abortable, isCancellation, throwIfCancelled, type TaskScope } from '../shared/task-scope.js'
+import { readHttpResponse } from '../github/http-request.js'
+import { runManagedCommand, type ManagedCommandContext } from './managed-command.js'
 import { githubSourceLabel, type GithubSource } from '../shared/types.js'
 
 export interface CommandSuccess {
@@ -7,7 +9,8 @@ export interface CommandSuccess {
   stderr: string
 }
 
-export type CommandRunner = (command: string, args: readonly string[]) => Promise<CommandSuccess>
+export type CommandRunner = (command: string, args: readonly string[], options?: ManagedCommandContext) => Promise<CommandSuccess>
+export type GithubAuthTaskOptions = ManagedCommandContext
 
 export type GhLookup =
   | { ok: true, token: string }
@@ -21,36 +24,34 @@ export interface ResolvedGithubAuth {
 
 const GH_ARGS = ['auth', 'token'] as const
 
-export function execFileRunner(command: string, args: readonly string[]): Promise<CommandSuccess> {
-  return new Promise((resolve, reject) => {
-    execFile(command, [...args], { timeout: 15000, windowsHide: true, maxBuffer: 1024 * 64 }, (error, stdout, stderr) => {
-      if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
-        reject(error)
-        return
-      }
-      if (error && typeof (error as { code?: unknown }).code === 'number') {
-        resolve({
-          code: (error as { code: number }).code,
-          stdout: String(stdout ?? ''),
-          stderr: String(stderr ?? '')
-        })
-        return
-      }
-      if (error) {
-        resolve({ code: 1, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') })
-        return
-      }
-      resolve({ code: 0, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') })
-    })
+export function execFileRunner(
+  command: string,
+  args: readonly string[],
+  options?: ManagedCommandContext
+): Promise<CommandSuccess> {
+  return runManagedCommand(command, args, {
+    ...options,
+    timeoutMs: 15_000,
+    maxBuffer: 1024 * 64,
+    label: 'GitHub CLI 认证进程'
   })
 }
 
 export async function readGhAuthToken(
   run: CommandRunner = execFileRunner,
-  log: (message: string) => void = () => {}
+  log: (message: string) => void = () => {},
+  options: GithubAuthTaskOptions = {}
 ): Promise<GhLookup> {
+  const signal = options.signal ?? options.tasks?.signal
+  throwIfCancelled(signal)
   try {
-    const result = await run('gh', GH_ARGS)
+    const command = run('gh', GH_ARGS, options)
+    const result = run === execFileRunner ? await command : await abortable(command, signal)
+    throwIfCancelled(signal)
+    if (result.code === 127) {
+      log('gh auth token unavailable: not-installed')
+      return { ok: false, reason: 'not-installed' }
+    }
     if (result.code !== 0) {
       log('gh auth token unavailable: not-logged-in')
       return { ok: false, reason: 'not-logged-in' }
@@ -62,6 +63,7 @@ export async function readGhAuthToken(
     }
     return { ok: true, token }
   } catch (error) {
+    if (isCancellation(error)) throw error
     const code = (error as NodeJS.ErrnoException | undefined)?.code
     if (code === 'ENOENT') {
       log('gh auth token unavailable: not-installed')
@@ -73,11 +75,16 @@ export async function readGhAuthToken(
 }
 
 export async function resolveGithubAuth(options: {
-  readGh: () => Promise<GhLookup>
+  readGh: (options?: GithubAuthTaskOptions) => Promise<GhLookup>
   readPat: () => string | null
   patSaved: boolean
+  signal?: AbortSignal
+  tasks?: TaskScope
 }): Promise<ResolvedGithubAuth> {
-  const gh = await options.readGh()
+  const signal = options.signal ?? options.tasks?.signal
+  throwIfCancelled(signal)
+  const gh = await options.readGh({ signal, tasks: options.tasks })
+  throwIfCancelled(signal)
   if (gh.ok) {
     return { source: 'gh-cli', token: gh.token, patSaved: options.patSaved }
   }
@@ -189,18 +196,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-export async function fetchGitHubLogin(token: string, fetchImpl: typeof fetch = fetch): Promise<string> {
+export async function fetchGitHubLogin(
+  token: string,
+  fetchImpl: typeof fetch = fetch,
+  options: { signal?: AbortSignal, timeoutMs?: number } = {}
+): Promise<string> {
   let response: Response
+  let bodyText: string
   try {
-    response = await fetchImpl('https://api.github.com/user', {
+    const result = await readHttpResponse('https://api.github.com/user', {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github+json',
         'User-Agent': 'Arckeep',
         'X-GitHub-Api-Version': '2022-11-28'
       }
-    })
-  } catch {
+    }, fetchImpl, options)
+    throwIfCancelled(options.signal)
+    response = result.response
+    bodyText = result.bodyText
+  } catch (error) {
+    if (isCancellation(error)) throw error
     const failure = classifyGithubFailure({ network: true })
     throw new GitHubConnectionError(failure.message, null, failure.kind)
   }
@@ -218,24 +234,33 @@ export async function fetchGitHubLogin(token: string, fetchImpl: typeof fetch = 
 
   let body: unknown
   try {
-    body = await response.json()
+    body = JSON.parse(bodyText) as unknown
   } catch {
     throw new GitHubConnectionError('GitHub 响应无法解析。请稍后重试。', response.status, 'other')
   }
   const login = isRecord(body) && typeof body.login === 'string' ? body.login : ''
   if (!login) throw new GitHubConnectionError('GitHub 响应里没有用户名。请稍后重试，或换一个 token。', response.status, 'other')
+  throwIfCancelled(options.signal)
   return login
 }
 
 export async function testGithubConnection(options: {
   token: string | null
   fetchImpl?: typeof fetch
+  signal?: AbortSignal
+  timeoutMs?: number
 }): Promise<{ ok: true, login: string } | { ok: false, error: string }> {
+  throwIfCancelled(options.signal)
   if (!options.token) return { ok: false, error: '尚未配置 GitHub token' }
   try {
-    const login = await fetchGitHubLogin(options.token, options.fetchImpl)
+    const login = await fetchGitHubLogin(options.token, options.fetchImpl, {
+      signal: options.signal,
+      timeoutMs: options.timeoutMs
+    })
+    throwIfCancelled(options.signal)
     return { ok: true, login }
   } catch (error) {
+    if (isCancellation(error)) throw error
     if (error instanceof GitHubConnectionError) return { ok: false, error: error.message }
     if (isGithubNetworkError(error)) return { ok: false, error: classifyGithubFailure({ network: true }).message }
     return { ok: false, error: '测试连接失败。请稍后重试。' }

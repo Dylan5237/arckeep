@@ -67,4 +67,21 @@ describe('capture draft', () => {
     expect(captureDraftPath(userDataDir(appData, path.win32.join), path.win32.join))
       .toBe('C:\\Users\\Dylan\\AppData\\Roaming\\Arckeep\\capture-draft.json')
   })
+
+  it('restores the idea mode and multiline body beyond the todo limit', () => {
+    const file = tempFile()
+    const text = `第一行 #literal !等我\n${'想法'.repeat(400)}`
+    saveCaptureDraft(file, { kind: 'idea', text, repo: 'example/demo', waiting: true })
+    expect(loadCaptureDraft(file)).toEqual({ kind: 'idea', text, repo: 'example/demo', waiting: false })
+    expect(captureDraftOnEscape(loadCaptureDraft(file))).toEqual(loadCaptureDraft(file))
+  })
+
+  it('applies separate limits and treats unknown modes as legacy todo drafts', () => {
+    const file = tempFile()
+    const text = '字'.repeat(10_100)
+    saveCaptureDraft(file, { kind: 'idea', text, repo: '', waiting: true })
+    expect(loadCaptureDraft(file).text).toHaveLength(10_000)
+    saveCaptureDraft(file, { kind: 'unknown', text, repo: '', waiting: true })
+    expect(loadCaptureDraft(file)).toEqual({ text: text.slice(0, 500), repo: '', waiting: true })
+  })
 })

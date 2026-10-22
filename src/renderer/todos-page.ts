@@ -6,11 +6,12 @@ import {
   writeCompletedGroupOpen
 } from '../shared/todos/groups'
 import { formatRelativeTime } from '../shared/todos/time'
-import { beginDeleteUndo, deleteUndoItem, type DeleteUndo } from '../shared/todos/undo'
+import { activeDeleteUndo, beginDeleteUndo, type DeleteUndo } from '../shared/todos/undo'
 import type { TodoItem } from '../shared/types'
 import { bindExclusiveRowActions } from './exclusive-rows'
 
 type RepoFilter = 'all' | 'none' | string
+type TodoEditDraft = { id: string, text: string, repo: string, waiting: boolean }
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -37,6 +38,37 @@ function localStamp(iso: string): string {
 let unsubscribe: (() => void) | null = null
 let pendingUndo: DeleteUndo | null = null
 let undoTimer: number | null = null
+let activeDraw: (() => void) | null = null
+let activeUndoExpiry: (() => void) | null = null
+
+function clearUndoTimer(): void {
+  if (undoTimer !== null) window.clearTimeout(undoTimer)
+  undoTimer = null
+}
+
+function scheduleUndoExpiry(expected: DeleteUndo): void {
+  clearUndoTimer()
+  const remaining = expected.until - Date.now()
+  undoTimer = window.setTimeout(() => {
+    undoTimer = null
+    if (pendingUndo !== expected) return
+    if (activeDeleteUndo(expected, Date.now())) {
+      scheduleUndoExpiry(expected)
+      return
+    }
+    pendingUndo = null
+    activeUndoExpiry?.()
+  }, Math.max(0, remaining))
+}
+
+function currentUndo(): DeleteUndo | null {
+  const active = activeDeleteUndo(pendingUndo, Date.now())
+  if (!active && pendingUndo) {
+    pendingUndo = null
+    clearUndoTimer()
+  }
+  return active
+}
 
 function rememberCompletedOpen(open: boolean): void {
   try {
@@ -67,6 +99,7 @@ export async function renderTodos(content: HTMLElement): Promise<() => void> {
 
   let filter: RepoFilter = 'all'
   let editingId: string | null = null
+  let editDraft: TodoEditDraft | null = null
 
   const draw = async (): Promise<void> => {
     if (!page.isConnected) return
@@ -84,58 +117,83 @@ export async function renderTodos(content: HTMLElement): Promise<() => void> {
       rows.refresh()
       return
     }
-    host.replaceChildren(renderBoard(items, repos, filter, deleteUndoItem(pendingUndo, Date.now()), {
+    host.replaceChildren(renderBoard(items, repos, filter, currentUndo(), editDraft, {
       onFilter: value => {
         filter = value
         editingId = null
+        editDraft = null
         void draw()
       },
       editingId,
       onEdit: id => {
         editingId = id
+        const item = items.find(candidate => candidate.id === id)
+        editDraft = item
+          ? { id, text: item.text, repo: item.repo ?? '', waiting: item.waiting }
+          : null
         void draw()
       },
       onCancelEdit: () => {
         editingId = null
+        editDraft = null
         void draw()
+      },
+      onDraftChanged: draft => {
+        editDraft = draft
       },
       onChanged: () => {
         editingId = null
+        editDraft = null
         void draw()
       },
       onDeleted: item => {
-        pendingUndo = beginDeleteUndo(item, Date.now())
-        if (undoTimer !== null) window.clearTimeout(undoTimer)
-        undoTimer = window.setTimeout(() => {
-          pendingUndo = null
-          undoTimer = null
-          void draw()
-        }, pendingUndo.until - Date.now())
+        const nextUndo = beginDeleteUndo(item, Date.now())
+        pendingUndo = nextUndo
+        scheduleUndoExpiry(nextUndo)
         editingId = null
+        editDraft = null
         void draw()
       },
-      onUndo: item => {
-        void window.arckeep.restoreTodo(item).then(result => {
-          if (!result.ok || !page.isConnected) return
-          pendingUndo = null
-          if (undoTimer !== null) window.clearTimeout(undoTimer)
-          undoTimer = null
-          editingId = null
-          void draw()
-        })
+      onUndo: async requested => {
+        if (currentUndo() !== requested) {
+          activeUndoExpiry?.()
+          return
+        }
+        try {
+          const result = await window.arckeep.restoreTodo(requested.item)
+          if (!result.ok) return
+          if (pendingUndo === requested) {
+            pendingUndo = null
+            clearUndoTimer()
+          }
+          activeDraw?.()
+        } catch {
+          // Keep the undo available until its deadline if the restore request fails.
+        }
       }
     }))
     rows.refresh()
   }
 
-  unsubscribe = window.arckeep.onTodosChanged(() => {
+  const thisUnsubscribe = window.arckeep.onTodosChanged(() => {
     if (!page.isConnected || editingId) return
     void draw()
   })
+  unsubscribe = thisUnsubscribe
+  activeDraw = draw
+  const expireUndo = (): void => { host.querySelector('.todo-undo')?.remove() }
+  activeUndoExpiry = expireUndo
+  const active = currentUndo()
+  if (active) scheduleUndoExpiry(active)
   await draw()
+  let disposed = false
   return () => {
-    unsubscribe?.()
-    unsubscribe = null
+    if (disposed) return
+    disposed = true
+    thisUnsubscribe?.()
+    if (unsubscribe === thisUnsubscribe) unsubscribe = null
+    if (activeDraw === draw) activeDraw = null
+    if (activeUndoExpiry === expireUndo) activeUndoExpiry = null
     rows.release()
   }
 }
@@ -144,15 +202,17 @@ function renderBoard(
   items: TodoItem[],
   repos: string[],
   filter: RepoFilter,
-  undoItem: TodoItem | null,
+  undo: DeleteUndo | null,
+  editDraft: TodoEditDraft | null,
   actions: {
     onFilter: (value: RepoFilter) => void
     editingId: string | null
     onEdit: (id: string) => void
     onCancelEdit: () => void
+    onDraftChanged: (draft: TodoEditDraft) => void
     onChanged: () => void
     onDeleted: (item: TodoItem) => void
-    onUndo: (item: TodoItem) => void
+    onUndo: (undo: DeleteUndo) => void | Promise<void>
   }
 ): DocumentFragment {
   const fragment = document.createDocumentFragment()
@@ -178,7 +238,7 @@ function renderBoard(
   ]))
 
   const appendUndo = (): void => {
-    if (undoItem) fragment.append(renderUndoBar(undoItem, actions.onUndo))
+    if (undo) fragment.append(renderUndoBar(undo, actions.onUndo))
   }
   if (items.length === 0) {
     fragment.append(el('p', { class: 'empty-todos' }, ['还没有待办。按全局热键打开快速捕获。']))
@@ -194,10 +254,10 @@ function renderBoard(
   const { open, done } = partitionTodos(visible)
   const list = el('div', { class: 'todo-list' })
   for (const item of open) {
-    list.append(renderRow(item, repos, actions.editingId === item.id, actions))
+    list.append(renderRow(item, repos, actions.editingId === item.id, editDraft, actions))
   }
   fragment.append(list)
-  if (done.length > 0) fragment.append(renderCompletedGroup(done, repos, actions))
+  if (done.length > 0) fragment.append(renderCompletedGroup(done, repos, editDraft, actions))
   appendUndo()
   return fragment
 }
@@ -205,17 +265,19 @@ function renderBoard(
 function renderCompletedGroup(
   done: TodoItem[],
   repos: string[],
+  editDraft: TodoEditDraft | null,
   actions: {
     editingId: string | null
     onEdit: (id: string) => void
     onCancelEdit: () => void
+    onDraftChanged: (draft: TodoEditDraft) => void
     onChanged: () => void
     onDeleted: (item: TodoItem) => void
   }
 ): HTMLElement {
   const list = el('div', { class: 'todo-list' })
   for (const item of done) {
-    list.append(renderRow(item, repos, actions.editingId === item.id, actions))
+    list.append(renderRow(item, repos, actions.editingId === item.id, editDraft, actions))
   }
   const group = el('details', { class: 'todo-done', 'data-action': 'completed-group' }, [
     el('summary', {}, [completedGroupTitle(done.length)]),
@@ -228,12 +290,17 @@ function renderCompletedGroup(
   return group
 }
 
-function renderUndoBar(item: TodoItem, onUndo: (item: TodoItem) => void): HTMLElement {
-  const undo = el('button', { type: 'button', 'data-action': 'undo-delete' }, ['撤销'])
-  undo.addEventListener('click', () => onUndo(item))
+function renderUndoBar(pending: DeleteUndo, onUndo: (undo: DeleteUndo) => void | Promise<void>): HTMLElement {
+  const button = el('button', { type: 'button', 'data-action': 'undo-delete' }, ['撤销'])
+  button.addEventListener('click', () => {
+    button.disabled = true
+    void Promise.resolve().then(() => onUndo(pending)).catch(() => {}).finally(() => {
+      if (button.isConnected) button.disabled = false
+    })
+  })
   return el('div', { class: 'todo-undo', role: 'status' }, [
     el('span', {}, ['已删除 · ']),
-    undo
+    button
   ])
 }
 
@@ -259,9 +326,11 @@ function renderRow(
   item: TodoItem,
   repos: string[],
   editing: boolean,
+  editDraft: TodoEditDraft | null,
   actions: {
     onEdit: (id: string) => void
     onCancelEdit: () => void
+    onDraftChanged: (draft: TodoEditDraft) => void
     onChanged: () => void
     onDeleted: (item: TodoItem) => void
   }
@@ -295,7 +364,7 @@ function renderRow(
     el('div', { class: 'todo-actions' }, editing ? [] : [edit, remove])
   ])
 
-  const main = editing ? renderEditor(item, repos, actions) : renderRead(item)
+  const main = editing ? renderEditor(item, repos, editDraft, actions) : renderRead(item)
   const row = el('article', {
     class: editing ? 'todo-row is-editing' : item.completed ? 'todo-row is-done' : 'todo-row',
     'data-row-id': item.id
@@ -320,20 +389,38 @@ function renderRead(item: TodoItem): HTMLElement {
 function renderEditor(
   item: TodoItem,
   repos: string[],
-  actions: { onCancelEdit: () => void, onChanged: () => void }
+  draft: TodoEditDraft | null,
+  actions: {
+    onCancelEdit: () => void
+    onDraftChanged: (draft: TodoEditDraft) => void
+    onChanged: () => void
+  }
 ): HTMLElement {
-  const text = el('input', { type: 'text', value: item.text, 'aria-label': '待办内容', maxlength: '500' })
+  const currentDraft = draft?.id === item.id
+    ? draft
+    : { id: item.id, text: item.text, repo: item.repo ?? '', waiting: item.waiting }
+  const text = el('input', { type: 'text', 'aria-label': '待办内容', maxlength: '500' })
+  text.value = currentDraft.text
   const repo = el('input', {
     type: 'text',
-    value: item.repo ?? '',
     'aria-label': '仓库标签',
     placeholder: 'owner/repo，可选',
     list: `repo-${item.id}`
   })
+  repo.value = currentDraft.repo
   const list = el('datalist', { id: `repo-${item.id}` })
   for (const name of repos) list.append(el('option', { value: name }))
   const waiting = el('input', { type: 'checkbox' })
-  waiting.checked = item.waiting
+  waiting.checked = currentDraft.waiting
+  const saveDraft = (): void => actions.onDraftChanged({
+    id: item.id,
+    text: text.value,
+    repo: repo.value,
+    waiting: waiting.checked
+  })
+  text.addEventListener('input', saveDraft)
+  repo.addEventListener('input', saveDraft)
+  waiting.addEventListener('change', saveDraft)
   const error = el('p', { class: 'todo-error', role: 'alert' })
   error.hidden = true
   const save = el('button', { type: 'button', class: 'primary' }, ['保存'])
@@ -355,10 +442,9 @@ function renderEditor(
     })
   })
   text.addEventListener('keydown', event => {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      save.click()
-    }
+    if (event.key !== 'Enter' || event.isComposing) return
+    event.preventDefault()
+    save.click()
   })
   return el('div', { class: 'todo-main todo-editor' }, [
     text,

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ArckeepApi, TodoItem } from '../src/shared/types.js'
 
 const MARKUP = `
@@ -70,8 +70,7 @@ describe('quick capture Enter', () => {
     view.text.value = '从正文记下'
     view.repo.value = 'example/demo'
     pressEnter(view.text)
-    await Promise.resolve()
-    await Promise.resolve()
+    await vi.waitFor(() => expect(view.closed).toEqual(['saved']))
     expect(view.created).toEqual([{ text: '从正文记下', repo: 'example/demo', waiting: false }])
     expect(view.closed).toEqual(['saved'])
   })
@@ -81,8 +80,7 @@ describe('quick capture Enter', () => {
     view.text.value = '从仓库框记下'
     view.repo.value = 'example/demo'
     pressEnter(view.repo)
-    await Promise.resolve()
-    await Promise.resolve()
+    await vi.waitFor(() => expect(view.closed).toEqual(['saved']))
     expect(view.created).toEqual([{ text: '从仓库框记下', repo: 'example/demo', waiting: false }])
     expect(view.closed).toEqual(['saved'])
   })
@@ -92,8 +90,7 @@ describe('quick capture Enter', () => {
     view.text.value = '没有仓库也记下'
     view.repo.value = ''
     pressEnter(view.text)
-    await Promise.resolve()
-    await Promise.resolve()
+    await vi.waitFor(() => expect(view.closed).toEqual(['saved']))
     expect(view.created).toEqual([{ text: '没有仓库也记下', repo: null, waiting: false }])
     expect(view.closed).toEqual(['saved'])
   })

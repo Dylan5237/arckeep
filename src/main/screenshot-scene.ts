@@ -23,13 +23,19 @@ export const SCREENSHOT_SCENES = [
   'todos-delete',
   'todos-narrow',
   'todos-split',
+  'prompts',
+  'prompts-narrow',
+  'prompts-empty',
   'waiting',
   'waiting-empty',
   'waiting-no-token',
   'waiting-invalid-token',
   'waiting-loading',
+  'waiting-auth-checking',
   'waiting-rate-limit',
   'waiting-narrow',
+  'waiting-apo',
+  'waiting-apo-narrow',
   'waiting-hover',
   'waiting-ignore',
   'waiting-watch',
@@ -40,6 +46,10 @@ export const SCREENSHOT_SCENES = [
   'waiting-maybe-only',
   'waiting-maybe-collapsed',
   'overview',
+  'overview-progress',
+  'overview-progress-narrow',
+  'overview-progress-expanded',
+  'overview-progress-errors',
   'overview-collapsed',
   'overview-archived',
   'overview-empty',
@@ -47,6 +57,7 @@ export const SCREENSHOT_SCENES = [
   'overview-no-token',
   'overview-invalid-token',
   'overview-loading',
+  'overview-auth-checking',
   'overview-row-error',
   'overview-narrow',
   'overview-chip-hover',
@@ -83,6 +94,13 @@ export function screenshotWindowSize(scene: ScreenshotScene): { width: number, h
 }
 
 function screenshotFrame(scene: ScreenshotScene): { width: number, height: number } {
+  if (scene === 'overview-progress-narrow') return { width: 800, height: 1400 }
+  if (scene === 'overview-progress-expanded') return { width: 1180, height: 1500 }
+  if (scene.startsWith('overview-progress')) return { width: 1180, height: 1120 }
+  if (scene === 'waiting-apo') return { width: 1120, height: 880 }
+  if (scene === 'waiting-apo-narrow') return { width: 800, height: 960 }
+  if (scene === 'prompts-narrow') return { width: 720, height: 860 }
+  if (scene === 'prompts' || scene === 'prompts-empty') return { width: 1120, height: 860 }
   if (scene === 'waiting-narrow' || scene === 'overview-narrow') return { width: 800, height: 1680 }
   if (scene === 'tools-narrow' || scene === 'narrow' || scene === 'todos-narrow') return { width: 800, height: 760 }
   if (scene === 'todos-split') return { width: 800, height: 1280 }
@@ -144,7 +162,8 @@ export function screenshotShowsMainWindow(scene: ScreenshotScene): boolean {
     && scene !== 'capture-saved'
 }
 
-export function screenshotStartPage(scene: ScreenshotScene): 'inbox' | 'projects' | 'settings' | 'tools' | 'todos' {
+export function screenshotStartPage(scene: ScreenshotScene): 'inbox' | 'projects' | 'settings' | 'tools' | 'todos' | 'prompts' {
+  if (scene.startsWith('prompts')) return 'prompts'
   if (screenshotOpensSettings(scene)) return 'settings'
   if (scene.startsWith('overview')) return 'projects'
   if (screenshotOpensTodos(scene)) return 'todos'
@@ -153,6 +172,9 @@ export function screenshotStartPage(scene: ScreenshotScene): 'inbox' | 'projects
 }
 
 export function screenshotReadyText(scene: ScreenshotScene): string {
+  if (scene.startsWith('overview-progress')) return 'Command Center #1'
+  if (scene === 'waiting-apo' || scene === 'waiting-apo-narrow') return 'EXCEPTION ACCEPT'
+  if (scene === 'overview-auth-checking' || scene === 'waiting-auth-checking') return '正在检查 GitHub 认证'
   const toolText = toolScreenshotExpectation(scene)
   if (toolText) return toolText
   if (scene === 'connected') return MOCK_GITHUB_LOGIN
@@ -177,7 +199,7 @@ export function screenshotReadyText(scene: ScreenshotScene): string {
   if (scene === 'overview-invalid-token') return 'GitHub 认证无效或已过期'
   if (scene === 'overview-loading') return '正在刷新'
   if (scene === 'overview-row-error') return '仓库不存在或无权访问'
-  if (scene === 'overview-settings') return '没有单独的最近推送窗口'
+  if (scene === 'overview-settings') return '仓库查询范围'
   return '等我处理'
 }
 

@@ -102,6 +102,12 @@ export function partitionDismissals(
       waitingDays: draft.waitingDays,
       daysEstimated: draft.daysEstimated,
       updatedAt: draft.updatedAt,
+      waitingSince: draft.reasonDetails
+        .filter(detail => detail.at && detail.estimated === draft.daysEstimated)
+        .map(detail => detail.at as string)
+        .filter(at => Number.isFinite(Date.parse(at)))
+        .sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null,
+      quickActions: draft.quickActions ?? [],
       ignored: deferred,
       parentNumber: draft.parentNumber,
       parent: draft.parent,

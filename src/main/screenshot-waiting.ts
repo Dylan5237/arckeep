@@ -2,6 +2,8 @@ import { sampleWaitingRows } from '../shared/waiting/sample.js'
 import type { WaitingSnapshot } from '../shared/waiting/types.js'
 import type { IpcResult } from '../shared/types.js'
 import type { ScreenshotScene } from './screenshot-scene.js'
+import { pendingApoActions } from '../shared/waiting/apo-actions.js'
+import { blankRecord } from '../shared/waiting/parse-github.js'
 
 function base(partial: Partial<WaitingSnapshot>): WaitingSnapshot {
   return {
@@ -23,6 +25,26 @@ function base(partial: Partial<WaitingSnapshot>): WaitingSnapshot {
 }
 
 export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapshot {
+  if (scene === 'waiting-apo' || scene === 'waiting-apo-narrow') {
+    const now = Date.now()
+    const sample = sampleWaitingRows()[0]!
+    const rows = [
+      { number: 42, minutes: 92, token: 'FREEZE ACK', repo: 'northwind/workbench', title: '确认下一阶段的范围与验收标准' },
+      { number: 87, minutes: 8, token: 'EXCEPTION ACCEPT', repo: 'northwind/agent-project', title: '合同变更：确认接口调整的影响与处理方式' },
+      { number: 63, minutes: 38, token: 'PHASE ACCEPT', repo: 'northwind/workbench', title: '验证材料已齐，等待阶段验收' }
+    ].map(item => {
+      const at = new Date(now - item.minutes * 60_000).toISOString()
+      const url = `https://github.com/${item.repo}/issues/${item.number}`
+      const text = `请处置人 @mock-user 在本 Issue 评论 ${item.token}。`
+      return { ...sample, id: `${item.repo}#${item.number}`, repo: item.repo, number: item.number, type: 'issue' as const,
+        title: item.title, url, updatedAt: at, waitingSince: at, waitingDays: 0, daysEstimated: false,
+        tier: 'strong' as const, ignored: false, parent: null, parentNumber: null, childCount: 0,
+        reasons: ['要人动手'], action: '要你动手', signalText: text, ownRequest: false,
+        quickActions: pendingApoActions(blankRecord({ repo: item.repo, number: item.number, kind: 'issue', title: item.title,
+          url, body: text, createdAt: at, updatedAt: at, viewerLogin: 'mock-user', commentsTruncated: false })) }
+    })
+    return base({ rows, hiddenCount: 0, refreshedAt: new Date(now).toISOString() })
+  }
   if (scene === 'waiting' || scene === 'waiting-narrow' || scene === 'waiting-hover' || scene === 'waiting-ignore' || scene === 'waiting-related' || scene === 'waiting-related-open') {
     const rows = sampleWaitingRows().sort((left, right) => right.waitingDays - left.waitingDays || left.title.localeCompare(right.title))
     return base({ rows, hiddenCount: 4 })
@@ -117,6 +139,7 @@ export function screenshotWaitingSnapshot(scene: ScreenshotScene): WaitingSnapsh
   if (scene === 'waiting-no-token') return base({ auth: 'missing', refreshedAt: null, hiddenCount: 0 })
   if (scene === 'waiting-invalid-token') return base({ auth: 'invalid', refreshedAt: null, hiddenCount: 0 })
   if (scene === 'waiting-loading') return base({ refreshing: true, refreshedAt: null, hiddenCount: 0 })
+  if (scene === 'waiting-auth-checking') return base({ auth: 'unknown', refreshing: true, refreshedAt: null, hiddenCount: 0 })
   if (scene === 'waiting-rate-limit') {
     const rows = sampleWaitingRows().sort((left, right) => right.waitingDays - left.waitingDays).slice(0, 8)
     return base({
@@ -143,7 +166,7 @@ export function createScreenshotWaiting(scene: ScreenshotScene): {
   observedLocalLinks: () => readonly { github: string, path: string }[]
 } {
   const snapshot = screenshotWaitingSnapshot(scene)
-  const refresh = scene === 'waiting-loading'
+  const refresh = scene === 'waiting-loading' || scene === 'waiting-auth-checking'
     ? () => new Promise<WaitingSnapshot>(() => {})
     : () => Promise.resolve(snapshot)
   const ok = (): IpcResult<WaitingSnapshot> => ({ ok: true, data: snapshot })

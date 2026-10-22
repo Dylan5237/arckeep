@@ -12,6 +12,15 @@ html, body {
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+.capture-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.capture-heading select { font: inherit; color: inherit; border: 1px solid var(--arckeep-line); border-radius: 7px; background: var(--arckeep-surface); padding: 5px 10px; }
+
+#idea-text { width: 100%; resize: none; font: inherit; color: inherit; border: 1px solid var(--arckeep-line); border-radius: 7px; background: var(--arckeep-surface); padding: 8px 10px; }
+#idea-text:focus-visible { outline: 2px solid var(--arckeep-ink); outline-offset: 1px; }
+#capture-save { align-self: flex-start; border: 0; border-radius: 7px; background: var(--arckeep-ink); color: var(--arckeep-surface); padding: 7px 12px; font: inherit; cursor: pointer; }
+#capture-save:focus-visible { outline: 2px solid var(--arckeep-ink); outline-offset: 2px; }
 
 body {
   padding: 16px 18px 16px 6px;

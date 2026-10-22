@@ -133,8 +133,16 @@ export function mergeRecords(records: readonly GithubRecord[]): GithubRecord[] {
     existing.lastPushedAt = laterIso(existing.lastPushedAt, record.lastPushedAt)
     existing.lastReviewAt = laterIso(existing.lastReviewAt, record.lastReviewAt)
     existing.parentNumber = existing.parentNumber ?? record.parentNumber
-    if (!existing.body && record.body) existing.body = record.body
-    if (record.comments.length > existing.comments.length) existing.comments = record.comments.map(comment => ({ ...comment }))
+    const newer = Date.parse(record.updatedAt) > Date.parse(existing.updatedAt)
+    if (newer) {
+      existing.updatedAt = record.updatedAt
+      existing.body = record.body
+      existing.title = record.title
+    } else if (!existing.body && record.body) existing.body = record.body
+    if (newer || record.comments.length > existing.comments.length) {
+      existing.comments = record.comments.map(comment => ({ ...comment }))
+      existing.commentsTruncated = record.commentsTruncated
+    }
     for (const label of record.labels) {
       if (!existing.labels.includes(label)) existing.labels.push(label)
     }

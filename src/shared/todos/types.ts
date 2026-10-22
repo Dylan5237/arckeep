@@ -31,6 +31,8 @@ export interface TodoUpdate extends TodoInput {
 }
 
 export interface CaptureDraft {
+  /** Absent on legacy drafts and while capturing a todo. */
+  kind?: 'todo' | 'idea'
   text: string
   repo: string
   waiting: boolean

@@ -1,5 +1,6 @@
 import { primaryAction } from './action.js'
 import { laterIso, waitingDays } from './days.js'
+import { pendingApoActions } from './apo-actions.js'
 import { waitingExcerpt } from './human-text.js'
 import { escapeRegex } from './parse-github.js'
 import { compileUserRegexList } from './rules.js'
@@ -220,6 +221,13 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
   const reasons: ClassifiedReason[] = []
   let tier: WaitingTier = 'weak'
   let signal: WaitingSignal | null = null
+  const quickActions = !closed && config.sources.humanIssues ? pendingApoActions(record) : []
+  const firstAction = quickActions[0]
+  if (firstAction && (humanAllowed || prTextAllowed)) {
+    reasons.push(fallbackUpdated(WAITING_REASONS.human, record, firstAction.requestAt))
+    tier = 'strong'
+    signal = { rule: 'APO 人工评论', excerpt: firstAction.requestText }
+  }
 
   if (review) {
     reasons.push(fallbackUpdated(WAITING_REASONS.review, record, record.reviewRequestedAt))
@@ -270,7 +278,7 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
   if (tier === 'strong' && review && text) {
     signal = { rule: WAITING_REASONS.review, excerpt: `${reviewExcerpt(record)}。${text.excerpt}` }
   }
-  return draftFromReasons({
+  const draft = draftFromReasons({
     id: `${record.kind}:${record.repo}#${record.number}`,
     repo: record.repo,
     number: record.number,
@@ -284,6 +292,8 @@ export function classifyRecord(record: GithubRecord, config: WaitingConfig, now:
     tier,
     parked: repoIsParked(record.repoDescription ?? '', record.repoTopics ?? [], config.parkedMarkers)
   }, now)
+  if (tier === 'strong') draft.quickActions = quickActions
+  return draft
 }
 
 export function draftFromReasons(input: {

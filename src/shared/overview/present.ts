@@ -1,4 +1,4 @@
-import { relativeLabel } from '../waiting/local-time.js'
+import { relativeLabel } from '../time.js'
 import type { CiState, OverviewRow, OverviewWarning } from './types.js'
 
 const CI_NOTE: Partial<Record<CiState, string>> = {
@@ -22,7 +22,8 @@ export function ciSecondaryNote(row: OverviewRow): string | null {
 
 export function overviewMetaText(row: OverviewRow, now: Date): string {
   if (row.error) return row.error
-  const parts = [row.lastCommitAt ? relativeLabel(row.lastCommitAt, now) : '尚无提交']
+  const parts = [row.lastActivityAt ? `最近活动 ${relativeLabel(row.lastActivityAt, now)}`
+    : row.lastCommitAt ? relativeLabel(row.lastCommitAt, now) : '尚无提交']
   if (row.openPrCount > 0) parts.push(`${row.openPrCount} 个 PR 待合并`)
   const ci = ciSecondaryNote(row)
   if (ci) parts.push(ci)

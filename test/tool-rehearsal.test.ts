@@ -37,6 +37,22 @@ function exampleActions(): ToolAction[] {
   return validated.config.actions
 }
 
+function commandAction(): ToolAction {
+  return {
+    id: 'command-test',
+    title: '输出参数',
+    type: 'run-command',
+    shell: 'powershell',
+    cwd: '{{cwd}}',
+    previewCommand: 'Write-Output {{name}}',
+    command: 'Write-Output {{name}}; Write-Output "confirmed"',
+    params: [
+      { key: 'cwd', label: '目录', input: 'directory', required: true },
+      { key: 'name', label: '名称', required: true }
+    ]
+  }
+}
+
 describe('dry-run output becomes a file summary', () => {
   it('parses created files into one sentence', () => {
     expect(parseCreatedFiles(created)).toEqual([
@@ -103,11 +119,7 @@ describe('dry-run output becomes a file summary', () => {
   })
 
   it('plans the dry-run with PowerShell quotes and does not confirm a failed run', async () => {
-    const validated = validateToolShelfText(toolShelfExampleText())
-    if (!validated.ok) throw new Error(validated.error)
-    const apo = validated.config.actions.find(action => action.id === 'apo-init')
-    if (!apo) throw new Error('missing apo')
-    const preview = buildPreview(apo, { cwd: 'C:\\work\\demo', name: "o'hare" }, 'C:\\work\\demo')
+    const preview = buildPreview(commandAction(), { cwd: 'C:\\work\\demo', name: "o'hare" }, 'C:\\work\\demo')
     let calls = 0
     const failed = await rehearsePreview(preview, {
       platform: 'win32',
@@ -115,9 +127,9 @@ describe('dry-run output becomes a file summary', () => {
       run: async plan => {
         calls += 1
         const script = powershellScriptFromPlan(plan)
-        expect(script).toContain("apo init --dry-run --name 'o''hare'")
-        expect(script).toContain('exit $LASTEXITCODE')
-        expect(script).not.toContain('apo init --name')
+        expect(script).toContain("Write-Output 'o''hare'")
+        expect(script).toContain('exit $global:LASTEXITCODE')
+        expect(script).not.toContain('Write-Output "confirmed"')
         return { code: 3, stdout: '', stderr: '拒绝初始化', aborted: false }
       }
     })
@@ -126,12 +138,12 @@ describe('dry-run output becomes a file summary', () => {
     expect(failed.summary).toContain('退出码 3')
     expect(failed.summary).not.toContain('退出码 1')
     expect(foldedCommandLines({ ...preview, rehearsal: failed }).join('\n')).not.toContain('--dry-run')
-    expect(foldedCommandLines(preview).join('\n')).toContain("apo init --name 'o''hare'")
+    expect(foldedCommandLines(preview).join('\n')).toContain("Write-Output 'o''hare'; Write-Output \"confirmed\"")
     expect(foldedCommandLines(preview).join('\n')).toContain('shell: PowerShell')
   })
 
   it('does not spawn when the working directory is missing', async () => {
-    const preview = buildPreview(exampleActions()[2], { cwd: 'C:\\work\\demo', name: 'demo' }, 'C:\\work\\demo')
+    const preview = buildPreview(commandAction(), { cwd: 'C:\\work\\demo', name: 'demo' }, 'C:\\work\\demo')
     const rehearsal = await rehearsePreview(preview, {
       platform: 'win32',
       cwdExists: () => false,
@@ -156,11 +168,16 @@ describe('read-only actions skip the confirm dialog', () => {
     expect(directActionLabel(openRepo)).toBe('打开')
     expect(directActionLabel(openFolder)).toBe('打开')
     expect(directActionLabel(note)).toBe('复制')
-    expect(confirmsBeforeRun(init)).toBe(true)
-    expect(paramsSubmitsToPreview(init)).toBe(true)
-    expect(entryStep(init)).toBe('params')
-    expect(entryStep({ ...init, params: undefined })).toBe('preview')
-    expect(directActionLabel(init)).toBe('预览')
+    expect(confirmsBeforeRun(init)).toBe(false)
+    expect(paramsSubmitsToPreview(init)).toBe(false)
+    expect(entryStep(init)).toBe('run')
+    expect(directActionLabel(init)).toBe('复制')
+    const command = commandAction()
+    expect(confirmsBeforeRun(command)).toBe(true)
+    expect(paramsSubmitsToPreview(command)).toBe(true)
+    expect(entryStep(command)).toBe('params')
+    expect(entryStep({ ...command, params: undefined })).toBe('preview')
+    expect(directActionLabel(command)).toBe('预览')
   })
 
   it('describes an open action before the button runs it', () => {

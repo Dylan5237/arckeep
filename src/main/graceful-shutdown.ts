@@ -1,11 +1,15 @@
+import { withDeadline } from '../shared/task-scope.js'
+
 export function createGracefulShutdownHandler({
   quit,
   shutdown,
-  onError = console.error
+  onError = console.error,
+  timeoutMs = 15_000
 }: {
   quit: () => void
   shutdown: () => unknown
   onError?: (error: unknown) => void
+  timeoutMs?: number
 }): (event?: { preventDefault?: () => void }) => Promise<void> | undefined {
   if (typeof quit !== 'function' || typeof shutdown !== 'function') {
     throw new TypeError('quit and shutdown must be functions')
@@ -20,10 +24,10 @@ export function createGracefulShutdownHandler({
     if (shutdownPromise) return shutdownPromise
 
     shutdownPromise = Promise.resolve()
-      .then(() => shutdown())
+      .then(() => withDeadline(Promise.resolve().then(shutdown), timeoutMs, '应用关闭清理超时'))
       .then(() => undefined)
       .catch(error => {
-        onError(error)
+        try { onError(error) } catch { /* Failure reporting must not block exit. */ }
       })
       .finally(() => {
         allowQuit = true

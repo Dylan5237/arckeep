@@ -262,6 +262,8 @@ export function parseGithubNode(node: unknown, flags: ParseFlags): GithubRecord 
     isDraft: node.isDraft === true,
     labels: labelsOf(node),
     comments,
+    commentsTruncated: isRecord(node.comments) && typeof node.comments.totalCount === 'number'
+      ? node.comments.totalCount > comments.length : comments.length >= 8,
     repoDescription: repository ? text(repository.description) : '',
     repoTopics: topicsOf(repository),
     parentNumber: isRecord(node.parent) ? numberValue(node.parent.number) : null,

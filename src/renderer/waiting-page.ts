@@ -1,5 +1,11 @@
-import { localAbsolute, localClock, relativeLabel } from '../shared/waiting/local-time'
+import { elapsedTime, localAbsolute, localClock, relativeLabel } from '../shared/time'
+import { orderList, type ListOrder } from '../shared/list-order'
+import { listSortControl, readListOrder } from './list-sort'
+import type { ApoQuickAction } from '../shared/waiting/apo-actions'
 import type { WaitingRow, WaitingSnapshot } from '../shared/waiting/types'
+import { createRefreshStatus } from './refresh-status'
+import { DEFAULT_REPO_FETCH_WINDOW, type RepoFetchWindow } from '../shared/repo-fetch-window'
+import { repoFetchWindowControl } from './repo-fetch-window'
 import { bindExclusiveRowActions } from './exclusive-rows'
 
 const PROVENANCE = new Set(['指派', '提及', '请求 review', '状态文档'])
@@ -70,12 +76,6 @@ function band(days: number): 'high' | 'mid' | 'low' {
   return 'low'
 }
 
-const BAND_LABEL = {
-  high: '两周以上',
-  mid: '3–13 天',
-  low: '近 3 天'
-} as const
-
 /** Collapsed 「可能相关」 header. The count is visible without opening the section. */
 export function maybeRelatedLabel(count: number): string {
   return `可能相关 · ${count}`
@@ -107,7 +107,12 @@ function externalIcon(): SVGElement {
 }
 
 function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
+  order: ListOrder
+  sort: (order: ListOrder) => void
+  comment: (rowId: string, action: ApoQuickAction, checkOnly?: boolean) => void
+  commentState: (action: ApoQuickAction) => { busy: boolean, message: string, blocked: boolean }
   refresh: () => void
+  setWindow: (value: RepoFetchWindow) => void
   settings: () => void
   todos: () => void
   snooze: (id: string, days: 1 | 3 | 7) => void
@@ -118,13 +123,14 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
   toggleIgnored: (show: boolean) => void
   rememberMaybe: (open: boolean) => void
   open: (url: string) => void
-}): void {
-  const mainRows = snapshot.rows.filter(row => row.tier !== 'weak')
-  const maybeRows = snapshot.rows.filter(row => row.tier === 'weak')
+}): HTMLElement {
+  const sorted = orderList(snapshot.rows, handlers.order, { time: row => row.updatedAt, name: row => row.repo, id: row => row.id })
+  const mainRows = sorted.filter(row => row.tier !== 'weak')
+  const maybeRows = sorted.filter(row => row.tier === 'weak')
   const oldest = mainRows.reduce((max, row) => Math.max(max, row.waitingDays), 0)
   const summary = mainRows.length === 0
-    ? '打开这一页就会刷新。'
-    : `${mainRows.length} 件待处理 · 最久的一件已经等了 ${oldest} 天`
+    ? '先显示上次结果，需要最新数据时可点刷新。'
+    : `${mainRows.length} 件待处理 · 最久的一件已经等了 ${oldest > 0 ? `${oldest} 天` : '不足 1 天'}`
   const refreshed = snapshot.refreshedAt
     ? relativeLabel(snapshot.refreshedAt, new Date())
     : '尚未刷新'
@@ -143,7 +149,12 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
   ignoredInput.checked = snapshot.showIgnored
   ignoredInput.addEventListener('change', () => handlers.toggleIgnored(ignoredInput.checked))
   ignored.prepend(ignoredInput)
-  toolbar.append(refresh, ignored)
+  toolbar.append(refresh, repoFetchWindowControl(snapshot.repoFetchWindow ?? DEFAULT_REPO_FETCH_WINDOW, handlers.setWindow, snapshot.refreshing), listSortControl('waiting', handlers.order, handlers.sort), ignored)
+  if (snapshot.refreshing) {
+    toolbar.append(el('span', {
+      class: 'waiting-stamp refresh-elapsed', 'data-refresh-elapsed': '', 'aria-live': 'off'
+    }, ['已用 0 秒']))
+  }
 
   const page = el('section', { class: 'page waiting' }, [
     el('h1', {}, ['等我处理']),
@@ -179,7 +190,9 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
     page.append(renderHiddenRepos(snapshot.hiddenRepos, handlers.unhideRepo))
   }
   if (snapshot.refreshing && snapshot.rows.length === 0) {
-    page.append(el('p', { class: 'waiting-loading', role: 'status' }, ['正在刷新…']))
+    page.append(el('p', { class: 'waiting-loading', role: 'status' }, [
+      snapshot.auth === 'unknown' ? '正在检查 GitHub 认证…' : '正在刷新…'
+    ]))
   } else if (!snapshot.refreshing && mainRows.length === 0 && maybeRows.length === 0 && snapshot.auth === 'ok') {
     page.append(el('p', { class: 'waiting-empty' }, [waitingEmptyCopy(0)]))
   } else {
@@ -201,6 +214,7 @@ function paint(host: HTMLElement, snapshot: WaitingSnapshot, handlers: {
   }
   bindExclusiveRowActions(page, '.waiting-row')
   host.replaceChildren(page)
+  return page
 }
 
 function renderHiddenRepos(repos: readonly string[], unhideRepo: (repo: string) => void): HTMLElement {
@@ -219,6 +233,8 @@ function renderHiddenRepos(repos: readonly string[], unhideRepo: (repo: string) 
 }
 
 function renderMaybe(rows: readonly WaitingRow[], handlers: {
+  comment: (rowId: string, action: ApoQuickAction, checkOnly?: boolean) => void
+  commentState: (action: ApoQuickAction) => { busy: boolean, message: string, blocked: boolean }
   snooze: (id: string, days: 1 | 3 | 7) => void
   ignore: (id: string) => void
   restore: (id: string) => void
@@ -241,6 +257,8 @@ function renderMaybe(rows: readonly WaitingRow[], handlers: {
 }
 
 function renderGroups(rows: readonly WaitingRow[], handlers: {
+  comment: (rowId: string, action: ApoQuickAction, checkOnly?: boolean) => void
+  commentState: (action: ApoQuickAction) => { busy: boolean, message: string, blocked: boolean }
   snooze: (id: string, days: 1 | 3 | 7) => void
   ignore: (id: string) => void
   restore: (id: string) => void
@@ -249,24 +267,13 @@ function renderGroups(rows: readonly WaitingRow[], handlers: {
   todos: () => void
 }): HTMLElement {
   const list = el('div', { class: 'waiting-groups' })
-  let current: 'high' | 'mid' | 'low' | null = null
-  let group: HTMLElement | null = null
-  for (const row of rows) {
-    const age = band(row.waitingDays)
-    if (age !== current) {
-      current = age
-      const count = rows.filter(item => band(item.waitingDays) === age).length
-      group = el('section', { class: `age-group age-${age}` }, [
-        el('h2', {}, [`${BAND_LABEL[age]} · ${count}`])
-      ])
-      list.append(group)
-    }
-    group?.append(renderRow(row, handlers))
-  }
+  for (const row of rows) list.append(renderRow(row, handlers))
   return list
 }
 
 function renderRow(row: WaitingRow, handlers: {
+  comment: (rowId: string, action: ApoQuickAction, checkOnly?: boolean) => void
+  commentState: (action: ApoQuickAction) => { busy: boolean, message: string, blocked: boolean }
   snooze: (id: string, days: 1 | 3 | 7) => void
   ignore: (id: string) => void
   restore: (id: string) => void
@@ -275,13 +282,14 @@ function renderRow(row: WaitingRow, handlers: {
   todos: () => void
 }): HTMLElement {
   const age = band(row.waitingDays)
+  const duration = row.waitingDays > 0 ? { value: row.waitingDays, unit: '天' } : elapsedTime(row.waitingSince, new Date())
+  const ageText = !duration ? '不足 1 天' : duration.unit === '刚刚' ? '刚刚' : `${duration.value} ${duration.unit}`
   const days = el('span', {
     class: `days days-${age}`,
-    title: row.daysEstimated ? '估算：没有精确的事件时间，按 updated_at 计算' : '从原因发生时算起'
+    title: `${row.daysEstimated ? '估算等待时长' : '从原因发生时算起'}${row.waitingSince ? ` · ${localAbsolute(row.waitingSince)}` : ''}`
   }, [
     row.daysEstimated ? '约' : '',
-    String(row.waitingDays),
-    el('span', { class: 'unit' }, ['天'])
+    ageText
   ])
   const title = el('button', {
     type: 'button',
@@ -309,12 +317,16 @@ function renderRow(row: WaitingRow, handlers: {
   const via = viaNames.length > 0
     ? el('span', { class: 'waiting-via' }, [viaNames.join(' · ')])
     : null
-  const where = row.number === null ? row.repo : `${row.repo} #${row.number}`
   const family = [
     row.parentNumber != null ? `属于 #${row.parentNumber}` : '',
     row.childCount > 0 ? `含 ${row.childCount} 个子项` : ''
   ].filter(Boolean).join(' ')
-  const meta = el('span', { class: 'waiting-meta' }, [family ? `${where} ${family}` : where])
+  const meta = el('span', { class: 'waiting-meta waiting-identity' }, [
+    el('strong', { class: 'waiting-repo' }, [row.repo]),
+    ...(row.number === null ? [] : [el('strong', { class: 'waiting-number' }, [`#${row.number}`])]),
+    ...(family ? [el('span', { class: 'waiting-family' }, [family])] : [])
+  ])
+  meta.title = `最近活动 ${localAbsolute(row.updatedAt)}`
   const actions = el('div', { class: 'row-actions' })
   if (row.ignored) {
     const restore = el('button', { type: 'button', class: 'ghost tiny' }, ['恢复'])
@@ -354,10 +366,31 @@ function renderRow(row: WaitingRow, handlers: {
     : row.tier === 'weak'
       ? null
       : el('p', { class: 'waiting-reason' }, [row.reasons.join(' · ') || '等待'])
+  const quick = el('div', { class: 'apo-quick-actions' })
+  if (row.tier !== 'weak' && !row.ignored) for (const action of row.quickActions ?? []) {
+    const state = handlers.commentState(action)
+    const button = el('button', {
+      type: 'button', class: 'ghost apo-comment-button', 'data-apo-action': action.id,
+      title: `以 @${action.viewerLogin} 向 ${action.target.repo} #${action.target.number} 评论：${action.token}\n请求：${action.requestText}`
+    }, [state.busy ? '正在评论…' : action.token])
+    button.disabled = state.busy || state.blocked
+    button.addEventListener('click', () => handlers.comment(row.id, action))
+    const target = el('button', { type: 'button', class: 'ghost tiny apo-target' }, [`${action.target.repo} #${action.target.number}`])
+    target.addEventListener('click', () => handlers.open(action.target.url))
+    const controls: Node[] = [button, target]
+    if (!state.busy && (action.state === 'unknown' || state.message.includes('核对 GitHub'))) {
+      const check = el('button', { type: 'button', class: 'ghost tiny apo-check' }, ['核对评论结果'])
+      check.title = '只读取 GitHub 评论，不重新发送'
+      check.addEventListener('click', () => handlers.comment(row.id, action, true))
+      controls.push(check)
+    }
+    controls.push(el('span', { class: 'apo-comment-status', role: 'status' }, [state.message]))
+    quick.append(el('div', { class: 'apo-action' }, controls))
+  }
   return el('div', {
     class: `waiting-row age-${age}${row.ignored ? ' is-ignored' : ''}`,
     'data-row-id': row.id
-  }, [...body, reason].filter((node): node is Node | string => node != null))
+  }, [...body, reason, ...(quick.childElementCount ? [quick] : [])].filter((node): node is Node | string => node != null))
 }
 
 export async function renderWaiting(
@@ -368,7 +401,7 @@ export async function renderWaiting(
     rows: [],
     refreshedAt: null,
     refreshing: true,
-    auth: 'ok',
+    auth: 'unknown',
     rateLimitResetAt: null,
     sourceErrors: [],
     notices: [],
@@ -379,9 +412,24 @@ export async function renderWaiting(
     maybeWhenEmpty: null,
     maybeWhenListed: null
   }
+  let current = loading
+  let requestVersion = 0
+  let refreshing = false
+  let order = readListOrder('waiting')
+  const commentStates = new Map<string, { busy: boolean, message: string, blocked: boolean }>()
+  const refreshStatus = createRefreshStatus(host)
   const apply = (snapshot: WaitingSnapshot) => {
-    paint(host, snapshot, {
+    if (!refreshStatus.ownsPage()) return
+    current = snapshot
+    refreshStatus.attach(paint(host, snapshot, {
+      order,
+      sort: value => { order = value; apply(current) },
+      comment: (rowId, action, checkOnly) => { void comment(rowId, action, checkOnly) },
+      commentState: action => commentStates.get(action.id) ?? {
+        busy: false, blocked: Boolean(action.state) || snapshot.auth !== 'ok', message: action.state === 'sent' ? '已评论' : action.state === 'unknown' ? '结果待核实，请先核对 GitHub' : ''
+      },
       refresh: () => { void reload() },
+      setWindow: value => { void setWindow(value) },
       settings: () => navigate('settings', { focusToken: true }),
       todos: () => navigate('todos'),
       snooze: (id, days) => { void act(api => api.snoozeWaiting(id, days)) },
@@ -392,24 +440,75 @@ export async function renderWaiting(
       toggleIgnored: show => { void act(api => api.setShowIgnored(show)) },
       rememberMaybe: open => { void act(api => api.setMaybeSectionOpen(open)) },
       open: url => { void window.arckeep.openExternal(url) }
-    })
+    }))
+  }
+  const comment = async (rowId: string, action: ApoQuickAction, checkOnly = false) => {
+    if (!refreshStatus.ownsPage() || commentStates.get(action.id)?.busy) return
+    commentStates.set(action.id, { busy: true, message: '', blocked: true })
+    apply(current)
+    try {
+      const result = await (checkOnly ? window.arckeep.checkWaitingApo(rowId, action.id) : window.arckeep.commentWaitingApo(rowId, action.id))
+      const unknown = result.ok && result.data.state === 'unknown'
+      commentStates.set(action.id, {
+        busy: false, blocked: result.ok || checkOnly || Boolean(action.state),
+        message: result.ok ? (unknown ? '结果待核实，请先核对 GitHub' : '已评论') : result.error
+      })
+    } catch {
+      commentStates.set(action.id, { busy: false, blocked: true, message: '未收到结果，请先核对 GitHub，勿重复评论' })
+    }
+    apply(current)
   }
   const act = async (call: (api: Window['arckeep']) => Promise<{ ok: boolean, error?: string, data?: WaitingSnapshot }>) => {
     const result = await call(window.arckeep)
-    if (result.ok && result.data) apply(result.data)
+    if (result.ok && result.data) apply({ ...result.data, refreshing: refreshing || result.data.refreshing })
   }
-  const reload = async () => {
-    apply({ ...loading, refreshing: true })
+  const setWindow = async (value: RepoFetchWindow) => {
+    if (!refreshStatus.ownsPage() || current.refreshing) return
+    const previous = current
+    apply({ ...current, refreshing: true })
     try {
-      apply(await window.arckeep.refreshWaiting())
+      const result = await window.arckeep.setRepoFetchWindow(value)
+      if (!result.ok) throw new Error(result.error)
+      current = { ...current, rows: [], refreshedAt: null, repoFetchWindow: value }
+      await reload()
     } catch (error) {
+      apply({ ...previous, refreshing: false, sourceErrors: [{ source: '查询范围', message: error instanceof Error ? error.message : '查询范围保存失败' }] })
+    }
+  }
+  const reload = async (force = true) => {
+    if (!refreshStatus.ownsPage()) return
+    const version = ++requestVersion
+    const finish = refreshStatus.start()
+    refreshing = true
+    apply({
+      ...current,
+      refreshing: true,
+      auth: current.auth === 'ok' ? 'ok' : 'unknown',
+      sourceErrors: current.auth === 'missing' || current.auth === 'invalid' ? [] : current.sourceErrors
+    })
+    try {
+      const snapshot = await window.arckeep.refreshWaiting(force)
+      if (version === requestVersion) apply(snapshot)
+    } catch (error) {
+      if (version !== requestVersion) return
       apply({
-        ...loading,
+        ...current,
         refreshing: false,
         sourceErrors: [{ source: '刷新', message: error instanceof Error ? error.message : '刷新失败' }]
       })
+    } finally {
+      if (version === requestVersion) refreshing = false
+      finish()
     }
   }
+  const finishLoading = refreshStatus.start()
   apply(loading)
-  await reload()
+  try {
+    apply(await window.arckeep.getWaiting())
+  } catch {
+    // A missing cache does not prevent a fresh request.
+  } finally {
+    finishLoading()
+  }
+  if (refreshStatus.ownsPage()) await reload(false)
 }

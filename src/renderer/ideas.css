@@ -1,0 +1,164 @@
+.ideas {
+  padding-bottom: 16px;
+}
+
+.ideas-composer {
+  padding-top: 16px;
+  padding-bottom: 18px;
+}
+
+.ideas-composer h2 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.ideas-composer textarea,
+.idea-editor textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 96px;
+  resize: vertical;
+  border: 1px solid var(--arckeep-line);
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: var(--arckeep-surface);
+  line-height: 1.45;
+}
+
+.ideas-repo-line {
+  margin-top: 8px;
+}
+
+.ideas-repo-line input,
+.idea-editor input {
+  width: 100%;
+  min-width: 0;
+}
+
+.ideas-compose-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.ideas-char-count {
+  color: var(--arckeep-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ideas-feedback:not(:empty) {
+  margin: 0 28px 12px;
+}
+
+.ideas-loading,
+.ideas-empty,
+.ideas-load-error {
+  margin: 0;
+  padding: 16px 28px 20px;
+  border-top: 1px solid var(--arckeep-hair);
+  color: var(--arckeep-muted);
+  font-size: 12.5px;
+}
+
+.ideas-load-error p {
+  margin: 0 0 10px;
+}
+
+.ideas-empty p {
+  margin: 0 0 10px;
+}
+
+.idea-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.idea-entry {
+  min-width: 0;
+  padding: 15px 28px 16px;
+  border-top: 1px solid var(--arckeep-hair);
+}
+
+.idea-entry-text {
+  margin: 0;
+  color: var(--arckeep-ink);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.idea-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.idea-stamp,
+.idea-repo {
+  color: var(--arckeep-muted);
+  font-size: 12px;
+}
+
+.idea-repo.chip {
+  padding: 3px 8px;
+}
+
+.idea-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.idea-actions button,
+.idea-edit-buttons button {
+  font-size: 12.5px;
+}
+
+.idea-editor {
+  width: 100%;
+}
+
+.idea-editor-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.idea-edit-buttons {
+  display: flex;
+  gap: 7px;
+}
+
+.ideas button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 700px) {
+  .ideas-composer {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .ideas-feedback:not(:empty) {
+    margin-right: 18px;
+    margin-left: 18px;
+  }
+
+  .ideas-loading,
+  .ideas-empty,
+  .ideas-load-error,
+  .idea-entry {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+}

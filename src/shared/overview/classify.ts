@@ -144,9 +144,11 @@ export function classifyRepo(
   const group = overviewGroup(facts, config, now)
   const stallBasis = stallBasisOf(facts)
   const base: OverviewRow = {
+    commandCenter: facts.commandCenter,
     name: facts.name,
     url: facts.url,
     lastCommitAt: facts.lastCommitAt,
+    lastActivityAt: recentActivityAt(facts),
     openPrCount: facts.openPrCount,
     ciState: facts.error ? 'unknown' : facts.ciState,
     warnings: [],

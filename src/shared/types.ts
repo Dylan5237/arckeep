@@ -1,15 +1,23 @@
 import type { OverviewConfig, OverviewSnapshot } from './overview/types.js'
+import type { IdeaInput, IdeaItem, IdeaUpdate } from './ideas/types.js'
+import type { PromptInput, PromptItem, PromptUpdate } from './prompts/types.js'
 import type { CaptureDraft, TodoItem, TodoUpdate } from './todos/types.js'
 import type { ToolFixture } from './tools/fixture.js'
 import type { KnownRepo } from './tools/repos.js'
 import type { ActionPreview, ToolAction, ToolRunEvent } from './tools/types.js'
 import type { WaitingConfig, WaitingSnapshot } from './waiting/types.js'
+import type { ApoCommentOutcome } from './waiting/apo-actions.js'
+import type { RepoFetchWindow } from './repo-fetch-window.js'
+import type { ClaudeSession, ClaudeSessionTranscript, ClaudeWorkspace } from './claude-sessions.js'
 
 export type { OverviewConfig, OverviewSnapshot } from './overview/types.js'
+export type { IdeaInput, IdeaItem, IdeaUpdate } from './ideas/types.js'
+export type { PromptInput, PromptItem, PromptUpdate } from './prompts/types.js'
 export type { WaitingConfig, WaitingSnapshot } from './waiting/types.js'
 export type { ToolFixture } from './tools/fixture.js'
 export type { KnownRepo } from './tools/repos.js'
 export type { ActionPreview, ToolAction, ToolRunEvent } from './tools/types.js'
+export type { ClaudeSession, ClaudeSessionMessage, ClaudeSessionTranscript, ClaudeWorkspace } from './claude-sessions.js'
 
 export const DEFAULT_HOTKEY = 'Ctrl+Alt+Space'
 
@@ -25,6 +33,7 @@ export interface PublicGithubAuth {
 
 export interface AppState {
   watchedRepos: string[]
+  repoFetchWindow: RepoFetchWindow
   /** Value shown in the hotkey field. A failed save keeps what was typed. */
   hotkey: string
   /** Combo registered with the OS, or null when nothing is live. */
@@ -54,6 +63,7 @@ export type IpcResult<T> = OkResult<T> | ErrResult
 export interface ArckeepApi {
   getState(): Promise<AppState>
   setRepos(repos: string[]): Promise<IpcResult<{ watchedRepos: string[] }>>
+  setRepoFetchWindow(window: RepoFetchWindow): Promise<IpcResult<{ repoFetchWindow: RepoFetchWindow }>>
   setHotkey(hotkey: string): Promise<IpcResult<{ hotkey: string }>>
   setHideMainWindowOnLaunch(hide: boolean): Promise<IpcResult<{ hideMainWindowOnLaunch: boolean }>>
   setPat(token: string): Promise<IpcResult<{ patSaved: true }>>
@@ -66,6 +76,17 @@ export interface ArckeepApi {
   deleteTodo(id: string): Promise<IpcResult<{ id: string }>>
   restoreTodo(item: TodoItem): Promise<IpcResult<TodoItem>>
   todoRepoOptions(): Promise<string[]>
+  listIdeas(): Promise<IpcResult<IdeaItem[]>>
+  createIdea(input: IdeaInput): Promise<IpcResult<IdeaItem>>
+  updateIdea(input: IdeaUpdate): Promise<IpcResult<IdeaItem>>
+  deleteIdea(id: string): Promise<IpcResult<{ id: string }>>
+  onIdeasChanged(listener: () => void): () => void
+  listPrompts(): Promise<IpcResult<PromptItem[]>>
+  createPrompt(input: PromptInput): Promise<IpcResult<PromptItem>>
+  updatePrompt(input: PromptUpdate): Promise<IpcResult<PromptItem>>
+  deletePrompt(id: string): Promise<IpcResult<{ id: string }>>
+  setPromptPinned(id: string, pinned: boolean): Promise<IpcResult<PromptItem>>
+  onPromptsChanged(listener: () => void): () => void
   closeCapture(mode?: 'dismiss' | 'saved'): Promise<void>
   getCaptureDraft(): Promise<CaptureDraft>
   setCaptureDraft(draft: CaptureDraft): Promise<CaptureDraft>
@@ -73,7 +94,9 @@ export interface ArckeepApi {
   onHotkeyStatus(listener: (combo: string | null) => void): () => void
   onFocusHotkey(listener: () => void): () => void
   getWaiting(): Promise<WaitingSnapshot>
-  refreshWaiting(): Promise<WaitingSnapshot>
+  refreshWaiting(force?: boolean): Promise<WaitingSnapshot>
+  commentWaitingApo(rowId: string, actionId: string): Promise<IpcResult<ApoCommentOutcome>>
+  checkWaitingApo(rowId: string, actionId: string): Promise<IpcResult<ApoCommentOutcome>>
   snoozeWaiting(id: string, days: 1 | 3 | 7): Promise<IpcResult<WaitingSnapshot>>
   ignoreWaiting(id: string): Promise<IpcResult<WaitingSnapshot>>
   restoreWaiting(id: string): Promise<IpcResult<WaitingSnapshot>>
@@ -85,7 +108,7 @@ export interface ArckeepApi {
   openExternal(url: string): Promise<IpcResult<true>>
   advanceWaitingDays(days: number): Promise<IpcResult<WaitingSnapshot>>
   getOverview(): Promise<OverviewSnapshot>
-  refreshOverview(): Promise<OverviewSnapshot>
+  refreshOverview(force?: boolean): Promise<OverviewSnapshot>
   setOverview(config: OverviewConfig): Promise<IpcResult<AppState>>
   setToolShelf(json: string): Promise<IpcResult<{ toolShelfJson: string }>>
   getToolExample(): Promise<string>
@@ -94,8 +117,9 @@ export interface ArckeepApi {
   pickFolder(): Promise<IpcResult<{ cancelled: true } | { cancelled: false, path: string }>>
   importToolShelf(): Promise<IpcResult<{ cancelled: true } | { cancelled: false, text: string }>>
   exportToolShelf(json: string): Promise<IpcResult<{ cancelled: boolean }>>
-  previewTool(actionId: string, params: Record<string, string>): Promise<IpcResult<ActionPreview>>
-  runTool(actionId: string, params: Record<string, string>): Promise<IpcResult<
+  previewTool(actionId: string, params: Record<string, string>, requestId: string): Promise<IpcResult<ActionPreview>>
+  cancelToolPreview(requestId: string): Promise<IpcResult<{ cancelled: true }>>
+  runTool(actionId: string, params: Record<string, string>, confirmationId?: string): Promise<IpcResult<
     | { kind: 'run', runId: string }
     | { kind: 'open-url' }
     | { kind: 'open-folder' }
@@ -105,6 +129,10 @@ export interface ArckeepApi {
   copyText(text: string): Promise<IpcResult<true>>
   getToolFixture(): Promise<ToolFixture | null>
   onToolEvent(listener: (event: ToolRunEvent) => void): () => void
+  listClaudeSessions(repo?: string): Promise<IpcResult<ClaudeSession[]>>
+  chooseClaudeWorkspace(repo: string, name: string): Promise<IpcResult<ClaudeWorkspace>>
+  startClaudeSession(repo: string, name: string, resumeSessionId?: string): Promise<IpcResult<ClaudeSession>>
+  readClaudeSession(sessionId: string): Promise<IpcResult<ClaudeSessionTranscript>>
 }
 
 export function githubSourceLabel(source: GithubSource): string {

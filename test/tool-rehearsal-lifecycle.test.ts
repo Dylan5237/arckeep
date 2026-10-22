@@ -1,0 +1,128 @@
+import { describe, expect, it } from 'vitest'
+import type { ToolRunEvent } from '../src/shared/tools/types.js'
+import type { ShellPlan } from '../src/main/tool-launch.js'
+import { createToolRehearsals } from '../src/main/tool-rehearse.js'
+import type { ActionPreview } from '../src/shared/tools/types.js'
+
+const preview: ActionPreview = {
+  actionId: 'rehearse',
+  title: '预演',
+  type: 'run-command',
+  text: 'echo real',
+  dryRun: 'echo dry-run',
+  shell: 'powershell',
+  cwd: 'C:\\work\\demo'
+}
+
+function fakeRunner(
+  onCreated: (emit: (event: ToolRunEvent) => void) => void,
+  onAbort: () => void = () => {}
+) {
+  return (emit: (event: ToolRunEvent) => void) => {
+    onCreated(emit)
+    return {
+      start: (_plan: ShellPlan, _cwd: string) => 'dry-run-1',
+      abortAll: onAbort
+    }
+  }
+}
+
+describe('tool rehearsal lifecycle', () => {
+  it('refuses new rehearsals while shutdown waits for an existing run', async () => {
+    let emit: ((event: ToolRunEvent) => void) | undefined
+    let starts = 0
+    const rehearsals = createToolRehearsals({
+      platform: 'win32', cwdExists: () => true, timeoutMs: 10_000,
+      createRunner: handler => {
+        emit = handler
+        return { start: () => { starts += 1; return 'run-A' }, abortAll: () => {} }
+      }
+    })
+    const existing = rehearsals.rehearse('shutdown-A', preview)
+    rehearsals.close()
+    const shutdown = rehearsals.cancelAll()
+    const rejected = await rehearsals.rehearse('shutdown-B', preview)
+    expect(rejected.canConfirm).toBe(false)
+    expect(rejected.summary).toContain('关闭')
+    expect(starts).toBe(1)
+    emit?.({ type: 'done', runId: 'run-A', aborted: true, durationMs: 0 })
+    await Promise.all([existing, shutdown])
+    expect((await rehearsals.rehearse('shutdown-C', preview)).canConfirm).toBe(false)
+    expect(starts).toBe(1)
+  })
+
+  it('cancels a pending rehearsal and waits for its process completion event', async () => {
+    let emit: ((event: ToolRunEvent) => void) | null = null
+    let abortCalls = 0
+    const rehearsals = createToolRehearsals({
+      platform: 'win32',
+      cwdExists: () => true,
+      createRunner: fakeRunner(handler => { emit = handler }, () => { abortCalls += 1 }),
+      timeoutMs: 10_000
+    })
+    const pending = rehearsals.rehearse('request-cancel', preview)
+    const cancellation = rehearsals.cancel('request-cancel')
+
+    expect(abortCalls).toBe(1)
+    emit?.({ type: 'done', runId: 'dry-run-1', exitCode: null, durationMs: 2, aborted: true })
+    await cancellation
+    const result = await pending
+
+    expect(result.canConfirm).toBe(false)
+    expect(result.status).toBe('failed')
+  })
+
+  it('keeps application shutdown pending until all dry-runs settle', async () => {
+    let emit: ((event: ToolRunEvent) => void) | null = null
+    let abortCalls = 0
+    const rehearsals = createToolRehearsals({
+      platform: 'win32',
+      cwdExists: () => true,
+      createRunner: fakeRunner(handler => { emit = handler }, () => { abortCalls += 1 }),
+      timeoutMs: 10_000
+    })
+    const pending = rehearsals.rehearse('request-exit', preview)
+    let shutdownFinished = false
+    const shutdown = rehearsals.cancelAll().then(() => { shutdownFinished = true })
+    await Promise.resolve()
+    expect(abortCalls).toBe(1)
+    expect(shutdownFinished).toBe(false)
+    emit?.({ type: 'done', runId: 'dry-run-1', exitCode: null, durationMs: 3, aborted: true })
+    await Promise.all([shutdown, pending])
+    expect(shutdownFinished).toBe(true)
+  })
+
+  it('waits for termination after the rehearsal runner emits its done event', async () => {
+    let emit: ((event: ToolRunEvent) => void) | null = null
+    let releaseTermination: () => void = () => {}
+    const termination = new Promise<void>(resolve => { releaseTermination = resolve })
+    let abortCalls = 0
+    const rehearsals = createToolRehearsals({
+      platform: 'win32',
+      cwdExists: () => true,
+      createRunner: handler => {
+        emit = handler
+        return {
+          start: (_plan: ShellPlan, _cwd: string) => 'dry-run-1',
+          abortAll: () => {
+            abortCalls += 1
+            emit?.({ type: 'done', runId: 'dry-run-1', exitCode: null, durationMs: 4, aborted: true })
+          },
+          waitForTermination: () => termination
+        }
+      },
+      timeoutMs: 10_000
+    })
+    const pending = rehearsals.rehearse('request-shutdown-termination', preview)
+    let shutdownFinished = false
+    const shutdown = rehearsals.cancelAll().then(() => { shutdownFinished = true })
+
+    expect(abortCalls).toBe(1)
+    await Promise.resolve()
+    expect(shutdownFinished).toBe(false)
+
+    releaseTermination()
+    await Promise.all([shutdown, pending])
+    expect(shutdownFinished).toBe(true)
+  })
+})

@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { powershellLaunchScript } from '../shared/tools/quote.js'
+import { powershellLaunchScript, quotePowerShellArg } from '../shared/tools/quote.js'
 import type { ShellKind } from '../shared/tools/types.js'
 
 export interface ShellPlan {
@@ -22,6 +22,36 @@ export function resolveBash(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): 
   return candidates.find(candidate => existsSync(candidate)) ?? null
 }
 
+/** Give cmd a hidden console so its code-page switch applies to redirected output. */
+function cmdRunnerScript(executable: string, commandLine: string): string {
+  return [
+    "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+    "$ErrorActionPreference = 'Stop'",
+    'try {',
+    `  $psi = [System.Diagnostics.ProcessStartInfo]::new(${quotePowerShellArg(executable)})`,
+    '  $psi.UseShellExecute = $false',
+    '  $psi.CreateNoWindow = $false',
+    '  $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden',
+    '  $psi.RedirectStandardInput = $true',
+    '  $psi.RedirectStandardOutput = $true',
+    '  $psi.RedirectStandardError = $true',
+    `  $psi.Arguments = ${quotePowerShellArg(commandLine)}`,
+    '  $process = [System.Diagnostics.Process]::new()',
+    '  $process.StartInfo = $psi',
+    '  $null = $process.Start()',
+    '  $process.StandardInput.Close()',
+    '  $stdoutCopy = $process.StandardOutput.BaseStream.CopyToAsync([Console]::OpenStandardOutput())',
+    '  $stderrCopy = $process.StandardError.BaseStream.CopyToAsync([Console]::OpenStandardError())',
+    '  $process.WaitForExit()',
+    '  [System.Threading.Tasks.Task]::WaitAll([System.Threading.Tasks.Task[]]@($stdoutCopy, $stderrCopy))',
+    '  exit $process.ExitCode',
+    '} catch {',
+    '  [Console]::Error.WriteLine(($_ | Out-String).TrimEnd())',
+    '  exit 1',
+    '}'
+  ].join('\n')
+}
+
 export function planShell(
   shell: ShellKind,
   script: string,
@@ -30,12 +60,16 @@ export function planShell(
 ): ShellPlan {
   if (shell === 'cmd') {
     if (/[\r\n\0]/.test(script)) throw new Error('cmd 命令不能包含换行')
+    // Pipe-only cmd kept using OEM bytes after chcp; relay it through a hidden console.
+    const runnable = `chcp 65001 >NUL & ${script}`
+    const commandLine = `/d /s /c "${runnable}"`
+    const encoded = Buffer.from(cmdRunnerScript(env.ComSpec || 'cmd.exe', commandLine), 'utf16le').toString('base64')
     return {
       shell,
-      script,
-      file: env.ComSpec || 'cmd.exe',
-      args: ['/d', '/s', '/c', `"${script}"`],
-      windowsVerbatimArguments: true
+      script: runnable,
+      file: 'powershell.exe',
+      args: ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+      windowsVerbatimArguments: false
     }
   }
   if (shell === 'powershell') {
@@ -69,7 +103,11 @@ export function powershellScriptFromPlan(plan: ShellPlan): string {
 }
 
 export function cmdScriptFromPlan(plan: ShellPlan): string {
-  const wrapped = plan.args[3] ?? ''
-  if (!wrapped.startsWith('"') || !wrapped.endsWith('"')) throw new Error('cmd 参数缺少外层引号')
-  return wrapped.slice(1, -1)
+  if (plan.shell !== 'cmd') throw new Error('不是 cmd 启动计划')
+  const wrapper = powershellScriptFromPlan(plan)
+  const commandLine = `/d /s /c "${plan.script}"`
+  if (!wrapper.includes(`$psi.Arguments = ${quotePowerShellArg(commandLine)}`)) {
+    throw new Error('cmd 参数与启动计划不一致')
+  }
+  return plan.script
 }

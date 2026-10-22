@@ -3,12 +3,14 @@ import type { OverviewConfig } from '../shared/overview/types.js'
 import { parseWaitingConfig } from '../shared/waiting/rules.js'
 import type { WaitingConfig } from '../shared/waiting/types.js'
 import type { AppState, IpcResult } from '../shared/types.js'
+import { isCancellation, throwIfCancelled, type TaskScope } from '../shared/task-scope.js'
 import { validateToolShelfText } from './tool-validate.js'
 import {
   readGhAuthToken,
   resolveGithubAuth,
   testGithubConnection,
   toPublicGithubAuth,
+  type GithubAuthTaskOptions,
   type GhLookup
 } from './github-auth.js'
 import { applyHotkey, hotkeyConflictWarning, type HotkeyRegistrar } from './hotkey.js'
@@ -16,15 +18,17 @@ import { hotkeyRuntimeAfterApply, type HotkeyRuntime } from '../shared/hotkey-st
 import { normalizePat, normalizeWatchedRepos } from './ipc-validators.js'
 import { loadSettings, saveSettings, type PersistedSettings } from './settings-store.js'
 import { assertSerializedWithoutSecret, type SecretBox } from './token-store.js'
+import { parseRepoFetchWindow, type RepoFetchWindow } from '../shared/repo-fetch-window.js'
 
 export interface SettingsServiceDeps {
   file: string
   secretBox: SecretBox
   registrar: HotkeyRegistrar
   onHotkey: () => void
-  readGh?: () => Promise<GhLookup>
+  readGh?: (options?: GithubAuthTaskOptions) => Promise<GhLookup>
   fetchImpl?: typeof fetch
   log?: (message: string) => void
+  tasks?: TaskScope
 }
 
 export class SettingsService {
@@ -42,6 +46,7 @@ export class SettingsService {
   }
 
   init(): void {
+    this.assertOpen()
     const attempted = this.settings.hotkey
     const applied = applyHotkey(attempted, this.deps.registrar, this.deps.onHotkey, null)
     this.runtime = hotkeyRuntimeAfterApply(this.runtime, applied, attempted)
@@ -58,6 +63,7 @@ export class SettingsService {
 
   /** Test hook: drop the registered combo so the banner and tray show the failure. */
   simulateRegistrationFailure(): string {
+    this.assertOpen()
     if (this.runtime.active) {
       try {
         this.deps.registrar.unregister(this.runtime.active)
@@ -82,9 +88,17 @@ export class SettingsService {
   }
 
   async getState(): Promise<AppState> {
-    const github = toPublicGithubAuth(await this.resolveAuth())
+    const tasks = this.deps.tasks
+    return tasks
+      ? tasks.run(signal => this.buildState(signal), '读取应用状态')
+      : this.buildState()
+  }
+
+  private async buildState(signal?: AbortSignal): Promise<AppState> {
+    const github = toPublicGithubAuth(await this.resolveAuth({ signal, tasks: this.deps.tasks }))
     return {
       watchedRepos: [...this.settings.watchedRepos],
+      repoFetchWindow: this.settings.repoFetchWindow,
       hotkey: this.runtime.field,
       activeHotkey: this.runtime.active,
       hotkeyWarning: this.runtime.warning,
@@ -97,7 +111,22 @@ export class SettingsService {
     }
   }
 
+  setRepoFetchWindow(input: unknown): IpcResult<{ repoFetchWindow: RepoFetchWindow }> {
+    this.assertOpen()
+    try {
+      if (input === undefined) throw new Error('请选择仓库时间范围')
+      const repoFetchWindow = parseRepoFetchWindow(input)
+      const next = { ...this.settings, repoFetchWindow }
+      saveSettings(this.deps.file, next)
+      this.settings = next
+      return { ok: true, data: { repoFetchWindow } }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : '仓库时间范围保存失败' }
+    }
+  }
+
   setOverview(input: unknown): IpcResult<{ overview: OverviewConfig }> {
+    this.assertOpen()
     try {
       const overview = parseOverviewConfig(input)
       this.settings.overview = overview
@@ -109,6 +138,7 @@ export class SettingsService {
   }
 
   setToolShelfJson(input: unknown): IpcResult<{ toolShelfJson: string }> {
+    this.assertOpen()
     if (typeof input !== 'string') return { ok: false, error: '工具架配置必须是 JSON 文本' }
     const validated = validateToolShelfText(input)
     if (!validated.ok) return { ok: false, error: validated.error }
@@ -118,6 +148,7 @@ export class SettingsService {
   }
 
   setWaiting(input: unknown): IpcResult<{ waiting: WaitingConfig }> {
+    this.assertOpen()
     try {
       const waiting = parseWaitingConfig(input, { validatePatterns: true })
       this.settings.waiting = waiting
@@ -129,12 +160,14 @@ export class SettingsService {
   }
 
   patchShowIgnored(show: boolean): WaitingConfig {
+    this.assertOpen()
     this.settings.waiting = { ...this.settings.waiting, showIgnored: show }
     this.persist()
     return this.settings.waiting
   }
 
   setRepos(input: unknown): IpcResult<{ watchedRepos: string[] }> {
+    this.assertOpen()
     try {
       const watchedRepos = normalizeWatchedRepos(input)
       this.settings.watchedRepos = watchedRepos
@@ -146,6 +179,7 @@ export class SettingsService {
   }
 
   setHideMainWindowOnLaunch(input: unknown): IpcResult<{ hideMainWindowOnLaunch: boolean }> {
+    this.assertOpen()
     if (typeof input !== 'boolean') return { ok: false, error: '启动时隐藏主窗口必须是布尔值' }
     this.settings.hideMainWindowOnLaunch = input
     this.persist()
@@ -153,6 +187,7 @@ export class SettingsService {
   }
 
   setHotkey(input: unknown): IpcResult<{ hotkey: string }> {
+    this.assertOpen()
     const attempted = typeof input === 'string' ? input : this.runtime.field
     const applied = applyHotkey(input, this.deps.registrar, this.deps.onHotkey, this.runtime.active)
     this.runtime = hotkeyRuntimeAfterApply(this.runtime, applied, attempted)
@@ -163,6 +198,7 @@ export class SettingsService {
   }
 
   setPat(input: unknown): IpcResult<{ patSaved: true }> {
+    this.assertOpen()
     let token: string
     try {
       token = normalizePat(input)
@@ -187,28 +223,40 @@ export class SettingsService {
   }
 
   clearPat(): IpcResult<{ patSaved: false }> {
+    this.assertOpen()
     this.settings.patCiphertext = null
     this.persist()
     return { ok: true, data: { patSaved: false } }
   }
 
   async testConnection(pasted?: unknown): Promise<{ ok: true, login: string } | { ok: false, error: string }> {
+    const tasks = this.deps.tasks
+    return tasks
+      ? tasks.run(signal => this.runConnectionTest(pasted, signal), '测试 GitHub 连接')
+      : this.runConnectionTest(pasted)
+  }
+
+  private async runConnectionTest(pasted: unknown, signal?: AbortSignal): Promise<{ ok: true, login: string } | { ok: false, error: string }> {
     try {
+      throwIfCancelled(signal)
       if (typeof pasted === 'string' && pasted.trim()) {
         const token = normalizePat(pasted)
-        return await testGithubConnection({ token, fetchImpl: this.deps.fetchImpl })
+        return await testGithubConnection({ token, fetchImpl: this.deps.fetchImpl, signal })
       }
-      const resolved = await this.resolveAuth()
+      const resolved = await this.resolveAuth({ signal, tasks: this.deps.tasks })
       return await testGithubConnection({
         token: resolved.token,
-        fetchImpl: this.deps.fetchImpl
+        fetchImpl: this.deps.fetchImpl,
+        signal
       })
     } catch (error) {
+      if (isCancellation(error)) throw error
       return { ok: false, error: error instanceof Error ? error.message : '测试连接失败。请稍后重试。' }
     }
   }
 
   private persist(): void {
+    this.assertOpen()
     saveSettings(this.deps.file, this.settings)
   }
 
@@ -227,12 +275,17 @@ export class SettingsService {
     }
   }
 
-  private resolveAuth() {
-    const readGh = this.deps.readGh ?? (() => readGhAuthToken(undefined, this.deps.log))
+  private resolveAuth(options: GithubAuthTaskOptions = {}) {
+    const readGh = this.deps.readGh ?? (context => readGhAuthToken(undefined, this.deps.log, context))
     return resolveGithubAuth({
       readGh,
       readPat: () => this.readPat(),
-      patSaved: Boolean(this.settings.patCiphertext)
+      patSaved: Boolean(this.settings.patCiphertext),
+      ...options
     })
+  }
+
+  private assertOpen(): void {
+    this.deps.tasks?.assertOpen()
   }
 }

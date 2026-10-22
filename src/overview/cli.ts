@@ -86,6 +86,7 @@ export async function runOverviewCli(argv: readonly string[], io: CliIo): Promis
     token: access.token,
     config: settings.overview,
     watchedRepos: settings.watchedRepos,
+    repoFetchWindow: settings.repoFetchWindow,
     now: new Date(),
     fetchImpl: io.fetchImpl,
     includeArchived

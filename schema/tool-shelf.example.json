@@ -26,18 +26,11 @@
     },
     {
       "id": "apo-init",
-      "title": "apo 项目初始化",
-      "description": "初始化一个 apo 项目。",
-      "confirmLabel": "在 {{cwd}} 初始化 {{name}}",
-      "type": "run-command",
-      "shell": "powershell",
-      "cwd": "{{cwd}}",
-      "previewCommand": "apo init --dry-run --name {{name}}",
-      "command": "apo init --name {{name}}",
-      "params": [
-        { "key": "cwd", "label": "工作目录", "required": true, "input": "directory", "default": "C:\\work\\demo" },
-        { "key": "name", "label": "项目名", "required": true, "default": "demo" }
-      ]
+      "title": "APO 项目初始化",
+      "description": "复制提示词，在目标项目的 Coding Agent 会话中粘贴使用。",
+      "confirmLabel": "复制初始化提示词",
+      "type": "template",
+      "text": "使用 https://github.com/Dylan5237/agent-project-ops 初始化当前项目。"
     },
     {
       "id": "dispatch-note",

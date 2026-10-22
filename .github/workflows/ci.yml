@@ -107,6 +107,13 @@ jobs:
           }
           Compress-Archive -Path "dist/win-unpacked" -DestinationPath "dist/arckeep-win-unpacked.zip" -Force
 
+      - name: Packaged fixture startup smoke
+        shell: pwsh
+        run: ./scripts/smoke-windows-package.ps1
+
+      - name: Bind package checksums to source
+        run: node scripts/hash-windows-package.mjs
+
       - name: Upload Windows installers
         uses: actions/upload-artifact@v4
         with:
@@ -114,9 +121,10 @@ jobs:
           path: |
             dist/*Setup*.exe
             dist/*portable*.exe
+            dist/SHA256SUMS.txt
+            dist/package-manifest.json
           if-no-files-found: error
           retention-days: 14
-
       - name: Upload unpacked app
         uses: actions/upload-artifact@v4
         with:
@@ -124,14 +132,3 @@ jobs:
           path: dist/arckeep-win-unpacked.zip
           if-no-files-found: error
           retention-days: 14
-
-      - name: Launch unpacked smoke
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $exe = Get-Item -LiteralPath "dist/win-unpacked/Arckeep.exe"
-          $proc = Start-Process -FilePath $exe.FullName -PassThru
-          Start-Sleep -Seconds 8
-          if ($proc.HasExited) { throw "Arckeep exited early with code $($proc.ExitCode)" }
-          Stop-Process -Id $proc.Id -Force
-          Get-Process Arckeep -ErrorAction SilentlyContinue | Stop-Process -Force
