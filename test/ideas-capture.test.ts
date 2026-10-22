@@ -198,10 +198,38 @@ describe('idea quick capture', () => {
 
   it('keeps the existing todo shorthand in the full capture markup', async () => {
     const view = await mount()
+    view.select('todo')
     view.text.value = '要做的事 #example/demo !等我'
     enter(view.text)
     await flush()
     expect(view.api.createTodo).toHaveBeenCalledWith({ text: '要做的事', repo: 'example/demo', waiting: true })
     expect(view.api.createIdea).not.toHaveBeenCalled()
+  })
+
+  it('opens in idea mode when there is no draft', async () => {
+    const view = await mount()
+    expect(view.kind.value).toBe('idea')
+    expect(view.text.hidden).toBe(true)
+    expect(view.idea.hidden).toBe(false)
+    expect(document.querySelector<HTMLElement>('#capture-wait')?.hidden).toBe(true)
+    expect(view.button.textContent).toBe('记下灵感')
+    view.idea.value = '默认记成灵感'
+    enter(view.idea)
+    await flush()
+    expect(view.api.createIdea).toHaveBeenCalledWith({ text: '默认记成灵感', repo: null })
+    expect(view.api.createTodo).not.toHaveBeenCalled()
+  })
+
+  it('restores a legacy todo draft in todo mode instead of the new default', async () => {
+    const view = await mount({
+      getCaptureDraft: async () => ({ text: '旧待办正文', repo: 'example/demo', waiting: true })
+    })
+    expect(view.kind.value).toBe('todo')
+    expect(view.text.value).toBe('旧待办正文')
+    expect(view.repo.value).toBe('example/demo')
+    expect(view.waiting.checked).toBe(true)
+    expect(view.button.textContent).toBe('记下待办')
+    expect(view.text.hidden).toBe(false)
+    expect(view.idea.hidden).toBe(true)
   })
 })

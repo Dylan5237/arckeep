@@ -11,29 +11,29 @@
       <div class="capture-heading">
         <h1>快速捕获</h1>
         <select id="capture-kind" aria-label="记录类型">
+          <option value="idea" selected>灵感</option>
           <option value="todo">待办</option>
-          <option value="idea">灵感</option>
         </select>
       </div>
-      <div class="text-wrap">
-        <input id="text" type="text" maxlength="500" placeholder="记一件事" aria-label="待办内容" autocomplete="off" spellcheck="false" autofocus />
+      <div class="text-wrap" hidden>
+        <input id="text" type="text" maxlength="500" placeholder="记一件事" aria-label="待办内容" autocomplete="off" spellcheck="false" hidden />
         <span id="caret" class="caret" hidden></span>
         <span id="caret-probe" aria-hidden="true"></span>
       </div>
-      <textarea id="idea-text" rows="4" maxlength="10000" placeholder="记下此刻的想法，可换行" aria-label="灵感内容" spellcheck="false" hidden></textarea>
+      <textarea id="idea-text" rows="4" maxlength="10000" placeholder="记下此刻的想法，可换行" aria-label="灵感内容" spellcheck="false"></textarea>
       <label class="capture-repo">
         <span>仓库</span>
         <input id="repo" type="text" placeholder="owner/repo，可选" aria-label="仓库标签" list="capture-repos" autocomplete="off" spellcheck="false" />
       </label>
       <datalist id="capture-repos"></datalist>
-      <label class="capture-wait" id="capture-wait">
+      <label class="capture-wait" id="capture-wait" hidden>
         <input id="waiting" type="checkbox" />
         <span>等我</span>
       </label>
       <p id="error" class="error" role="alert" hidden></p>
-      <button id="capture-save" type="submit">记下待办</button>
-      <p class="hint" id="capture-key-hint">Enter 记下并关闭。Esc 或点到窗口外会留下草稿，下次热键还会在。</p>
-      <p class="hint" id="capture-type-hint">正文里可以写 #owner/repo、#仓库名 和 !等我。</p>
+      <button id="capture-save" type="submit">记下灵感</button>
+      <p class="hint" id="capture-key-hint">Enter 记下并关闭，Shift+Enter 换行。Esc 或点到窗口外会留下草稿，下次热键还会在。</p>
+      <p class="hint" id="capture-type-hint">灵感独立保存在本机，可选填仓库；正文最多 10000 字符，不解析 # 或 !等我。</p>
     </form>
     <script type="module" src="./capture.ts"></script>
   </body>

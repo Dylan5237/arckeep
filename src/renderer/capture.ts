@@ -208,11 +208,17 @@ reposReady = window.arckeep.todoRepoOptions().then(repos => {
 
 void window.arckeep.getCaptureDraft().then(draft => {
   if (params.get('fixture') === 'filled') {
+    if (kindInput) kindInput.value = 'todo'
     text.value = '记一条带仓库的待办'
     repo.value = 'example/demo'
     waiting.checked = true
   } else if (!draftEdited && !saving && !currentInput().value && !repo.value && !waiting.checked) {
-    if (kindInput && ideaInput && draft.kind === 'idea') kindInput.value = 'idea'
+    if (kindInput && ideaInput) {
+      // Empty/missing drafts open as 灵感; a kind-less draft with content is a legacy todo draft.
+      kindInput.value = draft.kind === 'idea'
+        ? 'idea'
+        : draft.kind === 'todo' || draft.text || draft.repo || draft.waiting ? 'todo' : 'idea'
+    }
     currentInput().value = draft.text
     repo.value = draft.repo
     waiting.checked = draft.waiting
