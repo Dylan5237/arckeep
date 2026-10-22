@@ -14,7 +14,7 @@ Always paste both `origin..HEAD` and `HEAD..origin` logs before asking.
 
 ### E-T1 — GitHub + local only
 
-Skip all projection steps. Two-row inventory. No GitLab in report.
+Only origin and local surfaces apply. Additional hosts are unsupported and reported as a stop condition.
 
 ### E-T0 — Local only
 

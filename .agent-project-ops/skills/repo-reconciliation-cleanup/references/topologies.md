@@ -1,23 +1,13 @@
-# Topologies (T0–T4)
+# Topologies / 支持边界
 
-Read when deciding which surfaces exist. Record **Topology ID** on the recon Issue before inventory.
+先只读识别拓扑，在对账 Issue 记录 ID。支持的远端只有 GitHub origin。
 
-| ID | Signals | Surfaces |
+| ID | Signals | Surfaces / action |
 | --- | --- | --- |
-| **T0** Local-only | no remotes / fetch fails | Local |
-| **T1** Local + authority | one write remote (GitHub `origin`); no projection | Local + Authority |
-| **T2** + projection | second remote is same-history projection | Local + Authority + Projection |
-| **T3** Remote-only | no usable local clone | Authority (+ Projection if reachable) |
-| **T4** Split-brain | two write-looking remotes or unknown extra | **STOP** until disposer names one write authority |
+| T0 | no remote or unreachable origin | local inventory only; no remote deletion or completed binding claim |
+| T1 | local clone + only GitHub origin | local + authority; origin/default is write SoT |
+| T2 | historical extra-role configuration | unsupported; preserve settings and stop affected writes for migration review |
+| T3 | GitHub repository without usable local clone | remote read-only inventory; local surface not applicable |
+| T4 | unknown extra remote or multiple write-looking hosts | unsupported; stop cleanup, never choose a new write authority implicitly |
 
-Extra remote classes: **projection** (ops mirror) · **share-export** (colleague filtered tree — out of scope) · **unknown** (fail closed).
-
-## Defaults by topology
-
-| Topology | Dev SoT | Projection steps | Local steps |
-| --- | --- | --- | --- |
-| T0 | local default tip | skip | worktrees/junk only; add-remote is separate auth |
-| T1 | `origin/<default>` | **skip entirely** | full local+remote hygiene |
-| T2 | authority default | FF integration when ancestor; hold merge-tip dual-SoT unless align auth | full |
-| T3 | authority via API | only if reachable | N/A |
-| T4 | undecided | blocked | blocked |
+Only T0/T1/T3 have a current workflow. Old topology IDs remain identifiable for reporting, not for synchronizing another host. Declaring an extra remote in an old registry does not make it supported. Add-origin or migration needs its own confirmed scope.

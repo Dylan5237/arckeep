@@ -22,6 +22,8 @@ Destructive cleanup (delete branches/worktrees/PRs, hard reset) **destroys evide
 | Path | When | Steps |
 | --- | --- | --- |
 | **Light** | T0/T1, no PROD floor required, few refs, no E-DIVERGE | inventory → classify → one widget with candidates → execute → short report |
-| **Full** | T2, E-DIVERGE, release/PROD involved, many diverged, workspace-wide | all phases + fact-surface statuses + two-phase report |
+| **Full** | E-DIVERGE, release/PROD involved, many diverged, workspace-wide | all phases + fact-surface statuses + two-phase report |
 
 Unsure → full.
+
+T2/T4 unsupported remote settings stop affected cleanup before either path. Preserve them for explicit project migration review.

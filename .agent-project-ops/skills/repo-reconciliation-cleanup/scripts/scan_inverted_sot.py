@@ -200,8 +200,8 @@ def format_report(root: Path, hits: list[Hit], scanned: int) -> str:
         lines.append(f"MUST-FIX {hit.path}:{hit.line} [{hit.rule}] {hit.excerpt}")
     lines.append(
         "fail-closed: rewrite the remote contract to GitHub origin = write "
-        "authority (templates/AGENTS.md); projection optional; share-export ≠ "
-        "projection. PIN binding is not complete while must-fix hits remain."
+        "authority (templates/AGENTS.md); only origin is supported. Preserve old "
+        "remote settings for explicit migration review. PIN binding is not complete while must-fix hits remain."
     )
     return "\n".join(lines) + "\n"
 

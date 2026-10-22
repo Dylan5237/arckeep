@@ -9,7 +9,7 @@
 
 **事实面状态**
 - authority tip: …   ← write authority tip (GitHub `origin`)
-- projection: … | not-applicable
+- unsupported extra remotes / old roles: … | none (preserved, no sync)
 - deploy/manifest tip: … | same-as-authority | UNKNOWN  ← **not** write SoT
 - AGENTS.md remote contract: clean | **MUST-FIX inverted SoT**
 - local/worktrees: …

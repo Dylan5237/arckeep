@@ -14,9 +14,9 @@ Every applicable surface must get an explicit status before claiming clean:
 
 | Surface | Question | Typical evidence |
 | --- | --- | --- |
-| Authority tip | What is **write authority** SHA (Dev SoT)? | `origin/<default>` after fetch. Never a GitLab/non-GitHub Issues host. |
-| Projection tip(s) | Integration / release tips? | projection remotes (T2 only). **Deploy/manifest tip ≠ write SoT.** |
-| Rule-file contract | Does `AGENTS.md` invert SoT? | `scan_inverted_sot.py` — MUST-FIX if GitLab (or other non-GitHub Issues host) is production/write SoT or GitHub is “mirror only” |
+| Authority tip | What is **write authority** SHA (Dev SoT)? | `origin/<default>` after fetch. Never another host. |
+| Unsupported remote settings | Is any extra remote or old active role present? | preserve and report; stop affected writes rather than syncing it |
+| Rule-file contract | Does `AGENTS.md` invert SoT? | `scan_inverted_sot.py` — MUST-FIX if a non-GitHub host is production/write SoT or GitHub is “mirror only” |
 | Local tip / worktrees | What is checked out where? | `git worktree list`, branch -vv |
 | Open PRs | What in-flight heads remain? | `gh pr list` |
 | PROD / deploy identity | What is actually released? | releaseId + manifest SHA, or UNKNOWN |
@@ -25,4 +25,4 @@ Every applicable surface must get an explicit status before claiming clean:
 
 Do **not** treat `git status` clean, PR merged, or tests green alone as “fully clean.”
 
-Distinguish: `merged` ≠ `projected` ≠ `deployed` ≠ `live-verified` ≠ `hygiene-closed` ≠ `cleaned`.
+Distinguish: `merged` ≠ `deployed` ≠ `live-verified` ≠ `hygiene-closed` ≠ `cleaned`.
