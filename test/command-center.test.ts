@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { commandCenterStatus, isCommandCenterTitle, parseCommandCenterBody, readCommandCenter } from '../src/shared/overview/command-center.js'
 import { isCommandCenterRead } from '../src/shared/overview/command-center-types.js'
-import { CC_BODY, CC_NOW, CC_REPO, ccNode, labelConnection, searchConnection } from './fixtures/command-center.js'
+import { CC_BODY, CC_BODY_V031, CC_NOW, CC_REPO, ccNode, labelConnection, searchConnection } from './fixtures/command-center.js'
 
 function read(patch: Partial<Parameters<typeof readCommandCenter>[0]> = {}) {
   return readCommandCenter({ repo: CC_REPO, labeled: labelConnection([ccNode()]), english: searchConnection([ccNode()]), chinese: searchConnection(), checkedAt: CC_NOW, ...patch })
@@ -226,5 +226,62 @@ describe('bounded Command Center discovery', () => {
     if (valid.kind !== 'ready') throw new Error('fixture not ready')
     expect(isCommandCenterRead({ ...valid, content: { ...valid.content, phases: null } }, CC_REPO)).toBe(false)
     expect(isCommandCenterRead({ ...valid, content: { ...valid.content, nextAction: { text: 'evil', links: [{ label: 'evil', url: 'javascript:alert(1)' }] } } }, CC_REPO)).toBe(false)
+  })
+})
+
+describe('Command Center APO v0.3.1 template', () => {
+  const content = () => parseCommandCenterBody(CC_BODY_V031, CC_REPO)!
+
+  it('reads the generated two-column status table without warnings', () => {
+    expect(content()).toMatchObject({ format: 'table', status: 'awaiting-accept', declaredUpdatedOn: '2026-10-22' })
+    expect(content().currentPhase).toEqual({ text: '#64 导出报表', links: [{ label: '#64', url: `https://github.com/${CC_REPO}/issues/64` }] })
+    expect(content().lastClosedPhase?.text).toBe('#60 登录页')
+    expect(content().openGates?.text).toBe('无')
+    expect(content().nextAction?.text).toBe('等你验收 #64')
+    expect(content().warnings).toEqual([])
+  })
+
+  it('keeps each pending decision request as its own text with its link', () => {
+    expect(content().pendingDecision?.text).toContain('D-3 rev 2（最终验收）')
+    expect(content().pendingDecision?.text).toContain('D-4 rev 1（开工确认）')
+    expect(content().pendingDecision?.links.map(link => link.url)).toEqual([
+      `https://github.com/${CC_REPO}/issues/64#issuecomment-1`, `https://github.com/${CC_REPO}/issues/65#issuecomment-2`
+    ].filter(url => url.startsWith('https://github.com/')))
+  })
+
+  it('maps the new status words and keeps the index and blocker table', () => {
+    expect(content().phases.map(phase => phase.status)).toEqual(['recorded-done', 'awaiting-accept', 'backlog', 'blocked', 'implementation'])
+    expect(content().blocks[0]?.label).toContain('#66')
+  })
+
+  it.each([['未开工', 'backlog'], ['进行中', 'implementation'], ['卡住', 'blocked'], ['待验收', 'awaiting-accept'], ['已完成', 'recorded-done']])('reads status 「%s」', (word, status) => {
+    expect(commandCenterStatus(word)).toBe(status)
+  })
+
+  it('records the process tier from 项目设置 and leaves older templates unset', () => {
+    expect(content().processMode).toBe('light')
+    expect(parseCommandCenterBody(CC_BODY_V031.replace('process_mode=light', 'process_mode=standard'), CC_REPO)?.processMode).toBe('standard')
+    expect(parseCommandCenterBody(CC_BODY, CC_REPO)?.processMode).toBeNull()
+  })
+
+  it('ignores a process tier written outside the 项目设置 section or in history', () => {
+    const outside = `${CC_BODY_V031.replace('process_mode=light', 'process_mode=standard')}
+## 接入记录
+
+- 曾用 process_mode=light
+`
+    expect(parseCommandCenterBody(outside, CC_REPO)?.processMode).toBe('standard')
+    const conflict = `${CC_BODY_V031}
+## 项目设置
+
+- 流程档位：process_mode=standard
+`
+    expect(parseCommandCenterBody(conflict, CC_REPO)?.processMode).toBeNull()
+  })
+
+  it('survives the disk-cache validator', () => {
+    const read = { kind: 'ready', source: { number: 1, title: '[Command Center] x', url: `https://github.com/${CC_REPO}/issues/1`, updatedAt: CC_NOW }, content: content(), checkedAt: CC_NOW }
+    expect(isCommandCenterRead(read, CC_REPO)).toBe(true)
+    expect(isCommandCenterRead({ ...read, content: { ...content(), processMode: 'turbo' } }, CC_REPO)).toBe(false)
   })
 })

@@ -33,6 +33,10 @@ export interface CommandCenterContent {
   lastClosedPhase: CommandCenterText | null
   openGates: CommandCenterText | null
   nextAction: CommandCenterText | null
+  /** APO v0.3.1 §1「待你决定」: the pending formal decision requests as written by the generator. */
+  pendingDecision: CommandCenterText | null
+  /** From the 项目设置 section; null when it is absent, ambiguous or an older template. */
+  processMode: 'light' | 'standard' | null
   summary: CommandCenterText | null
   declaredUpdatedOn: string | null
   fields: CommandCenterField[]
@@ -87,7 +91,8 @@ export function isCommandCenterRead(value: unknown, repo: string): value is Comm
     && item.links.every(link => object(link) && typeof link.label === 'string' && safeLink(link.url))
   const status = (item: unknown) => typeof item === 'string' && Object.hasOwn(COMMAND_CENTER_STATUS_LABELS, item)
   const content = (item: unknown) => object(item) && (item.format === 'table' || item.format === 'narrative') && status(item.status)
-    && ['currentPhase', 'statusText', 'lastClosedPhase', 'openGates', 'nextAction', 'summary', 'phaseNotes'].every(key => item[key] === null || text(item[key]))
+    && ['currentPhase', 'statusText', 'lastClosedPhase', 'openGates', 'nextAction', 'pendingDecision', 'summary', 'phaseNotes'].every(key => item[key] === null || text(item[key]))
+    && (item.processMode === null || item.processMode === 'light' || item.processMode === 'standard')
     && (item.declaredUpdatedOn === null || (typeof item.declaredUpdatedOn === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.declaredUpdatedOn)))
     && Array.isArray(item.fields) && item.fields.every(field => object(field) && typeof field.label === 'string' && text(field.value))
     && Array.isArray(item.blocks) && item.blocks.every(block => object(block) && typeof block.label === 'string' && text(block.value))

@@ -8,7 +8,7 @@ const MAX_PHASES = 30
 const MAX_BLOCKS = 30
 const NON_CURRENT_HEADING = /历史|快照|示例|归档|教程|\b(?:history|historical|snapshot|examples?|archives?|archived|tutorial)\b/i
 
-type FieldKey = 'currentPhase' | 'statusText' | 'lastClosedPhase' | 'openGates' | 'nextAction'
+type FieldKey = 'currentPhase' | 'statusText' | 'lastClosedPhase' | 'openGates' | 'nextAction' | 'pendingDecision'
 interface Section { title: string, tokens: Token[] }
 interface Candidate extends CommandCenterSource { body: string }
 
@@ -17,12 +17,12 @@ export function commandCenterStatus(value: string): CommandCenterStatus {
   if (text === '已 freeze / 实施中') return 'implementation'
   const qualified = /^(in-progress|implementation|backlog|blocked|verification)\s*\/\s*[a-z]+(?:_[a-z0-9]+)+$/.exec(text)
   if (qualified) return commandCenterStatus(qualified[1]!)
-  const match = /^(awaiting accept|awaiting-accept|in-progress|in progress|in_progress|implementation|backlog|blocked|verification|done|accepted|计划中|待开始|实现中|实施中|进行中|阻塞|验证中|等待验收|待验收|已完成)(?:$|\s*[（(：])/.exec(text)
+  const match = /^(awaiting accept|awaiting-accept|in-progress|in progress|in_progress|implementation|backlog|blocked|verification|done|accepted|未开工|计划中|待开始|实现中|实施中|进行中|卡住|阻塞|验证中|等待验收|待验收|已完成)(?:$|\s*[（(：])/.exec(text)
   if (!match) return 'unknown'
   switch (match[1]) {
-    case 'backlog': case '计划中': case '待开始': return 'backlog'
+    case 'backlog': case '未开工': case '计划中': case '待开始': return 'backlog'
     case 'in-progress': case 'in progress': case 'in_progress': case 'implementation': case '实现中': case '实施中': case '进行中': return 'implementation'
-    case 'blocked': case '阻塞': return 'blocked'
+    case 'blocked': case '卡住': case '阻塞': return 'blocked'
     case 'verification': case '验证中': return 'verification'
     case 'awaiting accept': case 'awaiting-accept': case '等待验收': case '待验收': return 'awaiting-accept'
     case 'done': case 'accepted': case '已完成': return 'recorded-done'
@@ -144,18 +144,19 @@ function tables(tokens: Token[], repo: string): CommandCenterText[][][] {
 
 function fieldKey(label: string): FieldKey | null {
   const key = label.trim().toLowerCase().replace(/\s+/g, ' ')
-  if (/^(current phase|当前阶段|stage|阶段)(?:$|\s*\/)/.test(key)) return 'currentPhase'
+  if (/^(current phase|当前工作|当前阶段|stage|阶段)(?:$|\s*\/)/.test(key)) return 'currentPhase'
   if (/^(status word|current status|status|当前状态|状态)(?:$|\s*\/)/.test(key)) return 'statusText'
-  if (/^(last closed phase|最近关闭阶段|上个已关闭阶段|已关闭阶段)(?:$|\s*\/)/.test(key)) return 'lastClosedPhase'
-  if (/^(open gates|门禁|未决门禁|待处理门禁|恢复条件)(?:$|\s*\/)/.test(key)) return 'openGates'
-  if (/^(single next action|next action|唯一下一动作|下一动作|下一步)(?:$|\s*\/)/.test(key)) return 'nextAction'
+  if (/^(last closed phase|最近完成|最近关闭阶段|上个已关闭阶段|已关闭阶段)(?:$|\s*\/)/.test(key)) return 'lastClosedPhase'
+  if (/^(open gates|门禁|未决门禁|待处理门禁|恢复条件|卡点)(?:$|\s*\/)/.test(key)) return 'openGates'
+  if (/^(待你决定|pending decisions?)(?:$|\s*\/)/.test(key)) return 'pendingDecision'
+  if (/^(single next action|next action|唯一下一动作|下一动作|下一步)(?:$|\s*[/（(])/.test(key)) return 'nextAction'
   return null
 }
 
 function headerIndex(header: CommandCenterText[], pattern: RegExp): number { return header.findIndex(cell => pattern.test(cell.text)) }
 
 function hasStatusLead(value: string): boolean {
-  return /^(?:status\s*[:：]\s*)?(?:awaiting accept|awaiting-accept|in[- _]progress|implementation|backlog|blocked|verification|done|accepted|计划中|待开始|实现中|实施中|进行中|阻塞|验证中|等待验收|待验收|已完成)(?:$|[\s（(：/—–])/i.test(value.trim())
+  return /^(?:status\s*[:：]\s*)?(?:awaiting accept|awaiting-accept|in[- _]progress|implementation|backlog|blocked|verification|done|accepted|未开工|计划中|待开始|实现中|实施中|进行中|卡住|阻塞|验证中|等待验收|待验收|已完成)(?:$|[\s（(：/—–])/i.test(value.trim())
 }
 
 function phaseIndex(section: Section | undefined, repo: string): { phases: CommandCenterPhase[], notes: CommandCenterText | null, truncated: boolean } {
@@ -239,14 +240,14 @@ export function parseCommandCenterBody(body: string, repo: string): CommandCente
     warnings.push('状态记录与当前状态描述并存，请核对原总控台')
   }
   for (const key of conflicting) values[key] = null
-  const updated = summaryProse.map(part => part.text).join('\n').match(/(?:Updated|更新(?:日期|时间)?)\s*[:：]\s*(\d{4}-\d{2}-\d{2})(?=$|[^\d])/i)?.[1] ?? null
+  const updated = summaryProse.map(part => part.text).join('\n').match(/(?:Updated\s*[:：]|更新(?:日期|时间)?\s*[:：]|更新于)\s*(\d{4}-\d{2}-\d{2})(?=$|[^\d])/i)?.[1] ?? null
   const updatedTime = updated ? Date.parse(`${updated}T00:00:00.000Z`) : Number.NaN
   const validUpdated = updated && Number.isFinite(updatedTime) && new Date(updatedTime).toISOString().startsWith(updated) ? updated : null
   const phaseSections = all.filter(item => /^(?:\d+[.、．]\s*)?(?:phase index|阶段索引)(?:$|\s*\/)/i.test(item.title))
   const indexed = phaseIndex(phaseSections.length === 1 ? phaseSections[0] : undefined, repo)
   if (phaseSections.length > 1) warnings.push('存在多个阶段索引，请核对原总控台')
   if (indexed.truncated) warnings.push(`阶段索引超过 ${MAX_PHASES} 项，完整列表请查看原总控台`)
-  const blockSections = all.filter(item => /^(?:\d+[.、．]\s*)?(?:open exceptions|exceptions|未决例外|阻塞与例外)(?:$|\s*\/)/i.test(item.title))
+  const blockSections = all.filter(item => /^(?:\d+[.、．]\s*)?(?:open exceptions|exceptions|未决例外|未解决的例外或阻塞|阻塞与例外)(?:$|\s*\/)/i.test(item.title))
   const blocks: CommandCenterField[] = []
   let blocksTruncated = false
   const addBlock = (block: CommandCenterField) => {
@@ -265,6 +266,11 @@ export function parseCommandCenterBody(body: string, repo: string): CommandCente
     for (const part of prose(blockSection.tokens, repo)) addBlock({ label: '例外 / 阻塞', value: part })
   }
   if (blocksTruncated) warnings.push(`例外 / 阻塞记录超过 ${MAX_BLOCKS} 项，完整列表请查看原总控台`)
+  const settingSections = all.filter(item => /^(?:\d+[.、．]\s*)?(?:项目设置|project settings)$/i.test(item.title))
+  const modes = settingSections.length === 1
+    ? new Set([...prose(settingSections[0]!.tokens, repo).map(part => part.text).join(' ').matchAll(/\bprocess_mode\s*=\s*(light|standard)\b/gi)].map(match => match[1]!.toLowerCase()))
+    : new Set<string>()
+  const processMode = modes.size === 1 ? [...modes][0] as 'light' | 'standard' : null
   if (!values.currentPhase) warnings.push('总控台未明确当前阶段')
   if (!values.statusText || commandCenterStatus(values.statusText.text) === 'unknown') warnings.push('总控台未提供可识别的明确状态')
   if (!values.nextAction) warnings.push('总控台未填写下一动作')
@@ -272,8 +278,9 @@ export function parseCommandCenterBody(body: string, repo: string): CommandCente
     format: summaryTables.some(table => /^(field|item|字段|项目)$/i.test(table[0]?.[0]?.text ?? '')) ? 'table' : 'narrative', currentPhase: values.currentPhase ?? null,
     statusText: values.statusText ?? null, status: commandCenterStatus(values.statusText?.text ?? ''),
     lastClosedPhase: values.lastClosedPhase ?? null, openGates: values.openGates ?? null, nextAction: values.nextAction ?? null,
+    pendingDecision: values.pendingDecision ?? null, processMode,
     summary: combine(summaryProse.filter(part => {
-      if (/^(Updated|更新(?:日期|时间)?)\s*[:：]/i.test(part.text)) return false
+      if (/^(?:Updated\s*[:：]|更新(?:日期|时间)?\s*[:：]|更新于)/i.test(part.text)) return false
       const split = part.text.search(/[:：]/)
       const key = split < 0 ? null : fieldKey(part.text.slice(0, split))
       return !key || (key === 'statusText' && commandCenterStatus(part.text.slice(split + 1)) === 'unknown')

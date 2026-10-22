@@ -141,6 +141,7 @@ export function commandCenterPanel(read: CommandCenterRead | undefined, open: (u
   }
   const { content } = record
   host.append(field('当前阶段', content.currentPhase, open))
+  if (content.processMode) host.append(el('p', 'cc-explainer', content.processMode === 'light' ? '流程档位：轻量（light）' : '流程档位：标准（standard）'))
   if (content.status === 'unknown' && content.statusText) host.append(field('状态原文', content.statusText, open))
   if (content.format === 'narrative' && content.summary) host.append(text(content.summary, open, true))
   const stages = ['backlog', 'implementation', 'verification', 'awaiting-accept'] as const
@@ -157,6 +158,7 @@ export function commandCenterPanel(read: CommandCenterRead | undefined, open: (u
   const actions = el('div', 'cc-actions')
   actions.append(field('门禁 / 阻塞', content.openGates, open), field('下一动作', content.nextAction, open))
   host.append(actions)
+  if (content.pendingDecision && content.pendingDecision.text.trim() !== '无') host.append(field('待你决定', content.pendingDecision, open))
   if (content.lastClosedPhase?.text && content.lastClosedPhase.text !== '—') {
     const closed = el('div', 'cc-last-closed')
     closed.append(el('span', '', '最近关闭阶段'), text(content.lastClosedPhase, open, true))
