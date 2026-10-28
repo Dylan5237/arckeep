@@ -1,0 +1,3 @@
+process_mode=standard
+agent_tools=codex,claude
+external_tools=arckeep
