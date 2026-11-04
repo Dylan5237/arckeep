@@ -103,6 +103,26 @@ describe('waiting quick comment interaction', () => {
     expect(target.querySelector<HTMLButtonElement>('.apo-comment-button')?.disabled).toBe(true)
   })
 
+  it('requires explicit confirmation before sending a near-miss manual comment', async () => {
+    const row = waitingRow('manual', 3)
+    row.quickActions = pendingApoActions(blankRecord({ repo: row.repo, number: 42, kind: 'issue', title: row.title,
+      url: row.url, body: '处置人：@ada 请处置人在本 Issue 评论 EXCEPTION ACCEPT', createdAt: row.updatedAt,
+      updatedAt: row.updatedAt, viewerLogin: 'ada', viewerOwnsRepo: true }))
+    expect(row.quickActions[0]?.manual).toBe(true)
+    const snap = waiting([row])
+    const send = vi.fn(async () => ({ ok: true, data: { state: 'sent' } }))
+    window.arckeep = { getWaiting: async () => snap, refreshWaiting: async () => snap, commentWaitingApo: send } as unknown as ArckeepApi
+    const target = host(); await renderWaiting(target, () => {})
+    const button = target.querySelector<HTMLButtonElement>('.apo-comment-button')!
+    expect(button.textContent).toContain('可能相关')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    button.click()
+    expect(send).not.toHaveBeenCalled()
+    confirm.mockReturnValue(true)
+    button.click()
+    expect(send).toHaveBeenCalledOnce()
+  })
+
   it('uses a separate read-only check after an unknown result, without another send', async () => {
     const snap = waiting([actionRow()])
     const send = vi.fn(async () => ({ ok: true, data: { state: 'unknown' } }))
@@ -171,6 +191,26 @@ describe('waiting decision reply interaction', () => {
     expect(reply).toHaveBeenCalledWith(row.id, row.decisionActions?.[0]?.id, '退回', '  缺回放步骤  ')
     expect(target.querySelector('.apo-decision .apo-comment-status')?.textContent).toContain('权限不足')
     expect(choiceButton(target, '批准 A').disabled).toBe(false)
+  })
+
+  it('requires explicit confirmation before sending a near-miss manual comment', async () => {
+    const row = waitingRow('manual', 3)
+    row.quickActions = pendingApoActions(blankRecord({ repo: row.repo, number: 42, kind: 'issue', title: row.title,
+      url: row.url, body: '处置人：@ada 请处置人在本 Issue 评论 EXCEPTION ACCEPT', createdAt: row.updatedAt,
+      updatedAt: row.updatedAt, viewerLogin: 'ada', viewerOwnsRepo: true }))
+    expect(row.quickActions[0]?.manual).toBe(true)
+    const snap = waiting([row])
+    const send = vi.fn(async () => ({ ok: true, data: { state: 'sent' } }))
+    window.arckeep = { getWaiting: async () => snap, refreshWaiting: async () => snap, commentWaitingApo: send } as unknown as ArckeepApi
+    const target = host(); await renderWaiting(target, () => {})
+    const button = target.querySelector<HTMLButtonElement>('.apo-comment-button')!
+    expect(button.textContent).toContain('可能相关')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    button.click()
+    expect(send).not.toHaveBeenCalled()
+    confirm.mockReturnValue(true)
+    button.click()
+    expect(send).toHaveBeenCalledOnce()
   })
 
   it('uses a separate read-only check after an unknown result, without another send', async () => {

@@ -71,8 +71,12 @@ export function apoProseBlocks(markdown: string): ApoProseBlock[] {
 
 export function apoDeclaredDisposers(markdown: string): string[] {
   const text = apoProseBlocks(markdown).map(block => block.text).join('\n')
-  const declared = [...text.matchAll(/(?:处置人|\bdisposer\b)\s*(?:[:：|]\s*)?@([A-Za-z0-9-]+)\b/giu)]
+  const declared = [...text.matchAll(/(?:处置人|拍板人|决策人|批准人|\bdisposer\b)\s*(?:[:：|]\s*)?(?:是\s*)?@([A-Za-z0-9-]+)\b/giu)]
   return declared.map(match => match[1]?.toLowerCase() ?? '')
+}
+
+export function apoHasDeclaredDisposers(markdown: string): boolean {
+  return apoDeclaredDisposers(markdown).length > 0
 }
 
 export function apoDisposerMatches(markdown: string, viewer: string): boolean {

@@ -60,6 +60,7 @@ async function mount(overrides: Partial<ArckeepApi> = {}) {
     text: field<HTMLInputElement>('#text'),
     idea: field<HTMLTextAreaElement>('#idea-text'),
     repo: field<HTMLInputElement>('#repo'),
+    ideaRepo: field<HTMLSelectElement>('#idea-repo'),
     waiting: field<HTMLInputElement>('#waiting'),
     button: field<HTMLButtonElement>('#capture-save'),
     error: field<HTMLElement>('#error'),
@@ -82,7 +83,8 @@ describe('idea quick capture', () => {
     view.waiting.checked = true
     view.select('idea')
     view.idea.value = '  第一行 #example/demo !等我\n第二行 <script>literal</script>\n  '
-    view.repo.value = 'example/demo'
+    view.ideaRepo.value = 'example/demo'
+    view.ideaRepo.dispatchEvent(new Event('change'))
     view.idea.dispatchEvent(new Event('input'))
     enter(view.idea)
     await flush()

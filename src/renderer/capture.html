@@ -24,6 +24,9 @@
       <label class="capture-repo">
         <span>仓库</span>
         <input id="repo" type="text" placeholder="owner/repo，可选" aria-label="仓库标签" list="capture-repos" autocomplete="off" spellcheck="false" />
+        <select id="idea-repo" aria-label="关联仓库（可选）" hidden>
+          <option value="">不关联仓库</option>
+        </select>
       </label>
       <datalist id="capture-repos"></datalist>
       <label class="capture-wait" id="capture-wait" hidden>

@@ -386,12 +386,23 @@ function renderRow(row: WaitingRow, handlers: {
   const quick = el('div', { class: 'apo-quick-actions' })
   if (row.tier !== 'weak' && !row.ignored) for (const action of row.quickActions ?? []) {
     const state = handlers.commentState(action)
+    const manual = action.manual === true
     const button = el('button', {
-      type: 'button', class: 'ghost apo-comment-button', 'data-apo-action': action.id,
-      title: `以 @${action.viewerLogin} 向 ${action.target.repo} #${action.target.number} 评论：${action.token}\n请求：${action.requestText}`
-    }, [state.busy ? '正在评论…' : action.token])
+      type: 'button', class: 'ghost apo-comment-button' + (manual ? ' apo-comment-manual' : ''), 'data-apo-action': action.id,
+      title: manual
+        ? `未识别到固定格式的请求，仅按 token 出现位置提供手动确认。\n以 @${action.viewerLogin} 向 ${action.target.repo} #${action.target.number} 评论：${action.token}\n依据：${action.requestText}`
+        : `以 @${action.viewerLogin} 向 ${action.target.repo} #${action.target.number} 评论：${action.token}\n请求：${action.requestText}`
+    }, [state.busy ? '正在评论…' : manual ? '可能相关：' + action.token : action.token])
     button.disabled = state.busy || state.blocked
-    button.addEventListener('click', () => handlers.comment(row.id, action))
+    button.addEventListener('click', () => {
+      if (manual) {
+        const accepted = window.confirm(
+          `没有识别到固定格式的评论请求。\n\n仍要以 @${action.viewerLogin} 向 ${action.target.repo} #${action.target.number} 发送评论 “${action.token}” 吗？\n\n依据：${action.requestText.slice(0, 300)}`
+        )
+        if (!accepted) return
+      }
+      handlers.comment(row.id, action)
+    })
     const target = el('button', { type: 'button', class: 'ghost tiny apo-target' }, [`${action.target.repo} #${action.target.number}`])
     target.addEventListener('click', () => handlers.open(action.target.url))
     const controls: Node[] = [button, target]
