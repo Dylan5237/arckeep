@@ -51,7 +51,10 @@ export interface ClaudeSessionServiceOptions {
 }
 
 function directoryKey(value: string): string {
-  return path.win32.normalize(path.win32.resolve(value)).toLowerCase()
+  if (/^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\')) {
+    return path.win32.normalize(path.win32.resolve(value)).toLowerCase()
+  }
+  return path.resolve(value).toLowerCase()
 }
 
 export class ClaudeSessionService {
