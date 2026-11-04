@@ -45,6 +45,7 @@ describe('task manual takeover', () => {
       sessionId: SESSION,
       repo: 'example/demo',
       env: ENV,
+      platform: 'win32',
       exists: existsSet(['C:\\tools\\claude.exe', 'C:\\tools\\wt.exe', POWERSHELL])
     })
     expect(plan.terminal).toBe('windows-terminal')

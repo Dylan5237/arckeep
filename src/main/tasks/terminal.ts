@@ -54,6 +54,7 @@ export function createTaskTerminalPlan(input: {
   sessionId: string | null
   repo?: string | null
   env?: NodeJS.ProcessEnv
+  platform?: NodeJS.Platform
   exists?: (candidate: string) => boolean
 }): TaskTerminalPlan {
   const env = input.env ?? process.env
@@ -65,6 +66,7 @@ export function createTaskTerminalPlan(input: {
       sessionId: input.sessionId,
       resume: true,
       env,
+      platform: input.platform,
       exists
     })
   }
