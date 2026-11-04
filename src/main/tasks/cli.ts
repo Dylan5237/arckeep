@@ -173,6 +173,18 @@ async function main(): Promise<void> {
       if (args.flags.has('watch')) await watchTask(engine, task.id, args)
       break
     }
+    case 'update': {
+      const task = await engine.update({
+        id: required(args, 'id'),
+        ...(args.values.has('goal') ? { goal: args.values.get('goal') } : {}),
+        ...(args.values.has('title') ? { title: args.values.get('title') } : {}),
+        ...(args.values.has('agent') ? { agent: args.values.get('agent') } : {}),
+        ...(args.values.has('autonomy') ? { autonomy: args.values.get('autonomy') } : {})
+      })
+      print(task)
+      if (args.flags.has('watch')) await watchTask(engine, task.id, args)
+      break
+    }
     case 'pause': {
       print(engine.pause(required(args, 'id')))
       break
