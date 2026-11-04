@@ -6,7 +6,7 @@ Arckeep 把「记录想法 / 正式交办 / 掌握后台工作 / 作出必要决
 
 **交办任务 → 确认执行范围 → Codex 或 Claude Code 真正执行 → 等待 CI/定时/决定 → 条件变化后自动唤醒继续 → 查看成果与证据 → 验收或反馈返修。**
 
-第一次使用请先看 [Arckeep 使用说明书](docs/USER-GUIDE.md)。
+第一次使用请先看 [Arckeep 使用说明书](docs/USER-GUIDE.md)；本次 v1.0 的验证记录与已知限制见 [交付报告](docs/V1.0-DELIVERY.md)。
 
 ## 快速开始
 
