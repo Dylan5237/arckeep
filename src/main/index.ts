@@ -97,6 +97,8 @@ if (screenshotPath) {
 }
 
 app.setName('Arckeep')
+// Windows taskbar grouping and notifications use this identity instead of "Electron".
+if (process.platform === 'win32') app.setAppUserModelId('com.dylan5237.arckeep')
 const dataDirOverride = process.env.ARCKEEP_DATA_DIR?.trim()
 app.setPath('userData', screenshotPath
   ? fs.mkdtempSync(path.join(os.tmpdir(), 'arckeep-screenshot-'))

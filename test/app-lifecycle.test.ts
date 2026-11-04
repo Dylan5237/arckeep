@@ -38,7 +38,7 @@ type LifecycleHarness = {
   ideaStore: { list: Mock, create: Mock, update: Mock, delete: Mock }
   secretSentinel: string
   emitAppEvent: (name: string, ...args: unknown[]) => void
-  app: { quit: Mock }
+  app: { quit: Mock, setName: Mock, setAppUserModelId: Mock }
   globalShortcut: { unregisterAll: Mock }
   ipcMain: { handle: Mock }
   dialog: { showOpenDialog: Mock }
@@ -157,6 +157,7 @@ async function createHarness(options: { failDraftRemoval?: boolean } = {}) {
     commandLine: { appendSwitch: vi.fn() },
     isPackaged: false,
     setName: vi.fn(),
+    setAppUserModelId: vi.fn(),
     setPath: vi.fn((name: string, value: string) => {
       paths.set(name, value)
       if (name === 'userData') fs.mkdirSync(value, { recursive: true })
@@ -381,6 +382,14 @@ async function createHarness(options: { failDraftRemoval?: boolean } = {}) {
 }
 
 describe('主进程退出生命周期', () => {
+  it('uses Arckeep as the Windows application identity', async () => {
+    const harness = await createHarness()
+    expect(harness.app.setName).toHaveBeenCalledWith('Arckeep')
+    if (process.platform === 'win32') {
+      expect(harness.app.setAppUserModelId).toHaveBeenCalledWith('com.dylan5237.arckeep')
+    }
+  })
+
   it('APO 评论、决策回复和只读核对只接收主窗口主 frame，并在退出后拒绝调用', async () => {
     const harness = await createHarness()
     harness.settingsOptions[0].onHotkey()
