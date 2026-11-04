@@ -10,6 +10,28 @@ import type { ApoCommentOutcome } from './waiting/apo-actions.js'
 import type { ApoReplyChoice } from './waiting/apo-reply.js'
 import type { RepoFetchWindow } from './repo-fetch-window.js'
 import type { ClaudeSession, ClaudeSessionTranscript, ClaudeWorkspace } from './claude-sessions.js'
+import type {
+  Task,
+  TaskAgentStatus,
+  TaskCreateInput,
+  TaskDecisionReplyInput,
+  TaskDetail,
+  TaskEngineConfig,
+  TaskSnapshot,
+  TaskUpdateInput
+} from './tasks/types.js'
+
+export type {
+  Task,
+  TaskAgentStatus,
+  TaskCreateInput,
+  TaskDecision,
+  TaskDecisionReplyInput,
+  TaskDetail,
+  TaskEngineConfig,
+  TaskSnapshot,
+  TaskUpdateInput
+} from './tasks/types.js'
 
 export type { OverviewConfig, OverviewSnapshot } from './overview/types.js'
 export type { IdeaInput, IdeaItem, IdeaUpdate } from './ideas/types.js'
@@ -136,6 +158,28 @@ export interface ArckeepApi {
   chooseClaudeWorkspace(repo: string, name: string): Promise<IpcResult<ClaudeWorkspace>>
   startClaudeSession(repo: string, name: string, resumeSessionId?: string): Promise<IpcResult<ClaudeSession>>
   readClaudeSession(sessionId: string): Promise<IpcResult<ClaudeSessionTranscript>>
+  resumeClaudeSession(sessionId: string): Promise<IpcResult<ClaudeSession>>
+  getTaskSnapshot(): Promise<IpcResult<TaskSnapshot>>
+  getTaskDetail(id: string): Promise<IpcResult<TaskDetail>>
+  createTask(input: TaskCreateInput): Promise<IpcResult<Task>>
+  updateTask(input: TaskUpdateInput): Promise<IpcResult<Task>>
+  startTask(id: string): Promise<IpcResult<Task>>
+  pauseTask(id: string): Promise<IpcResult<Task>>
+  resumeTask(id: string): Promise<IpcResult<Task>>
+  cancelTask(id: string): Promise<IpcResult<Task>>
+  retryTask(id: string): Promise<IpcResult<Task>>
+  acceptTask(id: string, note?: string): Promise<IpcResult<Task>>
+  reopenTask(id: string, feedback?: string): Promise<IpcResult<Task>>
+  deleteTask(id: string): Promise<IpcResult<{ id: string }>>
+  replyTaskDecision(input: TaskDecisionReplyInput): Promise<IpcResult<Task>>
+  refreshTaskEvents(force?: boolean): Promise<IpcResult<TaskSnapshot>>
+  setTaskConfig(input: TaskEngineConfig): Promise<IpcResult<TaskEngineConfig>>
+  refreshTaskAgents(): Promise<IpcResult<TaskAgentStatus[]>>
+  pickTaskDirectory(): Promise<IpcResult<{ cancelled: true } | { cancelled: false, path: string }>>
+  openTaskArtifact(taskId: string, artifactId: string): Promise<IpcResult<true>>
+  revealTaskRun(taskId: string, runId: string): Promise<IpcResult<true>>
+  onTasksChanged(listener: () => void): () => void
+  onTasksNavigate(listener: (taskId: string) => void): () => void
 }
 
 export function githubSourceLabel(source: GithubSource): string {

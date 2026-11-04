@@ -95,7 +95,39 @@ const api: ArckeepApi = {
   listClaudeSessions: repo => ipcRenderer.invoke(IpcChannel.listClaudeSessions, repo),
   chooseClaudeWorkspace: (repo, name) => ipcRenderer.invoke(IpcChannel.chooseClaudeWorkspace, repo, name),
   startClaudeSession: (repo, name, resumeSessionId) => ipcRenderer.invoke(IpcChannel.startClaudeSession, repo, name, resumeSessionId),
-  readClaudeSession: sessionId => ipcRenderer.invoke(IpcChannel.readClaudeSession, sessionId)
+  readClaudeSession: sessionId => ipcRenderer.invoke(IpcChannel.readClaudeSession, sessionId),
+  resumeClaudeSession: sessionId => ipcRenderer.invoke(IpcChannel.resumeClaudeSession, sessionId),
+  getTaskSnapshot: () => ipcRenderer.invoke(IpcChannel.getTaskSnapshot),
+  getTaskDetail: id => ipcRenderer.invoke(IpcChannel.getTaskDetail, id),
+  createTask: input => ipcRenderer.invoke(IpcChannel.createTask, input),
+  updateTask: input => ipcRenderer.invoke(IpcChannel.updateTask, input),
+  startTask: id => ipcRenderer.invoke(IpcChannel.startTask, id),
+  pauseTask: id => ipcRenderer.invoke(IpcChannel.pauseTask, id),
+  resumeTask: id => ipcRenderer.invoke(IpcChannel.resumeTask, id),
+  cancelTask: id => ipcRenderer.invoke(IpcChannel.cancelTask, id),
+  retryTask: id => ipcRenderer.invoke(IpcChannel.retryTask, id),
+  acceptTask: (id, note) => ipcRenderer.invoke(IpcChannel.acceptTask, id, note),
+  reopenTask: (id, feedback) => ipcRenderer.invoke(IpcChannel.reopenTask, id, feedback),
+  deleteTask: id => ipcRenderer.invoke(IpcChannel.deleteTask, id),
+  replyTaskDecision: input => ipcRenderer.invoke(IpcChannel.replyTaskDecision, input),
+  refreshTaskEvents: force => ipcRenderer.invoke(IpcChannel.refreshTaskEvents, force),
+  setTaskConfig: input => ipcRenderer.invoke(IpcChannel.setTaskConfig, input),
+  refreshTaskAgents: () => ipcRenderer.invoke(IpcChannel.refreshTaskAgents),
+  pickTaskDirectory: () => ipcRenderer.invoke(IpcChannel.pickTaskDirectory),
+  openTaskArtifact: (taskId, artifactId) => ipcRenderer.invoke(IpcChannel.openTaskArtifact, taskId, artifactId),
+  revealTaskRun: (taskId, runId) => ipcRenderer.invoke(IpcChannel.revealTaskRun, taskId, runId),
+  onTasksChanged: listener => {
+    const handler = () => listener()
+    ipcRenderer.on(IpcChannel.tasksChanged, handler)
+    return () => ipcRenderer.removeListener(IpcChannel.tasksChanged, handler)
+  },
+  onTasksNavigate: listener => {
+    const handler = (_event: IpcRendererEvent, taskId: unknown) => {
+      if (typeof taskId === 'string') listener(taskId)
+    }
+    ipcRenderer.on(IpcChannel.tasksNavigate, handler)
+    return () => ipcRenderer.removeListener(IpcChannel.tasksNavigate, handler)
+  }
 }
 
 contextBridge.exposeInMainWorld('arckeep', api)

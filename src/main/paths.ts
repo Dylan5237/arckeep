@@ -27,6 +27,14 @@ export function claudeSessionsFilePath(userData: string, join: (...parts: string
   return join(userData, 'claude-sessions.json')
 }
 
+export function tasksFilePath(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'tasks.json')
+}
+
+export function taskRunsDir(userData: string, join: (...parts: string[]) => string = path.join): string {
+  return join(userData, 'task-runs')
+}
+
 export function testHookTodosPath(userData: string, join: (...parts: string[]) => string = path.join): string {
   return join(userData, 'test-hook-todos.json')
 }

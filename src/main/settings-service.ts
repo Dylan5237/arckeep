@@ -266,6 +266,17 @@ export class SettingsService {
     return this.readPat()
   }
 
+  /** Raw token for background GitHub event checks. Never exposed to the renderer. */
+  async githubToken(): Promise<string | null> {
+    this.assertOpen()
+    try {
+      const resolved = await this.resolveAuth()
+      return resolved.token
+    } catch {
+      return null
+    }
+  }
+
   private readPat(): string | null {
     if (!this.settings.patCiphertext) return null
     try {
