@@ -76,6 +76,7 @@ import { registerClaudeIpc } from './claude/ipc.js'
 import { TaskEngine } from './tasks/engine.js'
 import { registerTaskIpc } from './tasks/ipc.js'
 import { detectAgents } from './tasks/agent-detect.js'
+import { createTaskTerminalPlan } from './tasks/terminal.js'
 import { seedScreenshotPrompts } from './screenshot-prompts.js'
 import { createSafeStorageBox } from './token-store.js'
 import type { HotkeyRegistrar } from './hotkey.js'
@@ -803,6 +804,16 @@ if (!gotLock) {
     registerTaskIpc({
       engine: taskEngine,
       getWindow: () => mainWindow,
+      launchTakeover: async task => {
+        const plan = createTaskTerminalPlan({
+          title: task.title,
+          cwd: task.cwd,
+          agent: task.agent,
+          sessionId: task.sessionId,
+          repo: task.repo
+        })
+        await launchClaudeInTerminal(plan)
+      },
       guard: event => {
         backgroundTasks.assertOpen()
         if (isQuitting) throw new TaskCancelledError()

@@ -71,7 +71,7 @@ export function createClaudeTerminalTitle(repo: string, sessionIdInput: string):
   return 'Arckeep - ' + safeName + ' - ' + sessionId
 }
 
-function resolvePowerShell(env: NodeJS.ProcessEnv, exists: (candidate: string) => boolean): string {
+export function resolvePowerShell(env: NodeJS.ProcessEnv, exists: (candidate: string) => boolean): string {
   const systemRoot = envValue(env, 'SystemRoot') || 'C:\\Windows'
   const systemPowerShell = path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
   if (exists(systemPowerShell)) return systemPowerShell

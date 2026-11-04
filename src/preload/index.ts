@@ -115,6 +115,7 @@ const api: ArckeepApi = {
   refreshTaskAgents: () => ipcRenderer.invoke(IpcChannel.refreshTaskAgents),
   pickTaskDirectory: () => ipcRenderer.invoke(IpcChannel.pickTaskDirectory),
   openTaskArtifact: (taskId, artifactId) => ipcRenderer.invoke(IpcChannel.openTaskArtifact, taskId, artifactId),
+  openTaskTerminal: taskId => ipcRenderer.invoke(IpcChannel.openTaskTerminal, taskId),
   revealTaskRun: (taskId, runId) => ipcRenderer.invoke(IpcChannel.revealTaskRun, taskId, runId),
   onTasksChanged: listener => {
     const handler = () => listener()

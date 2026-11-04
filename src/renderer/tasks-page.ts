@@ -146,18 +146,28 @@ export async function renderTasks(host: HTMLElement, options: TasksPageOptions):
     el('div', { class: 'task-header-actions' })
   ])
   const errorBox = el('div', { class: 'alert error task-page-error', role: 'alert', hidden: '' })
+  const noticeBox = el('div', { class: 'alert task-page-notice', role: 'status', hidden: '' })
   const decisionSection = el('section', { class: 'task-decision-section' })
   const composer = el('details', { class: 'card task-composer', open: '' })
   const listPane = el('section', { class: 'task-list-pane', 'aria-label': '任务列表' })
   const detailPane = el('section', { class: 'task-detail-pane', 'aria-live': 'polite' })
   const layout = el('div', { class: 'task-layout' }, [listPane, detailPane])
-  page.append(header, errorBox, decisionSection, composer, layout)
+  page.append(header, errorBox, noticeBox, decisionSection, composer, layout)
   host.replaceChildren(page)
 
   const showError = (message: string) => {
     state.error = message
     errorBox.textContent = message
     errorBox.hidden = message.length === 0
+    if (message) {
+      noticeBox.hidden = true
+      noticeBox.textContent = ''
+    }
+  }
+
+  const showNotice = (message: string) => {
+    noticeBox.textContent = message
+    noticeBox.hidden = message.length === 0
   }
 
   const refreshButton = el('button', { type: 'button', class: 'ghost' }, ['刷新'])
@@ -174,15 +184,16 @@ export async function renderTasks(host: HTMLElement, options: TasksPageOptions):
   const titleInput = el('input', { type: 'text', placeholder: '标题（可选，默认取目标第一行）', 'aria-label': '任务标题', maxlength: '200' })
   const repoSelect = el('select', { 'aria-label': '关联仓库' })
   const repoCustom = el('input', { type: 'text', placeholder: 'owner/repo', 'aria-label': '自定义仓库', hidden: '' })
-  const cwdText = el('code', { class: 'task-cwd-value' }, ['未选择'])
-  const cwdButton = el('button', { type: 'button', class: 'ghost' }, ['选择工作目录'])
+  const cwdSelect = el('select', { 'aria-label': '常用工作目录' })
+  const cwdButton = el('button', { type: 'button', class: 'ghost' }, ['浏览…'])
   const agentSelect = el('select', { 'aria-label': '执行 Agent' })
   const autonomySelect = el('select', { 'aria-label': '授权范围' })
   const prioritySelect = el('select', { 'aria-label': '优先级' })
-  const createDraftButton = el('button', { type: 'button', class: 'primary' }, ['创建任务'])
+  const createDraftButton = el('button', { type: 'button', class: 'ghost' }, ['仅创建'])
   const createStartButton = el('button', { type: 'button', class: 'primary' }, ['创建并开始'])
   const composerFeedback = el('p', { class: 'task-composer-feedback', role: 'status' })
   let selectedCwd = ''
+  let pendingAgentDefault = ''
   const prefillRepo = options.prefill?.repo ?? ''
 
   const composerSummary = el('summary', { class: 'task-composer-summary' }, ['交办新任务'])
@@ -194,35 +205,38 @@ export async function renderTasks(host: HTMLElement, options: TasksPageOptions):
     composer.open = true
   }
 
-  const fieldsRow = el('div', { class: 'task-form-grid' })
   const mkField = (label: string, control: HTMLElement, hint?: string) => {
     const field = el('label', { class: 'task-field' }, [el('span', { class: 'task-field-label' }, [label]), control])
     if (hint) field.append(el('span', { class: 'hint' }, [hint]))
     return field
   }
-  const repoField = el('div', { class: 'task-field' }, [
-    el('span', { class: 'task-field-label' }, ['关联仓库']),
-    repoSelect,
-    repoCustom
+  const quickFields = el('div', { class: 'task-form-grid' }, [
+    el('div', { class: 'task-field' }, [
+      el('span', { class: 'task-field-label' }, ['关联仓库（可选）']),
+      repoSelect,
+      repoCustom
+    ]),
+    el('div', { class: 'task-field' }, [
+      el('span', { class: 'task-field-label' }, ['工作目录']),
+      el('div', { class: 'task-cwd-row' }, [cwdSelect, cwdButton])
+    ])
   ])
-  const cwdField = el('div', { class: 'task-field' }, [
-    el('span', { class: 'task-field-label' }, ['工作目录']),
-    el('div', { class: 'task-cwd-row' }, [cwdText, cwdButton])
+  const advanced = el('details', { class: 'task-advanced' }, [
+    el('summary', {}, ['高级选项：Agent / 授权范围 / 优先级']),
+    el('div', { class: 'task-form-grid' }, [
+      mkField('执行 Agent', agentSelect),
+      mkField('授权范围', autonomySelect),
+      mkField('优先级', prioritySelect)
+    ])
   ])
-  fieldsRow.append(
-    repoField,
-    cwdField,
-    mkField('执行 Agent', agentSelect),
-    mkField('授权范围', autonomySelect),
-    mkField('优先级', prioritySelect)
-  )
   composerBody.append(
     el('div', { class: 'task-composer-main' }, [goalInput, titleInput]),
-    fieldsRow,
+    quickFields,
+    advanced,
     el('div', { class: 'task-composer-actions' }, [
-      createDraftButton,
       createStartButton,
-      el('span', { class: 'hint' }, ['创建后先确认范围再开始；也可以直接开始。'])
+      createDraftButton,
+      el('span', { class: 'hint' }, ['默认使用上次的目录 / Agent / 授权；只想先确认范围就点「仅创建」。'])
     ]),
     composerFeedback
   )
@@ -268,24 +282,72 @@ export async function renderTasks(host: HTMLElement, options: TasksPageOptions):
     repoCustom.hidden = true
     repoCustom.value = ''
     const known = state.knownRepos.find(item => item.github?.toLowerCase() === value.toLowerCase())
-    if (known?.path) {
-      selectedCwd = known.path
-      cwdText.textContent = selectedCwd
-    }
+    if (known?.path) setCwd(known.path, false)
   }
   repoSelect.addEventListener('change', applyRepoSelection)
-  cwdButton.addEventListener('click', () => {
-    void window.arckeep.pickTaskDirectory().then(result => {
+
+  const ensureCwdOption = (value: string, label?: string) => {
+    if (!value) return
+    if (![...cwdSelect.options].some(option => option.value === value)) {
+      cwdSelect.append(el('option', { value }, [label ?? value]))
+    }
+    cwdSelect.value = value
+  }
+
+  const setCwd = (value: string, matchRepo = true) => {
+    selectedCwd = value
+    ensureCwdOption(value)
+    if (!matchRepo) return
+    const known = state.knownRepos.find(item => item.path && item.path.toLowerCase() === value.toLowerCase())
+    if (known?.github) {
+      if (![...repoSelect.options].some(option => option.value.toLowerCase() === known.github!.toLowerCase())) {
+        repoSelect.append(el('option', { value: known.github }, [known.label + ' · ' + known.github]))
+      }
+      repoSelect.value = known.github
+      repoCustom.hidden = true
+      repoCustom.value = ''
+    }
+  }
+
+  const rebuildCwdOptions = () => {
+    const previous = selectedCwd
+    cwdSelect.replaceChildren(el('option', { value: '' }, ['选择常用工作目录…']))
+    const seen = new Set<string>()
+    for (const repo of state.knownRepos) {
+      if (!repo.path || seen.has(repo.path.toLowerCase())) continue
+      seen.add(repo.path.toLowerCase())
+      cwdSelect.append(el('option', { value: repo.path }, [repo.label + ' · ' + repo.path]))
+    }
+    cwdSelect.append(el('option', { value: '__pick__' }, ['浏览其他目录…']))
+    if (previous) ensureCwdOption(previous)
+  }
+
+  const chooseCwd = async () => {
+    try {
+      const result = await window.arckeep.pickTaskDirectory()
       if (!result.ok) {
         composerFeedback.textContent = result.error
         return
       }
-      if (result.data.cancelled) return
-      selectedCwd = result.data.path
-      cwdText.textContent = selectedCwd
+      if (result.data.cancelled) {
+        cwdSelect.value = selectedCwd
+        return
+      }
+      setCwd(result.data.path)
       composerFeedback.textContent = ''
-    }).catch(error => { composerFeedback.textContent = errorText(error, '无法选择工作目录') })
+    } catch (error) {
+      composerFeedback.textContent = errorText(error, '无法选择工作目录')
+    }
+  }
+
+  cwdSelect.addEventListener('change', () => {
+    if (cwdSelect.value === '__pick__') {
+      void chooseCwd()
+      return
+    }
+    if (cwdSelect.value) setCwd(cwdSelect.value)
   })
+  cwdButton.addEventListener('click', () => { void chooseCwd() })
 
   const refreshAgentOptions = (snapshot: TaskSnapshot) => {
     const previous = agentSelect.value || 'auto'
@@ -305,6 +367,12 @@ export async function renderTasks(host: HTMLElement, options: TasksPageOptions):
     }
     agentSelect.value = previous
     if (agentSelect.value !== previous) agentSelect.value = 'auto'
+    if (pendingAgentDefault) {
+      if ([...agentSelect.options].some(option => option.value === pendingAgentDefault)) {
+        agentSelect.value = pendingAgentDefault
+      }
+      pendingAgentDefault = ''
+    }
   }
 
   const currentProjectRepo = (): string | null => {
@@ -341,6 +409,7 @@ export async function renderTasks(host: HTMLElement, options: TasksPageOptions):
         source: options.prefill?.source ?? 'manual',
         start
       }))
+      saveTaskDefaults()
       goalInput.value = ''
       titleInput.value = ''
       composerFeedback.textContent = start ? '已创建并排队。' : '已创建，请在右侧确认范围后开始。'
@@ -363,9 +432,10 @@ export async function renderTasks(host: HTMLElement, options: TasksPageOptions):
     if (state.busy) return
     state.busy = true
     showError('')
+    showNotice('')
     try {
       await operation()
-      if (success) composerFeedback.textContent = success
+      if (success) showNotice(success)
       await refresh(true)
     } catch (error) {
       showError(errorText(error, '任务操作失败'))
@@ -387,6 +457,7 @@ export async function renderTasks(host: HTMLElement, options: TasksPageOptions):
       }, '已删除')
       case 'accept': return run(() => window.arckeep.acceptTask(task.id, state.acceptNotes.get(task.id)?.trim() || undefined), '已验收通过')
       case 'reopen': return run(() => window.arckeep.reopenTask(task.id, state.feedbackDrafts.get(task.id)?.trim() || undefined), '已提交，正在继续原任务')
+      case 'takeover': return run(async () => { unwrap(await window.arckeep.openTaskTerminal(task.id)) }, '已在外部终端打开任务工作目录')
       case 'check-events': return run(() => window.arckeep.refreshTaskEvents(true), '已检查等待事件')
       default: return Promise.resolve()
     }
@@ -880,6 +951,7 @@ export async function renderTasks(host: HTMLElement, options: TasksPageOptions):
     if (task.status === 'waiting') addControl('立即核对', 'check-events')
     if (task.status === 'paused') addControl('继续', 'resume', 'primary')
     if (task.status === 'failed' || task.status === 'cancelled') addControl('继续', 'retry', 'primary')
+    if (['draft', 'waiting', 'paused', 'failed', 'ready'].includes(task.status)) addControl('接管', 'takeover')
     if (['draft', 'queued', 'running', 'waiting', 'needs_decision', 'ready', 'paused', 'failed'].includes(task.status)) addControl('取消任务', 'cancel')
     if (['draft', 'paused', 'failed', 'ready', 'done', 'cancelled'].includes(task.status)) addControl('删除', 'delete')
     if (controls.childElementCount > 0) detailPane.append(controls)
@@ -948,6 +1020,30 @@ export async function renderTasks(host: HTMLElement, options: TasksPageOptions):
     }
   }
 
+  const loadTaskDefaults = (): Record<string, string> => {
+    try {
+      const raw = localStorage.getItem('arckeep.task-defaults.v1')
+      const parsed: unknown = raw ? JSON.parse(raw) : null
+      return parsed && typeof parsed === 'object' ? parsed as Record<string, string> : {}
+    } catch {
+      return {}
+    }
+  }
+
+  const saveTaskDefaults = () => {
+    try {
+      localStorage.setItem('arckeep.task-defaults.v1', JSON.stringify({
+        cwd: selectedCwd,
+        repo: currentProjectRepo() ?? '',
+        agent: agentSelect.value,
+        autonomy: autonomySelect.value,
+        priority: prioritySelect.value
+      }))
+    } catch {
+      // Preferences are optional.
+    }
+  }
+
   const loadKnownRepos = async () => {
     try {
       state.knownRepos = await window.arckeep.getKnownRepos()
@@ -955,6 +1051,15 @@ export async function renderTasks(host: HTMLElement, options: TasksPageOptions):
       state.knownRepos = []
     }
     rebuildRepoOptions()
+    rebuildCwdOptions()
+    const defaults = loadTaskDefaults()
+    if (defaults.repo && [...repoSelect.options].some(option => option.value.toLowerCase() === defaults.repo.toLowerCase())) {
+      repoSelect.value = defaults.repo
+    }
+    if (defaults.agent) pendingAgentDefault = defaults.agent
+    if (defaults.autonomy && [...autonomySelect.options].some(option => option.value === defaults.autonomy)) autonomySelect.value = defaults.autonomy
+    if (defaults.priority && [...prioritySelect.options].some(option => option.value === defaults.priority)) prioritySelect.value = defaults.priority
+    if (defaults.cwd) setCwd(defaults.cwd)
     if (options.prefill?.repo) {
       const repo = options.prefill.repo
       if (![...repoSelect.options].some(option => option.value.toLowerCase() === repo.toLowerCase())) {

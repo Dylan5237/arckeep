@@ -719,3 +719,24 @@
     align-items: flex-start;
   }
 }
+
+.task-advanced {
+  border-top: 1px dashed var(--arckeep-line);
+  padding-top: 8px;
+}
+
+.task-advanced summary {
+  cursor: pointer;
+  color: var(--arckeep-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.task-advanced[open] summary {
+  margin-bottom: 8px;
+}
+
+.task-cwd-row select {
+  flex: 1 1 auto;
+  min-width: 0;
+}

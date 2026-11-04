@@ -200,6 +200,7 @@ function makeHarness(tasks: Task[] = [BASE_TASK], decisions: TaskDecision[] = []
     refreshTaskAgents: vi.fn(async () => ({ ok: true as const, data: AGENTS })),
     pickTaskDirectory: vi.fn(async () => ({ ok: true as const, data: { cancelled: false as const, path: 'C:\\work\\demo' } })),
     openTaskArtifact: vi.fn(async () => ({ ok: true as const, data: true as const })),
+    openTaskTerminal: vi.fn(async () => ({ ok: true as const, data: true as const })),
     revealTaskRun: vi.fn(async () => ({ ok: true as const, data: true as const })),
     onTasksChanged: vi.fn(() => () => {}),
     onTasksNavigate: vi.fn(() => () => {})
@@ -222,6 +223,7 @@ afterEach(() => {
   dispose?.()
   dispose = null
   document.body.replaceChildren()
+  localStorage.clear()
   vi.restoreAllMocks()
 })
 
@@ -271,6 +273,36 @@ describe('tasks page', () => {
     }))
   })
 
+  it('remembers the last directory and advanced options for the next task', async () => {
+    localStorage.setItem('arckeep.task-defaults.v1', JSON.stringify({
+      cwd: 'C:\\work\\demo',
+      repo: 'example/demo',
+      agent: 'codex',
+      autonomy: 'full',
+      priority: 'high'
+    }))
+    const harness = makeHarness([])
+    window.arckeep = harness.api as unknown as ArckeepApi
+    const host = document.createElement('main')
+    document.body.append(host)
+    dispose = await renderTasks(host, {})
+    await settle()
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="常用工作目录"]')!.value).toBe('C:\\work\\demo')
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="执行 Agent"]')!.value).toBe('codex')
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="授权范围"]')!.value).toBe('full')
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="优先级"]')!.value).toBe('high')
+
+    host.querySelector<HTMLTextAreaElement>('[aria-label="任务目标"]')!.value = '继续上次的工作'
+    button(host, '创建并开始').click()
+    await settle()
+    expect(harness.api.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: 'C:\\work\\demo',
+      agent: 'codex',
+      autonomy: 'full',
+      priority: 'high'
+    }))
+  })
+
   it('opens artifacts and submits acceptance feedback from the task detail', async () => {
     const harness = makeHarness()
     window.arckeep = harness.api as unknown as ArckeepApi
@@ -283,6 +315,10 @@ describe('tasks page', () => {
     host.querySelector<HTMLButtonElement>('.task-artifact')!.click()
     await settle()
     expect(harness.api.openTaskArtifact).toHaveBeenCalledWith(BASE_TASK.id, 'a1')
+
+    button(host, '接管').click()
+    await settle()
+    expect(harness.api.openTaskTerminal).toHaveBeenCalledWith(BASE_TASK.id)
 
     const acceptNote = host.querySelector<HTMLInputElement>('[aria-label="验收备注"]')!
     acceptNote.value = '可以'

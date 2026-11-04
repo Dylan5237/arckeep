@@ -177,6 +177,7 @@ export interface ArckeepApi {
   refreshTaskAgents(): Promise<IpcResult<TaskAgentStatus[]>>
   pickTaskDirectory(): Promise<IpcResult<{ cancelled: true } | { cancelled: false, path: string }>>
   openTaskArtifact(taskId: string, artifactId: string): Promise<IpcResult<true>>
+  openTaskTerminal(taskId: string): Promise<IpcResult<true>>
   revealTaskRun(taskId: string, runId: string): Promise<IpcResult<true>>
   onTasksChanged(listener: () => void): () => void
   onTasksNavigate(listener: (taskId: string) => void): () => void

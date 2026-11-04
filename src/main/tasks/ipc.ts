@@ -10,6 +10,7 @@ export interface TaskIpcOptions {
   engine: TaskEngine
   guard: (event: IpcMainInvokeEvent) => void
   getWindow: () => BrowserWindow | null
+  launchTakeover: (task: Task) => Promise<void>
 }
 
 function failure(error: unknown, fallback: string): IpcResult<never> {
@@ -117,6 +118,19 @@ export function registerTaskIpc(options: TaskIpcOptions): void {
       if (!artifact.path || !existsSync(artifact.path)) throw new Error('产物文件已不存在，请查看运行日志')
       const message = await shell.openPath(artifact.path)
       if (message) throw new Error('无法打开产物：' + message)
+      return true as const
+    }))
+  ipcMain.handle(IpcChannel.openTaskTerminal, (event, taskId: unknown) =>
+    invoke(options, event, '无法打开任务终端', async () => {
+      if (typeof taskId !== 'string') throw new Error('任务编号无效')
+      const detail = options.engine.detail(taskId)
+      if (['running', 'queued'].includes(detail.task.status)) {
+        throw new Error('任务正在运行，请先暂停或等待本轮结束后接管')
+      }
+      // Taking over a waiting task must stop automatic event continuation while
+      // the user works in the terminal.
+      if (detail.task.status === 'waiting') options.engine.pause(taskId)
+      await options.launchTakeover(detail.task)
       return true as const
     }))
   ipcMain.handle(IpcChannel.revealTaskRun, (event, taskId: unknown, runId: unknown) =>

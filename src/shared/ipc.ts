@@ -88,6 +88,7 @@ export const IpcChannel = {
   refreshTaskAgents: 'tasks:refresh-agents',
   pickTaskDirectory: 'tasks:pick-directory',
   openTaskArtifact: 'tasks:open-artifact',
+  openTaskTerminal: 'tasks:open-terminal',
   revealTaskRun: 'tasks:reveal-run',
   tasksChanged: 'tasks:changed',
   tasksNavigate: 'tasks:navigate'
