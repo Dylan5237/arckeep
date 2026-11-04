@@ -134,7 +134,7 @@ export class IdeaStore {
     try {
       return readFileSync(this.file, 'utf8')
     } catch (error) {
-      if (errorCode(error) === 'ENOENT') return null
+      if (errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR') return null
       throw new Error('灵感数据文件读取失败')
     }
   }

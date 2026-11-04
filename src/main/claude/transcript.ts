@@ -9,7 +9,7 @@ const MAX_MESSAGES = 120
 const MAX_MESSAGE_TEXT = 6000
 
 export function claudeProjectDirectoryName(cwd: string): string {
-  const resolved = path.resolve(cwd)
+  const resolved = /^[A-Za-z]:[\\/]/.test(cwd) || cwd.startsWith('\\\\') ? path.win32.resolve(cwd) : path.resolve(cwd)
   const slug = resolved.replace(/[^a-zA-Z0-9]/g, '-')
   if (slug.length <= 200) return slug
   let hash = 0
