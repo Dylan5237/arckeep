@@ -1628,3 +1628,26 @@ textarea.tool-json {
     justify-content: flex-start;
   }
 }
+
+.claude-session-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.claude-session-title-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.claude-session-title-row .chip {
+  flex: 0 0 auto;
+  font-size: 10px;
+}
+
+button.apo-comment-manual {
+  border-style: dashed;
+  color: var(--arckeep-muted);
+}

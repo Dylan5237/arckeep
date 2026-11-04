@@ -1,4 +1,5 @@
 import { MAX_IDEA_LENGTH, type IdeaInput, type IdeaItem } from '../shared/ideas/types'
+import type { KnownRepo } from '../shared/tools/repos'
 import './ideas.css'
 
 type IdeaDraft = { text: string, repo: string }
@@ -53,10 +54,34 @@ export async function renderIdeas(target: HTMLElement): Promise<void> {
   let creating = false
   let mutationBusy = false
   const deletingIds = new Set<string>()
+  const knownRepos: KnownRepo[] = []
+  try {
+    knownRepos.push(...await window.arckeep.getKnownRepos())
+  } catch {
+    // The selector is optional; ideas still save without a repository.
+  }
+
+  const repoOptions = (current: string): HTMLSelectElement => {
+    const select = el('select', { 'aria-label': '关联仓库（可选）' })
+    select.append(el('option', { value: '' }, ['不关联仓库']))
+    const seen = new Set<string>()
+    for (const repo of knownRepos) {
+      if (!repo.github) continue
+      const key = repo.github.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      select.append(el('option', { value: repo.github }, [repo.label + ' · ' + repo.github]))
+    }
+    if (current && !seen.has(current.toLowerCase())) {
+      select.append(el('option', { value: current }, [current]))
+    }
+    select.value = current
+    return select
+  }
 
   const page = el('section', { class: 'page ideas', 'data-page': 'ideas' }, [
     el('h1', {}, ['灵感']),
-    el('p', { class: 'lede' }, ['先记下来，之后再整理。每条灵感最多 10,000 个字符。'])
+    el('p', { class: 'lede' }, ['先记下来，之后再整理。每条灵感最多 10,000 个字符；需要时再明确“交给 AI”，记录本身不会自动执行。'])
   ])
 
   const composer = el('section', { class: 'ideas-composer card', 'aria-labelledby': 'ideas-compose-title' })
@@ -67,11 +92,7 @@ export async function renderIdeas(target: HTMLElement): Promise<void> {
     placeholder: '写下一个想法，可以分多行记录…',
     rows: '4'
   })
-  const composeRepo = el('input', {
-    type: 'text',
-    'aria-label': '仓库标签（可选）',
-    placeholder: 'owner/repo，可选'
-  })
+  const composeRepo = repoOptions('')
   const composeCount = el('span', { class: 'ideas-char-count', 'aria-live': 'polite' }, [
     `0 / ${MAX_IDEA_LENGTH.toLocaleString()}`
   ])
@@ -178,7 +199,21 @@ export async function renderIdeas(target: HTMLElement): Promise<void> {
       }, [deletingIds.has(item.id) ? '正在删除…' : '删除'])
       deleteButton.disabled = mutationBusy || editingId !== null || deletingIds.has(item.id)
       deleteButton.addEventListener('click', () => { void deleteItem(item, deleteButton) })
-      actions.append(editButton, deleteButton)
+      const toTaskButton = el('button', { type: 'button', class: 'ghost', 'data-action': 'to-task' }, ['交给 AI'])
+      toTaskButton.title = '带着这条灵感去任务页确认范围；不会直接执行'
+      toTaskButton.disabled = mutationBusy || editingId !== null
+      toTaskButton.addEventListener('click', () => {
+        if (mutationBusy || editingId !== null) return
+        window.dispatchEvent(new CustomEvent('arckeep:new-task', {
+          detail: {
+            goal: item.text,
+            repo: item.repo,
+            title: item.text.split(/\r?\n/, 1)[0]?.slice(0, 200) || undefined,
+            source: 'idea'
+          }
+        }))
+      })
+      actions.append(toTaskButton, editButton, deleteButton)
     }
 
     return el('article', { class: 'idea-entry', 'data-idea-id': item.id }, [
@@ -197,12 +232,7 @@ export async function renderIdeas(target: HTMLElement): Promise<void> {
       rows: '4'
     })
     text.value = draft.text
-    const repo = el('input', {
-      type: 'text',
-      'aria-label': '编辑仓库标签（可选）',
-      placeholder: 'owner/repo，可选'
-    })
-    repo.value = draft.repo
+    const repo = repoOptions(draft.repo)
     const count = el('span', { class: 'ideas-char-count' }, [
       `${text.value.length.toLocaleString()} / ${MAX_IDEA_LENGTH.toLocaleString()}`
     ])
@@ -280,18 +310,18 @@ export async function renderIdeas(target: HTMLElement): Promise<void> {
   }
 
   function composeDraft(): IdeaInput {
-    return { text: composeText.value, repo: normalizeRepo(composeRepo.value) }
+    return { text: composeText.value, repo: composeRepo.value || null }
   }
 
   async function saveEdit(
     item: IdeaItem,
     text: HTMLTextAreaElement,
-    repo: HTMLInputElement,
+    repo: HTMLSelectElement,
     save: HTMLButtonElement,
     cancel: HTMLButtonElement
   ): Promise<void> {
     if (mutationBusy || save.disabled || !isCurrent()) return
-    const draft = { text: text.value, repo: normalizeRepo(repo.value) }
+    const draft = { text: text.value, repo: repo.value || null }
     if (!draft.text.trim()) {
       showFeedback('灵感内容不能为空。')
       return
@@ -417,7 +447,7 @@ export async function renderIdeas(target: HTMLElement): Promise<void> {
   }
 
   composeText.addEventListener('input', updateCreateControl)
-  composeRepo.addEventListener('input', updateCreateControl)
+  composeRepo.addEventListener('change', updateCreateControl)
   createButton.addEventListener('click', () => { void createItem() })
   updateCreateControl()
 
@@ -438,11 +468,6 @@ export async function renderIdeas(target: HTMLElement): Promise<void> {
 
 export function deactivateIdeas(): void {
   activePage?.deactivate()
-}
-
-function normalizeRepo(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
 }
 
 function errorMessage(error: unknown, fallback: string): string {

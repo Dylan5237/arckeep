@@ -16,6 +16,7 @@ async function flush(): Promise<void> {
 
 async function mount(): Promise<HTMLElement> {
   vi.resetModules()
+  window.history.replaceState({}, '', '/?page=inbox')
   document.body.innerHTML = '<nav><button data-view="inbox">等我处理</button><button data-view="prompts">提示词库</button></nav><main id="content"></main>'
   window.arckeep = {
     getState: () => new Promise(() => {}),

@@ -37,7 +37,13 @@ function makeHarness(initial: IdeaItem[] = []) {
         unsubscribeCount++
         listener = null
       }
-    })
+    }),
+    getKnownRepos: vi.fn(async () => [
+      { id: 'example/ideas', label: 'Ideas', github: 'example/ideas', path: null, sources: ['watched'] },
+      { id: 'example/draft', label: 'Draft', github: 'example/draft', path: null, sources: ['watched'] },
+      { id: 'example/locked', label: 'Locked', github: 'example/locked', path: null, sources: ['watched'] },
+      { id: 'example/edited', label: 'Edited', github: 'example/edited', path: null, sources: ['watched'] }
+    ])
   }
 
   return {
@@ -72,12 +78,12 @@ describe('ideas page', () => {
     const harness = makeHarness()
     const target = await mount(harness.api)
     const text = target.querySelector<HTMLTextAreaElement>('[aria-label="灵感内容"]')!
-    const repo = target.querySelector<HTMLInputElement>('[aria-label="仓库标签（可选）"]')!
+    const repo = target.querySelector<HTMLSelectElement>('[aria-label="关联仓库（可选）"]')!
     const draftText = '第一行想法\n补充细节\n最后一个问题'
     text.value = draftText
     repo.value = 'example/ideas'
     text.dispatchEvent(new Event('input', { bubbles: true }))
-    repo.dispatchEvent(new Event('input', { bubbles: true }))
+    repo.dispatchEvent(new Event('change', { bubbles: true }))
     target.querySelector<HTMLButtonElement>('[data-action="create"]')!.click()
     await settle()
 
@@ -92,7 +98,7 @@ describe('ideas page', () => {
     harness.api.createIdea = vi.fn(async () => ({ ok: false as const, error: '本地保存失败' })) as unknown as ArckeepApi['createIdea']
     const target = await mount(harness.api)
     const text = target.querySelector<HTMLTextAreaElement>('[aria-label="灵感内容"]')!
-    const repo = target.querySelector<HTMLInputElement>('[aria-label="仓库标签（可选）"]')!
+    const repo = target.querySelector<HTMLSelectElement>('[aria-label="关联仓库（可选）"]')!
     text.value = '失败后要留下来的想法\n还有第二行'
     repo.value = 'example/draft'
     text.dispatchEvent(new Event('input', { bubbles: true }))
@@ -112,7 +118,7 @@ describe('ideas page', () => {
     })) as unknown as ArckeepApi['createIdea']
     const target = await mount(harness.api)
     const text = target.querySelector<HTMLTextAreaElement>('[aria-label="灵感内容"]')!
-    const repo = target.querySelector<HTMLInputElement>('[aria-label="仓库标签（可选）"]')!
+    const repo = target.querySelector<HTMLSelectElement>('[aria-label="关联仓库（可选）"]')!
     const draft = '保存时不能被覆盖的内容\n第二行'
     text.value = draft
     repo.value = 'example/locked'
@@ -170,7 +176,7 @@ describe('ideas page', () => {
     const target = await mount(harness.api)
     target.querySelector<HTMLButtonElement>('[data-action="edit"]')!.click()
     const editor = target.querySelector<HTMLTextAreaElement>('.idea-editor textarea')!
-    const repo = target.querySelector<HTMLInputElement>('.idea-editor input')!
+    const repo = target.querySelector<HTMLSelectElement>('.idea-editor select')!
     editor.value = '需要保留下来的编辑\n第二行正文'
     repo.value = 'example/edited'
     editor.dispatchEvent(new Event('input', { bubbles: true }))
@@ -265,6 +271,7 @@ describe('ideas page', () => {
     document.body.append(target)
     window.arckeep = harness.api
     const pending = renderIdeas(target)
+    await settle()
     const marker = document.createElement('p')
     marker.textContent = '另一页'
     deactivateIdeas()

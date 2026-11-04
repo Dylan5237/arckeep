@@ -349,6 +349,18 @@ function renderRow(
 
   const edit = el('button', { type: 'button', 'data-action': 'edit' }, ['编辑'])
   edit.addEventListener('click', () => actions.onEdit(item.id))
+  const toTask = el('button', { type: 'button', 'data-action': 'to-task' }, ['交给 AI'])
+  toTask.title = '带着这条待办去任务页确认范围；不会直接执行'
+  toTask.addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('arckeep:new-task', {
+      detail: {
+        goal: item.text,
+        repo: item.repo,
+        title: item.text.slice(0, 200),
+        source: 'todo'
+      }
+    }))
+  })
   const remove = el('button', { type: 'button', 'data-action': 'delete' }, ['删除'])
   remove.addEventListener('click', () => {
     void window.arckeep.deleteTodo(item.id).then(result => {
@@ -361,7 +373,7 @@ function renderRow(
     el('time', { class: 'todo-time', datetime: item.createdAt, title: localStamp(item.createdAt) }, [
       formatRelativeTime(item.createdAt)
     ]),
-    el('div', { class: 'todo-actions' }, editing ? [] : [edit, remove])
+    el('div', { class: 'todo-actions' }, editing ? [] : [toTask, edit, remove])
   ])
 
   const main = editing ? renderEditor(item, repos, editDraft, actions) : renderRead(item)

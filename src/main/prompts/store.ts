@@ -147,7 +147,7 @@ export class PromptStore {
     try {
       return readFileSync(this.file, 'utf8')
     } catch (error) {
-      if (errorCode(error) === 'ENOENT') return null
+      if (errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR') return null
       throw new Error('提示词数据文件读取失败')
     }
   }

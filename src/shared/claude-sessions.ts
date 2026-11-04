@@ -11,6 +11,12 @@ export interface ClaudeSession {
   name: string
   cwd: string
   startedAt: string
+  /** Where the session came from. Arckeep sessions are resumable through the store. */
+  source?: 'arckeep' | 'local'
+  /** Last transcript write, used to sort local sessions. */
+  updatedAt?: string | null
+  /** First user message, for local sessions that Arckeep did not start. */
+  title?: string | null
 }
 
 export interface ClaudeSessionMessage {
@@ -39,5 +45,24 @@ export function normalizeClaudeSessionId(input: unknown): string {
     throw new Error('Claude 会话编号无效')
   }
   return input.toLowerCase()
+}
+
+/** Parses a git origin URL into owner/repo. Returns null for non-GitHub remotes. */
+export function parseGithubRemote(remote: string): string | null {
+  const value = remote.trim()
+  let repoPath: string
+  const scp = value.match(/^git@github\.com:([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)$/i)
+  if (scp) {
+    repoPath = scp[1]
+  } else {
+    let parsed: URL
+    try { parsed = new URL(value) } catch { return null }
+    if (!['http:', 'https:', 'ssh:', 'git:'].includes(parsed.protocol.toLowerCase())) return null
+    if (parsed.hostname.toLowerCase() !== 'github.com' || parsed.search || parsed.hash) return null
+    repoPath = parsed.pathname.replace(/^\/+|\/+$/g, '')
+  }
+  repoPath = repoPath.replace(/\.git$/i, '')
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoPath)) return null
+  return repoPath
 }
 

@@ -13,6 +13,7 @@ const caretMark = document.querySelector<HTMLElement>('#caret')
 const caretProbe = document.querySelector<HTMLElement>('#caret-probe')
 const kindInput = document.querySelector<HTMLSelectElement>('#capture-kind')
 const ideaInput = document.querySelector<HTMLTextAreaElement>('#idea-text')
+const ideaRepoInput = document.querySelector<HTMLSelectElement>('#idea-repo')
 
 if (!textInput || !repoInput || !waitingInput || !errorBox || !form || !repoList || !caretMark || !caretProbe) {
   throw new Error('快速捕获页面不完整')
@@ -20,6 +21,7 @@ if (!textInput || !repoInput || !waitingInput || !errorBox || !form || !repoList
 
 const text: HTMLInputElement = textInput
 const repo: HTMLInputElement = repoInput
+const ideaRepo: HTMLSelectElement | null = ideaRepoInput
 const waiting: HTMLInputElement = waitingInput
 const error: HTMLElement = errorBox
 const caret: HTMLElement = caretMark
@@ -33,6 +35,7 @@ let draftEdited = false
 let recordSaved = false
 let reposReady = Promise.resolve()
 let persistChain: Promise<void> = Promise.resolve()
+let draftRepoValue = ''
 
 function placeCaret(): void {
   const active = document.activeElement === text
@@ -63,12 +66,18 @@ function currentInput(): HTMLInputElement | HTMLTextAreaElement {
   return isIdea() && ideaInput ? ideaInput : text
 }
 
+function activeRepo(): string {
+  return isIdea() ? (ideaRepo?.value ?? '') : repo.value
+}
+
 function paintKind(): void {
   const idea = isIdea()
   text.hidden = idea
   const textWrap = text.closest<HTMLElement>('.text-wrap')
   if (textWrap) textWrap.hidden = idea
   if (ideaInput) ideaInput.hidden = !idea
+  if (ideaRepo) ideaRepo.hidden = !idea
+  repo.hidden = idea
   const waitingLabel = document.querySelector<HTMLElement>('#capture-wait')
   if (waitingLabel) waitingLabel.hidden = idea
   const saveButton = document.querySelector<HTMLButtonElement>('#capture-save')
@@ -79,7 +88,7 @@ function paintKind(): void {
     : 'Enter 记下并关闭。Esc 或点到窗口外会留下草稿，下次热键还会在。'
   const typeHint = document.querySelector<HTMLElement>('#capture-type-hint')
   if (typeHint) typeHint.textContent = idea
-    ? '灵感独立保存在本机，可选填仓库；正文最多 10000 字符，不解析 # 或 !等我。'
+    ? '灵感独立保存在本机，仓库从已有项目中选；正文最多 10000 字符，不解析 # 或 !等我。'
     : '正文里可以写 #owner/repo、#仓库名 和 !等我。'
   placeCaret()
 }
@@ -88,7 +97,7 @@ function currentDraft(): CaptureDraft {
   return {
     ...(isIdea() ? { kind: 'idea' as const } : {}),
     text: currentInput().value,
-    repo: repo.value,
+    repo: activeRepo(),
     waiting: !isIdea() && waiting.checked
   }
 }
@@ -109,6 +118,7 @@ function persistDraft(): Promise<void> {
 function lockFields(locked: boolean): void {
   text.disabled = locked
   repo.disabled = locked
+  if (ideaRepo) ideaRepo.disabled = locked
   waiting.disabled = locked
   if (kindInput) kindInput.disabled = locked
   if (ideaInput) ideaInput.disabled = locked
@@ -202,6 +212,19 @@ reposReady = window.arckeep.todoRepoOptions().then(repos => {
     option.value = name
     return option
   }))
+  if (ideaRepo) {
+    const previous = ideaRepo.value || draftRepoValue
+    const option = (value: string, label: string): HTMLOptionElement => {
+      const node = document.createElement('option')
+      node.value = value
+      node.textContent = label
+      return node
+    }
+    ideaRepo.replaceChildren(option('', '不关联仓库'))
+    for (const name of repos) ideaRepo.append(option(name, name))
+    if (previous && !repos.includes(previous)) ideaRepo.append(option(previous, previous))
+    ideaRepo.value = previous
+  }
 }).catch(() => {
   // The list is optional. A typed owner/repo still saves.
 })
@@ -220,7 +243,9 @@ void window.arckeep.getCaptureDraft().then(draft => {
         : draft.kind === 'todo' || draft.text || draft.repo || draft.waiting ? 'todo' : 'idea'
     }
     currentInput().value = draft.text
+    draftRepoValue = draft.repo
     repo.value = draft.repo
+    if (ideaRepo) ideaRepo.value = draft.repo
     waiting.checked = draft.waiting
   }
   paintKind()
@@ -240,13 +265,16 @@ form.addEventListener('keydown', event => {
   event.preventDefault()
   void save()
 })
-
 text.addEventListener('input', () => {
   draftEdited = true
   placeCaret()
   if (!saving) void persistDraft()
 })
 repo.addEventListener('input', () => {
+  draftEdited = true
+  if (!saving) void persistDraft()
+})
+ideaRepo?.addEventListener('change', () => {
   draftEdited = true
   if (!saving) void persistDraft()
 })

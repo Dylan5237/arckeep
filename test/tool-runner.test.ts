@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -232,7 +232,8 @@ describe('live CMD builtin output encoding', () => {
       const script = `node -e "process.stdin.resume(); process.stdin.on('end', () => process.stdout.write(process.cwd() + '|stdin-ended'))"`
       const result = await runPlan(planShell('cmd', script, process.env, 'win32'), cwd)
       expect(result.code).toBe(0)
-      expect(result.stdout).toBe(`${cwd}|stdin-ended`)
+      const actual = result.stdout.replace(/\|stdin-ended$/, '')
+      expect([cwd, realpathSync.native(cwd)]).toContain(actual)
     } finally {
       rmSync(cwd, { recursive: true, force: true })
     }

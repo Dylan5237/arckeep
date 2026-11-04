@@ -20,6 +20,7 @@ async function flush(): Promise<void> {
 
 async function mount(getState?: ArckeepApi['getState']): Promise<HTMLElement> {
   vi.resetModules()
+  window.history.replaceState({}, '', '/?page=inbox')
   document.body.innerHTML = `<nav><button data-view="inbox">等我处理</button><button data-view="projects">项目总览</button><button data-view="todos">待办</button><button data-view="ideas">灵感</button></nav><main id="content"></main>`
   window.arckeep = {
     getState: getState ?? (async () => ({ hotkeyUnavailable: null })),

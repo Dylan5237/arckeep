@@ -25,6 +25,7 @@ const hosts = process.platform === 'win32'
   ? ['powershell.exe', 'pwsh.exe'].filter(host => !spawnSync(host, ['-NoProfile', '-Command', 'exit 0'], { windowsHide: true }).error)
   : []
 
+if (process.platform === 'win32') {
 describe('live stderr visibility and dual-stream limits', () => {
   for (const host of hosts) {
     const env = { ...process.env, ARCKEEP_POWERSHELL: host }
@@ -65,3 +66,4 @@ describe('live stderr visibility and dual-stream limits', () => {
     }, 15_000)
   }
 })
+}

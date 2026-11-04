@@ -19,6 +19,12 @@ describe('APO comment request detection', () => {
     expect(actions[0]).toMatchObject({ token, target: { repo: 'ada/demo', number: 7 } })
   })
 
+  it('offers a confirmation-only action for an explicit decision-role request without a fixed sentence', () => {
+    const actions = pendingApoActions(record('请处置人在本 Issue 评论 EXCEPTION ACCEPT'))
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({ token: 'EXCEPTION ACCEPT', manual: true })
+  })
+
   it('supports a token on the line immediately after a directed comment request', () => {
     expect(pendingApoActions(record('请处置人 @ada 在本 Issue 回复：\n`EXCEPTION ACCEPT`'))).toHaveLength(1)
   })
@@ -68,7 +74,6 @@ describe('APO comment request detection', () => {
     '请 @ada 评论 EXCEPTION ACCEPTED',
     '处置人：@owner\n请处置人在本 Issue 评论 EXCEPTION ACCEPT',
     '处置人：@owner\n\n请 @ada 在本 Issue 评论 EXCEPTION ACCEPT',
-    '请处置人在本 Issue 评论 EXCEPTION ACCEPT',
     '请 @ada 到下面的例外 Issue 评论 EXCEPTION ACCEPT',
     '请 @ada 评论 `EXCEPTION ACCEPT extra-body`',
     '引用：请 @ada 在本 Issue 评论 EXCEPTION ACCEPT',

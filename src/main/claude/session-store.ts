@@ -3,6 +3,10 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { normalizeClaudeRepo, normalizeClaudeSessionId, type ClaudeSession, type ClaudeWorkspace } from '../../shared/claude-sessions.js'
 
+function normalizeStoredPath(value: string): string {
+  return /^[A-Za-z]:[\\/]/.test(value) ? path.win32.normalize(path.win32.resolve(value)) : path.resolve(value)
+}
+
 const DATA_VERSION = 1
 const MAX_SESSIONS = 500
 
@@ -23,7 +27,7 @@ function normalizeWorkspace(input: unknown): ClaudeWorkspace {
   const repo = normalizeClaudeRepo(value.repo)
   if (typeof value.name !== 'string' || !value.name.trim() || value.name.length > 200) throw new Error('Claude 项目名称无效')
   if (typeof value.path !== 'string' || !value.path.trim() || value.path.length > 2000) throw new Error('Claude 项目目录无效')
-  return { repo, name: value.name.trim(), path: path.resolve(value.path), updatedAt: timestamp(value.updatedAt) }
+  return { repo, name: value.name.trim(), path: normalizeStoredPath(value.path), updatedAt: timestamp(value.updatedAt) }
 }
 
 function normalizeSession(input: unknown): ClaudeSession {
@@ -36,7 +40,7 @@ function normalizeSession(input: unknown): ClaudeSession {
     id: normalizeClaudeSessionId(value.id),
     repo,
     name: value.name.trim(),
-    cwd: path.resolve(value.cwd),
+    cwd: normalizeStoredPath(value.cwd),
     startedAt: timestamp(value.startedAt)
   }
 }
@@ -119,6 +123,11 @@ export class ClaudeSessionStore {
     const key = normalizeClaudeRepo(repo).toLowerCase()
     const item = this.data.workspaces.find(workspace => workspace.repo.toLowerCase() === key)
     return item ? { ...item } : null
+  }
+
+  workspaces(): ClaudeWorkspace[] {
+    this.assertLoaded()
+    return this.data.workspaces.map(item => ({ ...item }))
   }
 
   setWorkspace(input: { repo: unknown, name: unknown, path: unknown }): ClaudeWorkspace {

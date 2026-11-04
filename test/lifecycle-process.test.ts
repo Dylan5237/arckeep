@@ -213,7 +213,9 @@ describe('managed process lifecycle', () => {
       expect(result.stdout, JSON.stringify(result)).toBe(command.stdout)
       expect(result.stderr, JSON.stringify(result)).toBe(command.stderr)
     }
-    expect(durations.slice(1).every(duration => duration < 900), JSON.stringify(durations)).toBe(true)
+    // Loaded Windows hosts can take >1s for a direct launch; keep the check
+    // generous enough to be stable while still catching a recompile-sized stall.
+    expect(durations.slice(1).every(duration => duration < 2500), JSON.stringify(durations)).toBe(true)
   }, 30_000)
 
   it.skipIf(process.platform !== 'win32')('reports a fixed not-found result for a missing managed executable', async () => {

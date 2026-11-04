@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Notification, Tray, dialog, globalShortcut, ipcMain, nativeImage, net, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, globalShortcut, ipcMain, nativeImage, net, powerMonitor, safeStorage, shell } from 'electron'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -27,6 +27,8 @@ import {
   claudeSessionsFilePath,
   overviewCachePath,
   settingsFilePath,
+  taskRunsDir,
+  tasksFilePath,
   testHookTodosPath,
   todosFilePath,
   userDataDir,
@@ -71,6 +73,10 @@ import { ClaudeSessionStore } from './claude/session-store.js'
 import { ClaudeSessionService } from './claude/service.js'
 import { activateClaudeTerminal, createClaudeLaunchPlan, createClaudeTerminalTitle, launchClaudeInTerminal } from './claude/launcher.js'
 import { registerClaudeIpc } from './claude/ipc.js'
+import { TaskEngine } from './tasks/engine.js'
+import { registerTaskIpc } from './tasks/ipc.js'
+import { detectAgents } from './tasks/agent-detect.js'
+import { createTaskTerminalPlan } from './tasks/terminal.js'
 import { seedScreenshotPrompts } from './screenshot-prompts.js'
 import { createSafeStorageBox } from './token-store.js'
 import type { HotkeyRegistrar } from './hotkey.js'
@@ -91,9 +97,14 @@ if (screenshotPath) {
 }
 
 app.setName('Arckeep')
+// Windows taskbar grouping and notifications use this identity instead of "Electron".
+if (process.platform === 'win32') app.setAppUserModelId('com.dylan5237.arckeep')
+const dataDirOverride = process.env.ARCKEEP_DATA_DIR?.trim()
 app.setPath('userData', screenshotPath
   ? fs.mkdtempSync(path.join(os.tmpdir(), 'arckeep-screenshot-'))
-  : userDataDir(app.getPath('appData')))
+  : dataDirOverride
+    ? path.resolve(dataDirOverride)
+    : userDataDir(app.getPath('appData')))
 
 let mainWindow: BrowserWindow | null = null
 let captureWindow: BrowserWindow | null = null
@@ -109,6 +120,7 @@ let service: SettingsService | null = null
 let todos: TodoStore | null = null
 let waiting: WaitingService | ReturnType<typeof createScreenshotWaiting> | null = null
 let overview: OverviewService | ReturnType<typeof createScreenshotOverview> | null = null
+let taskEngine: TaskEngine | null = null
 let hotkeyNoticeSent = false
 const toolRunner = new ToolRunner(event => {
   const win = mainWindow
@@ -417,7 +429,9 @@ function createWindow(): BrowserWindow {
   }
 
   const startPage = screenshotPath ? screenshotStartPage(screenshotScene) : 'inbox'
-  const query: Record<string, string> = startPage === 'inbox' ? {} : { page: startPage }
+  const query: Record<string, string> = screenshotPath
+    ? { page: startPage }
+    : startPage === 'inbox' ? {} : { page: startPage }
   loadRenderer(window, 'index.html', query)
   return window
 }
@@ -739,11 +753,69 @@ if (!gotLock) {
       activate: input => activateClaudeTerminal(createClaudeTerminalTitle(input.repo, input.sessionId)),
       launch: async input => {
         const plan = createClaudeLaunchPlan(input)
-        await launchClaudeInTerminal(plan)
+        try {
+          await launchClaudeInTerminal(plan)
+        } catch (error) {
+          // A Store-provided Windows Terminal alias can resolve but still fail
+          // to spawn on some machines; fall back to the bundled PowerShell.
+          if (plan.terminal !== 'windows-terminal') throw error
+          const fallback = createClaudeLaunchPlan({ ...input, terminal: 'powershell' })
+          await launchClaudeInTerminal(fallback)
+        }
       }
     })
     registerClaudeIpc({
       service: claudeService,
+      guard: event => {
+        backgroundTasks.assertOpen()
+        if (isQuitting) throw new TaskCancelledError()
+        requireSender(event, mainWindow?.webContents ?? null)
+        if (event.senderFrame !== mainWindow?.webContents.mainFrame) throw new Error('Blocked IPC from a child frame')
+      }
+    })
+    taskEngine = new TaskEngine({
+      file: tasksFilePath(userData),
+      runsDir: taskRunsDir(userData),
+      detectAgents: screenshotPath || process.env.VITEST
+        ? async () => [
+            { agent: 'claude', available: true, version: 'fixture', command: 'claude' },
+            { agent: 'codex', available: true, version: 'fixture', command: 'codex' }
+          ]
+        : detectAgents,
+      getGithubToken: () => service?.githubToken() ?? Promise.resolve(null),
+      fetchImpl: (input, init) => net.fetch(input instanceof URL ? input.href : input, init),
+      log: message => console.error(message),
+      onChange: ({ taskId }) => {
+        if (!mainWindow || mainWindow.isDestroyed()) return
+        mainWindow.webContents.send(IpcChannel.tasksChanged, taskId)
+      },
+      notify: ({ title, body, taskId }) => {
+        if (screenshotPath || !Notification.isSupported()) return
+        try {
+          const notice = new Notification({ title, body })
+          notice.on('click', () => {
+            showMainWindow()
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IpcChannel.tasksNavigate, taskId)
+          })
+          notice.show()
+        } catch {
+          // Notifications are best effort; the task list remains authoritative.
+        }
+      }
+    })
+    registerTaskIpc({
+      engine: taskEngine,
+      getWindow: () => mainWindow,
+      launchTakeover: async task => {
+        const plan = createTaskTerminalPlan({
+          title: task.title,
+          cwd: task.cwd,
+          agent: task.agent,
+          sessionId: task.sessionId,
+          repo: task.repo
+        })
+        await launchClaudeInTerminal(plan)
+      },
       guard: event => {
         backgroundTasks.assertOpen()
         if (isQuitting) throw new TaskCancelledError()
@@ -771,6 +843,12 @@ if (!gotLock) {
       createTray()
     } catch (error) {
       console.error(error instanceof Error ? error.message : '托盘不可用')
+    }
+    if (taskEngine) {
+      void taskEngine.start()
+      powerMonitor.on('resume', () => {
+        void taskEngine?.refreshEvents(false).catch(error => console.error(error instanceof Error ? error.message : '任务复查失败'))
+      })
     }
     installTestHooks()
   }).catch(error => {
@@ -843,6 +921,7 @@ const handleBeforeQuit = createGracefulShutdownHandler({
   timeoutMs: 15_000,
   shutdown: async () => {
     const stages = [
+      { label: '任务执行器', run: () => taskEngine?.close() ?? Promise.resolve() },
       { label: '后台任务', run: () => backgroundTasks.drain() },
       { label: '工具预演', run: () => toolIpcLifecycle?.shutdown() ?? toolRehearsals.cancelAll() },
       { label: '工具命令', run: () => toolRunner.abortAll() },

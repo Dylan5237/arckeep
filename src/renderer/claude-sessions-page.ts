@@ -43,7 +43,7 @@ export async function renderClaudeSessions(
 
   const page = el('section', { class: 'page claude-sessions' }, [
     el('h1', {}, ['Claude 会话']),
-    el('p', { class: 'lede' }, ['按项目和实际工作目录查看 Arckeep 启动的 Claude 会话。'])
+    el('p', { class: 'lede' }, ['按项目查看本机 Claude Code 会话，包括 Arckeep 之外启动的历史记录；可阅读并恢复原会话继续工作。'])
   ])
   const toolbar = el('div', { class: 'claude-toolbar' })
   const repoSelect = el('select', { 'aria-label': '筛选项目' })
@@ -86,6 +86,7 @@ export async function renderClaudeSessions(
   const sameSession = (left: ClaudeSession, right: ClaudeSession) =>
     left.id === right.id && left.repo === right.repo && left.name === right.name
       && left.cwd === right.cwd && left.startedAt === right.startedAt
+      && left.source === right.source && left.title === right.title && left.updatedAt === right.updatedAt
 
   const sameTranscript = (left: ClaudeSessionTranscript | null, right: ClaudeSessionTranscript | null) => {
     if (left === right) return true
@@ -111,7 +112,7 @@ export async function renderClaudeSessions(
     paintedSelectedId = selectedId
     paintedListReady = true
     if (sessions.length === 0) {
-      sessionList.append(el('p', { class: 'claude-empty' }, ['还没有 Claude 会话。到项目总览选择一个项目并启动。']))
+      sessionList.append(el('p', { class: 'claude-empty' }, ['还没有 Claude 会话。到项目总览选择一个项目并启动，或直接在本机使用 Claude Code。']))
       sessionList.scrollTop = scrollTop
       return
     }
@@ -129,15 +130,21 @@ export async function renderClaudeSessions(
       for (const item of group) {
         const card = el('article', { class: 'claude-session-card' + (item.id === selectedId ? ' active' : '') })
         const select = el('button', { type: 'button', class: 'claude-session-select' })
+        const badge = el('span', { class: 'chip' + (item.source === 'local' ? '' : ' chip-own') }, [
+          item.source === 'local' ? '本机' : 'Arckeep'
+        ])
         select.append(
-          el('strong', {}, [localAbsolute(item.startedAt)]),
+          el('div', { class: 'claude-session-title-row' }, [
+            el('strong', {}, [item.title || localAbsolute(item.startedAt)]),
+            badge
+          ]),
           el('span', {}, [item.cwd]),
-          el('code', {}, [item.id.slice(0, 8)])
+          el('code', {}, [item.id.slice(0, 8) + (item.updatedAt ? ' · ' + localAbsolute(item.updatedAt) : '')])
         )
         select.addEventListener('click', () => { void showTranscript(item.id) })
         const resume = el('button', { type: 'button', class: 'ghost tiny' }, ['恢复'])
-        resume.title = '在相同目录恢复此会话'
-        resume.addEventListener('click', () => { void startSession(item.repo, item.name, item.id) })
+        resume.title = '在相同目录恢复此会话，并打开可交互终端'
+        resume.addEventListener('click', () => { void openSession(item) })
         card.append(select, resume)
         section.append(card)
       }
@@ -273,22 +280,45 @@ export async function renderClaudeSessions(
         showFeedback(result.error, true)
         return
       }
-      const session = result.data
-      sessionMutationVersion += 1
-      if (repoFilter !== session.repo && pollBusy) filterRefreshQueued = true
-      repoFilter = session.repo
-      selectedId = session.id
-      options.repo = session.repo
-      sessions = [session, ...sessions.filter(item => item.id !== session.id)]
-        .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
-      populateRepoSelect()
-      paintList()
-      await showTranscript(session.id, '已向外部终端发送 Claude 启动请求；请确认 Claude 已就绪')
+      await acceptOpenedSession(result.data, '已向外部终端发送 Claude 启动请求；请确认 Claude 已就绪')
     } catch (error) {
       showFeedback(error instanceof Error ? error.message : 'Claude 启动失败', true)
     } finally {
       startButton.disabled = false
     }
+  }
+
+  const openSession = async (item: ClaudeSession) => {
+    startButton.disabled = true
+    try {
+      const result = item.source === 'local'
+        ? await window.arckeep.resumeClaudeSession(item.id)
+        : await window.arckeep.startClaudeSession(item.repo, item.name, item.id)
+      if (!result.ok) {
+        showFeedback(result.error, true)
+        return
+      }
+      await acceptOpenedSession(result.data, item.source === 'local'
+        ? '已在本机终端恢复这个 Claude 会话；请确认窗口已打开'
+        : '已向外部终端发送 Claude 恢复请求；请确认 Claude 已就绪')
+    } catch (error) {
+      showFeedback(error instanceof Error ? error.message : 'Claude 启动失败', true)
+    } finally {
+      startButton.disabled = false
+    }
+  }
+
+  const acceptOpenedSession = async (session: ClaudeSession, message: string) => {
+    sessionMutationVersion += 1
+    if (repoFilter !== session.repo && pollBusy) filterRefreshQueued = true
+    repoFilter = session.repo
+    selectedId = session.id
+    options.repo = session.repo
+    sessions = [session, ...sessions.filter(item => item.id !== session.id)]
+      .sort((a, b) => (b.updatedAt ?? b.startedAt).localeCompare(a.updatedAt ?? a.startedAt))
+    populateRepoSelect()
+    paintList()
+    await showTranscript(session.id, message)
   }
 
   repoSelect.addEventListener('change', () => {

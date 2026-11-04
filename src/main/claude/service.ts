@@ -2,29 +2,17 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
 import os from 'node:os'
-import { normalizeClaudeRepo, normalizeClaudeSessionId, type ClaudeSession, type ClaudeSessionTranscript, type ClaudeWorkspace } from '../../shared/claude-sessions.js'
+import { normalizeClaudeRepo, normalizeClaudeSessionId, parseGithubRemote, type ClaudeSession, type ClaudeSessionTranscript, type ClaudeWorkspace } from '../../shared/claude-sessions.js'
 import { ClaudeSessionStore } from './session-store.js'
-import { readClaudeTranscript, canonicalDirectory } from './transcript.js'
+import { readClaudeTranscript, readClaudeTranscriptAt, canonicalDirectory } from './transcript.js'
+import { discoverLocalClaudeSessions, type LocalClaudeSession } from './discovery.js'
+import { projectIdentities } from './project-map.js'
 
 const execFileAsync = promisify(execFile)
 const TERMINAL_START_GRACE_MS = 10_000
 
-function repoSlugFromRemote(remote: string): string | null {
-  const value = remote.trim()
-  let repoPath: string
-  const scp = value.match(/^git@github\.com:([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)$/i)
-  if (scp) {
-    repoPath = scp[1]
-  } else {
-    let parsed: URL
-    try { parsed = new URL(value) } catch { return null }
-    if (!['http:', 'https:', 'ssh:', 'git:'].includes(parsed.protocol.toLowerCase())) return null
-    if (parsed.hostname.toLowerCase() !== 'github.com' || parsed.search || parsed.hash) return null
-    repoPath = parsed.pathname.replace(/^\/+|\/+$/g, '')
-  }
-  repoPath = repoPath.replace(/\.git$/i, '')
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoPath)) return null
-  return repoPath.toLowerCase()
+export function repoSlugFromRemote(remote: string): string | null {
+  return parseGithubRemote(remote)?.toLowerCase() ?? null
 }
 
 export async function verifyClaudeWorkspace(input: string, expectedRepo: string): Promise<string> {
@@ -59,10 +47,14 @@ export interface ClaudeSessionServiceOptions {
   verifyDirectory?: (path: string, repo: string) => Promise<string>
   configDirectory?: string
   now?: () => number
+  discoverLocal?: (configDirectory: string) => Promise<LocalClaudeSession[]>
 }
 
 function directoryKey(value: string): string {
-  return path.win32.normalize(path.win32.resolve(value)).toLowerCase()
+  if (/^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\')) {
+    return path.win32.normalize(path.win32.resolve(value)).toLowerCase()
+  }
+  return path.resolve(value).toLowerCase()
 }
 
 export class ClaudeSessionService {
@@ -73,6 +65,7 @@ export class ClaudeSessionService {
   private readonly workspaceStarts = new Map<string, Promise<void>>()
   private readonly launches = new Map<string, Promise<void>>()
   private readonly recentlyLaunched = new Map<string, number>()
+  private localCache: { at: number, value: LocalClaudeSession[] } | null = null
 
   constructor(private readonly options: ClaudeSessionServiceOptions) {
     this.verifyDirectory = options.verifyDirectory ?? verifyClaudeWorkspace
@@ -84,8 +77,57 @@ export class ClaudeSessionService {
     this.now = options.now ?? Date.now
   }
 
-  list(repo?: unknown): ClaudeSession[] {
-    return this.options.store.list(repo)
+  async list(repo?: unknown): Promise<ClaudeSession[]> {
+    const filter = repo === undefined || repo === null || repo === ''
+      ? null
+      : normalizeClaudeRepo(repo).toLowerCase()
+    const stored = this.options.store.list().map(item => ({
+      ...item,
+      source: 'arckeep' as const,
+      updatedAt: item.startedAt,
+      title: null
+    }))
+    const local = await this.localSessions()
+    const storedIds = new Set(stored.map(item => item.id))
+    const candidates = local.filter(item => !storedIds.has(item.id))
+    const workspaceByPath = new Map(this.options.store.workspaces()
+      .map(item => [directoryKey(item.path), item] as const))
+    const identities = await projectIdentities([...new Set(candidates.map(item => item.cwd))])
+    const merged: ClaudeSession[] = [...stored]
+    for (const item of candidates) {
+      const workspace = workspaceByPath.get(directoryKey(item.cwd))
+      const identity = workspace
+        ? { repo: workspace.repo, name: workspace.name }
+        : identities.get(item.cwd) ?? { repo: 'local/project', name: path.basename(item.cwd) }
+      merged.push({
+        id: item.id,
+        cwd: item.cwd,
+        repo: identity.repo,
+        name: identity.name,
+        startedAt: item.startedAt,
+        source: 'local',
+        updatedAt: item.updatedAt,
+        title: item.title
+      })
+    }
+    return merged
+      .filter(item => filter === null || item.repo.toLowerCase() === filter)
+      .sort((left, right) => (right.updatedAt ?? right.startedAt).localeCompare(left.updatedAt ?? left.startedAt))
+  }
+
+  private async localSessions(): Promise<LocalClaudeSession[]> {
+    const now = this.now()
+    if (this.localCache && now - this.localCache.at < 15_000) return this.localCache.value
+    try {
+      const discover = this.options.discoverLocal
+        ?? ((directory: string) => discoverLocalClaudeSessions({ configDirectory: directory }))
+      const value = await discover(this.configDirectory)
+      this.localCache = { at: now, value }
+      return value
+    } catch {
+      this.localCache = { at: now, value: [] }
+      return []
+    }
   }
 
   async chooseWorkspace(repoInput: unknown, nameInput: unknown): Promise<ClaudeWorkspace> {
@@ -233,8 +275,62 @@ export class ClaudeSessionService {
 
   async read(sessionId: unknown): Promise<ClaudeSessionTranscript> {
     const session = this.options.store.find(sessionId)
-    if (!session) throw new Error('找不到该 Claude 会话')
-    return readClaudeTranscript(session, this.configDirectory)
+    if (session) return readClaudeTranscript({ ...session, source: 'arckeep' }, this.configDirectory)
+    const id = normalizeClaudeSessionId(sessionId)
+    const local = (await this.localSessions()).find(item => item.id === id)
+    if (!local) throw new Error('找不到该 Claude 会话')
+    const sessionView = await this.localSessionView(local)
+    return readClaudeTranscriptAt(local.file, sessionView)
+  }
+
+  async resume(sessionId: unknown): Promise<ClaudeSession> {
+    const stored = this.options.store.find(sessionId)
+    if (stored) return this.start(stored.repo, stored.name, stored.id)
+    const id = normalizeClaudeSessionId(sessionId)
+    const local = (await this.localSessions()).find(item => item.id === id)
+    if (!local) throw new Error('找不到该 Claude 会话')
+    const session = await this.localSessionView(local)
+    const launchedAt = this.recentlyLaunched.get(id)
+    if (launchedAt !== undefined && this.now() - launchedAt < TERMINAL_START_GRACE_MS) return session
+    const pending = this.launches.get(id)
+    if (pending) {
+      await pending
+      return session
+    }
+    try {
+      await canonicalDirectory(local.cwd)
+    } catch {
+      throw new Error('该会话的工作目录已不存在，无法恢复')
+    }
+    const launch = this.options.launch({ repo: session.repo, cwd: session.cwd, sessionId: session.id, resume: true })
+    const tracked = launch.finally(() => {
+      if (this.launches.get(id) === tracked) this.launches.delete(id)
+    })
+    this.launches.set(id, tracked)
+    await tracked
+    const now = this.now()
+    this.recentlyLaunched.set(id, now)
+    for (const [key, timestamp] of this.recentlyLaunched) {
+      if (now - timestamp >= TERMINAL_START_GRACE_MS) this.recentlyLaunched.delete(key)
+    }
+    return session
+  }
+
+  private async localSessionView(local: LocalClaudeSession): Promise<ClaudeSession> {
+    const workspace = this.options.store.workspaces().find(item => directoryKey(item.path) === directoryKey(local.cwd))
+    const identity = workspace
+      ?? (await projectIdentities([local.cwd])).get(local.cwd)
+      ?? { repo: 'local/project', name: path.basename(local.cwd) }
+    return {
+      id: local.id,
+      cwd: local.cwd,
+      repo: identity.repo,
+      name: identity.name,
+      startedAt: local.startedAt,
+      source: 'local',
+      updatedAt: local.updatedAt,
+      title: local.title
+    }
   }
 
   private normalizeName(input: unknown, repo: string): string {
