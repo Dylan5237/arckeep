@@ -14,8 +14,9 @@ import { renderWaiting } from './waiting-page'
 import { renderWaitingSettings } from './waiting-settings'
 import { renderRepoFetchWindowSettings } from './repo-fetch-window'
 import { renderClaudeSessions } from './claude-sessions-page'
+import { renderTasks, renderTaskSettings, type TaskPrefill } from './tasks-page'
 
-type ViewId = 'inbox' | 'projects' | 'claude' | 'todos' | 'ideas' | 'prompts' | 'tools' | 'settings'
+type ViewId = 'tasks' | 'inbox' | 'projects' | 'claude' | 'todos' | 'ideas' | 'prompts' | 'tools' | 'settings'
 
 const symbol = document.querySelector<HTMLImageElement>('#brand-symbol')
 if (symbol) symbol.src = brandSymbol
@@ -80,6 +81,7 @@ async function renderSettings(options?: { focusToken?: boolean, focusWatch?: boo
     renderRepoFetchWindowSettings(state, () => renderSettings()),
     renderWaitingSettings(state, () => renderSettings()),
     renderOverviewSettings(state, () => renderSettings()),
+    await renderTaskSettings(),
     await renderToolSettings(state, () => renderSettings())
   )
   paintHotkeyBanner(state.hotkeyUnavailable)
@@ -344,9 +346,10 @@ async function refreshHotkeyBanner(): Promise<void> {
 
 let leaveTodos: (() => void) | null = null
 let leaveClaudeSessions: (() => void) | null = null
+let leaveTasks: (() => void) | null = null
 let navigationEpoch = 0
 
-async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?: boolean, repo?: string, sessionId?: string }): Promise<void> {
+async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?: boolean, repo?: string, sessionId?: string, prefill?: TaskPrefill, taskId?: string }): Promise<void> {
   const epoch = ++navigationEpoch
   if (view !== 'tools') deactivateTools()
   deactivateIdeas()
@@ -355,6 +358,8 @@ async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?:
   leaveTodos = null
   leaveClaudeSessions?.()
   leaveClaudeSessions = null
+  leaveTasks?.()
+  leaveTasks = null
   setActive(view)
   if (!content) return
   // Each navigation owns a host so an older asynchronous refresh cannot
@@ -362,7 +367,12 @@ async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?:
   const host = el('div', { class: 'view-host' })
   if (view !== 'settings') content.replaceChildren(host)
   if (view === 'settings') await renderSettings(options)
-  else if (view === 'todos') {
+  else if (view === 'tasks') {
+    if (epoch !== navigationEpoch) return
+    const leave = await renderTasks(host, { prefill: options?.prefill, taskId: options?.taskId })
+    if (epoch !== navigationEpoch) leave()
+    else leaveTasks = leave
+  } else if (view === 'todos') {
     if (epoch !== navigationEpoch) return
     const leave = await renderTodos(host)
     if (epoch !== navigationEpoch) leave()
@@ -393,11 +403,21 @@ async function show(view: ViewId, options?: { focusToken?: boolean, focusWatch?:
 for (const button of navButtons) {
   button.addEventListener('click', () => {
     const view = button.dataset.view
-    if (view === 'inbox' || view === 'projects' || view === 'claude' || view === 'todos' || view === 'ideas' || view === 'prompts' || view === 'tools' || view === 'settings') {
+    if (view === 'tasks' || view === 'inbox' || view === 'projects' || view === 'claude' || view === 'todos' || view === 'ideas' || view === 'prompts' || view === 'tools' || view === 'settings') {
       void show(view)
     }
   })
 }
+
+window.arckeep.onTasksNavigate?.(taskId => {
+  void show('tasks', { taskId })
+})
+
+window.addEventListener('arckeep:new-task', event => {
+  const detail = (event as CustomEvent<TaskPrefill>).detail
+  if (!detail || typeof detail.goal !== 'string') return
+  void show('tasks', { prefill: detail })
+})
 
 window.arckeep.onHotkeyStatus(combo => {
   paintHotkeyBanner(combo)
@@ -420,5 +440,6 @@ void show(
         : initial === 'ideas' ? 'ideas'
           : initial === 'prompts' ? 'prompts'
             : initial === 'tools' ? 'tools'
-              : 'inbox'
+              : initial === 'inbox' ? 'inbox'
+                : 'tasks'
 )
