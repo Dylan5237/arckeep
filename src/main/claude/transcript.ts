@@ -79,7 +79,13 @@ export async function readClaudeTranscript(
   session: ClaudeSession,
   configDirectory = path.join(os.homedir(), '.claude')
 ): Promise<ClaudeSessionTranscript> {
-  const file = claudeTranscriptPath(configDirectory, session)
+  return readClaudeTranscriptAt(claudeTranscriptPath(configDirectory, session), session)
+}
+
+export async function readClaudeTranscriptAt(
+  file: string,
+  session: ClaudeSession
+): Promise<ClaudeSessionTranscript> {
   let handle: Awaited<ReturnType<typeof open>> | null = null
   try {
     handle = await open(file, 'r')

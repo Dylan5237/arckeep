@@ -40,5 +40,8 @@ export function registerClaudeIpc(options: ClaudeIpcOptions): void {
       options.service.start(repo, name, resumeId)))
   ipcMain.handle(IpcChannel.readClaudeSession, (event, sessionId: unknown) =>
     invoke(options, event, '无法读取 Claude 会话记录', () => options.service.read(sessionId)))
+  ipcMain.handle(IpcChannel.resumeClaudeSession, (event, sessionId: unknown) =>
+    invoke(options, event, '无法恢复 Claude 会话，请确认 Claude CLI 和 Windows Terminal 已安装', () =>
+      options.service.resume(sessionId)))
 }
 

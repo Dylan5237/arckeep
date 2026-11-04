@@ -121,6 +121,11 @@ export class ClaudeSessionStore {
     return item ? { ...item } : null
   }
 
+  workspaces(): ClaudeWorkspace[] {
+    this.assertLoaded()
+    return this.data.workspaces.map(item => ({ ...item }))
+  }
+
   setWorkspace(input: { repo: unknown, name: unknown, path: unknown }): ClaudeWorkspace {
     this.assertLoaded()
     const item = normalizeWorkspace({ ...input, updatedAt: this.timestamp() })

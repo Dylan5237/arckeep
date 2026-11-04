@@ -1,12 +1,26 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
-import { existsSync } from 'node:fs'
+import { statSync } from 'node:fs'
 import path from 'node:path'
 import { quotePowerShellArg } from '../../shared/tools/quote.js'
 import { normalizeClaudeSessionId } from '../../shared/claude-sessions.js'
 
 const execFileAsync = promisify(execFile)
 const TERMINAL_STARTUP_WINDOW_MS = 250
+
+/**
+ * Windows Store apps are exposed as App Execution Aliases. Node's existsSync
+ * reports EACCES for these reparse points, so treating only ENOENT as missing
+ * is required to find wt.exe from the WindowsApps folder.
+ */
+export function windowsPathExists(candidate: string): boolean {
+  try {
+    statSync(candidate)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EACCES'
+  }
+}
 
 export interface ClaudeLaunchPlan {
   file: string
@@ -24,7 +38,7 @@ function envValue(env: NodeJS.ProcessEnv, key: string): string {
 export function resolveWindowsExecutable(
   name: string,
   env: NodeJS.ProcessEnv = process.env,
-  exists: (candidate: string) => boolean = existsSync
+  exists: (candidate: string) => boolean = windowsPathExists
 ): string | null {
   const direct = path.win32.isAbsolute(name)
   const pathEntries = direct
@@ -86,11 +100,12 @@ export function createClaudeLaunchPlan(input: {
   env?: NodeJS.ProcessEnv
   platform?: NodeJS.Platform
   exists?: (candidate: string) => boolean
+  terminal?: 'auto' | 'windows-terminal' | 'powershell'
 }): ClaudeLaunchPlan {
   const platform = input.platform ?? process.platform
   if (platform !== 'win32') throw new Error('Claude 项目终端目前只支持 Windows')
   const env = input.env ?? process.env
-  const exists = input.exists ?? existsSync
+  const exists = input.exists ?? windowsPathExists
   const sessionId = normalizeClaudeSessionId(input.sessionId)
   const cwd = path.win32.resolve(input.cwd)
   const cli = resolveWindowsExecutable('claude', env, exists)
@@ -98,7 +113,8 @@ export function createClaudeLaunchPlan(input: {
   const title = createClaudeTerminalTitle(input.repo, sessionId)
   const powerShell = resolvePowerShell(env, exists)
   const command = claudeCommand(cli, sessionId, input.resume === true, title, cwd)
-  const terminal = resolveWindowsExecutable('wt.exe', env, exists)
+  const requested = input.terminal ?? 'auto'
+  const terminal = requested === 'powershell' ? null : resolveWindowsExecutable('wt.exe', env, exists)
   if (terminal) {
     return {
       file: terminal,
@@ -134,7 +150,7 @@ export async function activateClaudeTerminal(
   const platform = options.platform ?? process.platform
   if (platform !== 'win32') throw new Error('Claude 项目终端目前只支持 Windows')
   const env = options.env ?? process.env
-  const exists = options.exists ?? existsSync
+  const exists = options.exists ?? windowsPathExists
   const powershell = resolvePowerShell(env, exists)
   const script = '$shell = New-Object -ComObject WScript.Shell; if ($shell.AppActivate('
     + quotePowerShellArg(title) + ')) { [Console]::Out.Write(\'1\') } else { [Console]::Out.Write(\'0\') }'
