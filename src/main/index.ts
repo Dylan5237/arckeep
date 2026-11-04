@@ -96,9 +96,12 @@ if (screenshotPath) {
 }
 
 app.setName('Arckeep')
+const dataDirOverride = process.env.ARCKEEP_DATA_DIR?.trim()
 app.setPath('userData', screenshotPath
   ? fs.mkdtempSync(path.join(os.tmpdir(), 'arckeep-screenshot-'))
-  : userDataDir(app.getPath('appData')))
+  : dataDirOverride
+    ? path.resolve(dataDirOverride)
+    : userDataDir(app.getPath('appData')))
 
 let mainWindow: BrowserWindow | null = null
 let captureWindow: BrowserWindow | null = null
